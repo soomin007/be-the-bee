@@ -33,6 +33,26 @@ const PIECE_STRIPE: Record<Player, string> = { yellow: '#3a2600', brown: '#24120
 const PLAYER_LABEL: Record<Player, string> = { yellow: '노랑', brown: '갈색' }
 const TILE_STROKE = '#6b5524'
 
+// 결과 모달 벌 마스코트(인라인 SVG — 외부 에셋 없음). .wing 은 CSS 로 펄럭.
+const BEE_SVG = `
+  <svg class="modal-bee" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs><clipPath id="beeBody"><ellipse cx="50" cy="62" rx="30" ry="26"/></clipPath></defs>
+    <path d="M44 36 Q39 20 32 15" stroke="#5a3a14" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    <path d="M56 36 Q61 20 68 15" stroke="#5a3a14" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    <circle cx="32" cy="14" r="3.2" fill="#5a3a14"/>
+    <circle cx="68" cy="14" r="3.2" fill="#5a3a14"/>
+    <ellipse class="wing" cx="28" cy="44" rx="19" ry="13" fill="#ffffff" opacity="0.85" stroke="#d9c89a" stroke-width="1.5"/>
+    <ellipse class="wing" cx="72" cy="44" rx="19" ry="13" fill="#ffffff" opacity="0.85" stroke="#d9c89a" stroke-width="1.5"/>
+    <ellipse cx="50" cy="62" rx="30" ry="26" fill="#f4c430" stroke="#5a3a14" stroke-width="2.6"/>
+    <g clip-path="url(#beeBody)">
+      <rect x="18" y="64" width="64" height="8" fill="#3a2600"/>
+      <rect x="18" y="78" width="64" height="8" fill="#3a2600"/>
+    </g>
+    <circle cx="42" cy="55" r="3.4" fill="#3a2600"/>
+    <circle cx="58" cy="55" r="3.4" fill="#3a2600"/>
+    <path d="M43 62 Q50 68 57 62" stroke="#3a2600" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  </svg>`
+
 const BG_RADIUS = 12 // 옅은 배경 그리드 반경(헥스)
 const MIN_W = HEX_SIZE * 5 // 줌 인 한계(viewBox 폭)
 const MAX_W = HEX_SIZE * 130 // 줌 아웃 한계
@@ -224,8 +244,19 @@ export function mountGame(root: HTMLElement): void {
             <filter id="hiveGlow" x="-50%" y="-50%" width="200%" height="200%">
               <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f59e0b" flood-opacity="0.95" />
             </filter>
+            <radialGradient id="wax-yellow" cx="38%" cy="32%" r="75%">
+              <stop offset="0%" stop-color="#f9e48c" />
+              <stop offset="55%" stop-color="#f4d35e" />
+              <stop offset="100%" stop-color="#e3bd43" />
+            </radialGradient>
+            <radialGradient id="wax-brown" cx="38%" cy="32%" r="75%">
+              <stop offset="0%" stop-color="#d6974a" />
+              <stop offset="55%" stop-color="#c1812f" />
+              <stop offset="100%" stop-color="#a76d22" />
+            </radialGradient>
           </defs>
           <g class="content"></g>
+          <g class="fx" pointer-events="none"></g>
         </svg>
         <div class="action-bar"></div>
       </div>
@@ -234,6 +265,7 @@ export function mountGame(root: HTMLElement): void {
   `
   const svg = root.querySelector('svg.board') as SVGSVGElement
   const content = svg.querySelector('g.content') as SVGGElement
+  const fx = svg.querySelector('g.fx') as SVGGElement
   const panel = root.querySelector('.panel') as HTMLElement
   const actionBar = root.querySelector('.action-bar') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
@@ -511,6 +543,7 @@ export function mountGame(root: HTMLElement): void {
         if (n === 0) return
         clearAiTimer()
         stopReplayTimer()
+        clearFx()
         draft = null
         message = ''
         openMenu = null
@@ -554,6 +587,47 @@ export function mountGame(root: HTMLElement): void {
     render()
   }
 
+  // ---- 연출(fx 레이어 — render 가 지우지 않는 일회성 효과) -------------------
+  function clearFx(): void {
+    while (fx.firstChild) fx.removeChild(fx.firstChild)
+  }
+
+  // 착지 꽃가루 반짝 — 6방향으로 튀었다 사라지는 점.
+  function spawnSparkle(center: { x: number; y: number }, color: string): void {
+    const g = document.createElementNS(SVGNS, 'g')
+    const R = HEX_SIZE * 0.85
+    for (let i = 0; i < 6; i++) {
+      const ang = (Math.PI / 3) * i - Math.PI / 2
+      const dot = document.createElementNS(SVGNS, 'circle')
+      dot.setAttribute('cx', String(center.x))
+      dot.setAttribute('cy', String(center.y))
+      dot.setAttribute('r', String(HEX_SIZE * 0.11))
+      dot.setAttribute('fill', color)
+      dot.style.setProperty('--dx', `${(Math.cos(ang) * R).toFixed(1)}px`)
+      dot.style.setProperty('--dy', `${(Math.sin(ang) * R).toFixed(1)}px`)
+      dot.style.animation = 'pollen 600ms ease-out forwards'
+      g.appendChild(dot)
+    }
+    fx.appendChild(g)
+    window.setTimeout(() => g.remove(), 650)
+  }
+
+  // 직전 수의 말 위치에 착지 반짝(말을 놓은 수에만).
+  function sparkleLastPiece(move: Move, owner: Player): void {
+    const pc = lastPieceCell(move)
+    if (!pc) return
+    spawnSparkle(hexToPixel(pc), PIECE_FILL[owner])
+  }
+
+  // 승리 — 5목 라인을 따라 꿀이 터지는 연출(칸마다 시차).
+  function spawnWinBurst(board: GameState['board']): void {
+    const line = winningLine(board)
+    if (!line) return
+    line.cells.forEach((k, i) => {
+      window.setTimeout(() => spawnSparkle(hexToPixel(hexFromKey(k)), '#f59e0b'), i * 90)
+    })
+  }
+
   function applyAndAdvance(move: Move): void {
     replayIndex = null // 실시간 수가 들어오면 복기 종료
     history = [...history, state]
@@ -564,8 +638,13 @@ export function mountGame(root: HTMLElement): void {
     message = ''
     modalDismissed = false
     openMenu = null
-    if (state.phase === 'finished' && state.result?.kind === 'win') sound.win()
-    else sound.place(mover)
+    if (state.phase === 'finished' && state.result?.kind === 'win') {
+      sound.win()
+      spawnWinBurst(state.board)
+    } else {
+      sound.place(mover)
+      sparkleLastPiece(move, mover)
+    }
     // 훈수 모드면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
     if (settings.hints && state.phase === 'playing') {
       const opp = opponent(state.turn)
@@ -749,7 +828,7 @@ export function mountGame(root: HTMLElement): void {
       const h = hexFromKey(key)
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
-          fill: TILE_FILL[cell.tile.owner],
+          fill: `url(#wax-${cell.tile.owner})`, // 밀랍 셀 질감(돔형 음영)
           stroke: TILE_STROKE,
           strokeWidth: 1.5,
           cls: lastKeys.has(key) ? 'pop' : undefined,
@@ -1011,6 +1090,7 @@ export function mountGame(root: HTMLElement): void {
     modalLayer.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal-card">
+          ${BEE_SVG}
           <div class="modal-title">${title}</div>
           <div class="modal-sub">${sub}</div>
           <div class="modal-actions">
@@ -1329,6 +1409,7 @@ export function mountGame(root: HTMLElement): void {
         if (history.length > 0) {
           clearAiTimer()
           stopReplayTimer()
+          clearFx()
           replayIndex = null
           // 사람 차례가 될 때까지 되돌린다 — vs AI 에선 AI 수와 내 수를 함께 무른다.
           // (한 수만 무르면 AI 차례로 돌아가 AI 가 즉시 다시 둬 무효가 됨)
@@ -1381,6 +1462,7 @@ export function mountGame(root: HTMLElement): void {
       case 'new':
         clearAiTimer()
         stopReplayTimer()
+        clearFx()
         replayIndex = null
         state = createInitialState()
         history = []

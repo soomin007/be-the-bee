@@ -442,6 +442,51 @@ svg.board.panning {
   animation: piece-pop 0.28s ease-out;
 }
 
+/* 착지/승리 꽃가루 반짝 — fx 레이어의 점이 바깥으로 튀며 사라진다 */
+@keyframes pollen {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(1);
+    opacity: 0;
+  }
+}
+
+/* 결과 모달 벌 마스코트 */
+.modal-bee {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 0.4rem;
+  animation: bee-bob 1.6s ease-in-out infinite;
+}
+@keyframes bee-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(3deg);
+  }
+}
+.modal-bee .wing {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bee-wing 0.18s ease-in-out infinite alternate;
+}
+@keyframes bee-wing {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0.62);
+  }
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
