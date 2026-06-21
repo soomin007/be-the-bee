@@ -37,8 +37,12 @@ If anything in `engine/` touches the DOM or imports from `ui/`, that is a bug.
 
 Use **cube coordinates** (q, r, s with q + r + s = 0) internally. The board is
 sparse (tiles are placed dynamically, the board grows during play), so store it
-as a `Map` keyed by coordinate — never a fixed 2D array. Follow the conventions
+as a coordinate-keyed sparse map — never a fixed 2D array. Follow the conventions
 in the Red Blob Games hex guide.
+
+> 구현 메모: 보드는 JSON 직렬화 가능한 `Record<string, Cell>`(키 = `hexKey`)로
+> 저장한다. "좌표 키 희소 맵 / 2D 배열 금지" 의도는 그대로 지키면서 직렬화가
+> 공짜다(JS `Map`은 직렬화가 안 돼 채택하지 않음). 2026-06-21 결정.
 
 ## "Five in a row" — one scan, two uses
 
@@ -65,6 +69,35 @@ Write the line-scanning function once and reuse it for both. Do not duplicate it
 - `npm run dev`   — local dev server
 - `npm test`      — run engine tests
 - `npm run build` — production build
+
+## 운영 규칙 (세션 루틴·커밋·문서)
+
+문서 지도(무엇이 어디서 단일 진실인지)는 [`docs/INDEX.md`](docs/INDEX.md).
+
+### 세션 시작 루틴 (본격 작업 전 가장 먼저)
+다음을 읽고 "직전까지 한 것 / 다음 후보 / 추천 한 가지"를 정리해 사용자에게 제안한 뒤 시작한다:
+1. [`docs/design/backlog.md`](docs/design/backlog.md) — 다음 작업의 단일 소스
+2. 최신 [`session_logs/YYYY-MM-DD.md`](session_logs/) — 직전 세션 상태·결정·미해결
+3. [`docs/design/known_issues.md`](docs/design/known_issues.md) — 반복 금지 함정/오류
+4. `git log --oneline -10` + `git status` — 누적 변경
+사용자가 곧장 작업을 지시하면 그것부터 하되, 위 파일로 맥락을 먼저 맞춘다.
+
+### Git push 루틴
+의미 있는 작업 단위(기능·시스템 변경·문서 대량 갱신·세션 로그 등)가 끝나면 **즉시
+commit + push origin main** (사용자 지시 없어도 자동). 작은 단위로 자주 끊는다.
+- 커밋 메시지: 한국어, `prefix(scope): 설명`(feat/fix/refactor/docs/chore), 이모지 없음,
+  본문은 변경 항목 bullet.
+- `main`에 직접 push (이 프로젝트는 branch/PR 안 씀).
+- destructive 작업(force push, reset --hard 등)은 먼저 확인.
+
+### 오류 기록 루틴 (반복 방지)
+세션 중 버그·설계 함정·작업 실수를 발견하면 `docs/design/known_issues.md`에
+"증상 → 원인 → 재발 방지책"으로 기록한다. 게임 버그뿐 아니라 프로세스 실수(도구
+오용, 커밋 누락 등)도 포함. 세션 시작 루틴에서 이 파일을 먼저 읽어 예방한다.
+
+### 세션 로그
+매 세션 종료 시 `session_logs/YYYY-MM-DD.md`(날짜별 새 문서)에 요약·주요 변경·결정·
+미해결을 기록한다. 같은 날짜면 이어서 추가.
 
 ## Out of scope (for now)
 
