@@ -68,6 +68,7 @@ interface RoomSettings {
   bgmTrack: number // BGM_TRACKS 인덱스
   bgmVolume: number // 0~1
   sfxVolume: number // 0~1 (0 = 효과음 끔)
+  watchDelay: number // 관전 모드 수 간격(ms)
 }
 function defaultSettings(): RoomSettings {
   return {
@@ -78,6 +79,7 @@ function defaultSettings(): RoomSettings {
     bgmTrack: 0,
     bgmVolume: 0.4,
     sfxVolume: 0.6,
+    watchDelay: 700,
   }
 }
 
@@ -107,6 +109,10 @@ function loadSettings(): RoomSettings {
           : d.bgmTrack,
       bgmVolume: clampVol(s.bgmVolume, d.bgmVolume),
       sfxVolume: clampVol(s.sfxVolume, d.sfxVolume),
+      watchDelay:
+        typeof s.watchDelay === 'number' && s.watchDelay >= 100 && s.watchDelay <= 3000
+          ? Math.round(s.watchDelay)
+          : d.watchDelay,
     }
   } catch {
     return d
@@ -484,6 +490,8 @@ export function mountGame(root: HTMLElement): void {
     if (!aiControls(state.turn) || aiThinking) return
     aiThinking = true
     render() // "생각 중" 표시 + 입력 잠금
+    // 관전 모드는 사용자가 정한 간격으로 천천히 — vs AI 는 짧게.
+    const delay = settings.mode === 'watch' ? settings.watchDelay : AI_DELAY_MS
     aiTimer = window.setTimeout(() => {
       aiTimer = null
       aiThinking = false
@@ -492,7 +500,7 @@ export function mountGame(root: HTMLElement): void {
       } catch {
         render()
       }
-    }, AI_DELAY_MS)
+    }, delay)
   }
 
   function onHexClick(h: Hex): void {
@@ -968,6 +976,16 @@ export function mountGame(root: HTMLElement): void {
         ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat}</div>`
         : `<div class="settings-summary">🎮 ${MODE_LABEL[settings.mode]} · 난이도 <b>${DIFF_LABEL[settings.aiDifficulty]}</b></div>`
 
+    // 관전 모드: 두는 속도(수 간격) 조절. 간격이 클수록 천천히.
+    const watchCtl =
+      settings.mode === 'watch'
+        ? `<div class="sc-slider watch-speed">
+             <span class="sc-label">관전 간격</span>
+             <input type="range" data-ctl="watchDelay" min="100" max="2000" step="100" value="${settings.watchDelay}">
+             <span class="sc-val">${(settings.watchDelay / 1000).toFixed(1)}초</span>
+           </div>`
+        : ''
+
     let reach = ''
     if (state.phase === 'playing') {
       if (winNowCells.length > 0) {
@@ -1013,6 +1031,7 @@ export function mountGame(root: HTMLElement): void {
       <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       ${settingsHtml}
       ${settingsSummary}
+      ${watchCtl}
       ${soundCtl}
       <p class="hint">같은 진영 말 5개를 일렬로 연결하면 승리. 타일은 기존 타일에 붙여야 합니다.</p>
       <p class="hint nav">🖱️ 휠: 줌 · 드래그: 이동 · ⌨️ 화살표/＋－/0(리셋)</p>
@@ -1048,6 +1067,15 @@ export function mountGame(root: HTMLElement): void {
         sound.place('yellow') // 레벨 미리듣기
         persist()
       })
+    }
+    const watchDelay = panel.querySelector('input[data-ctl="watchDelay"]') as HTMLInputElement | null
+    if (watchDelay) {
+      const val = watchDelay.nextElementSibling as HTMLElement | null
+      watchDelay.addEventListener('input', () => {
+        settings.watchDelay = Number(watchDelay.value)
+        if (val) val.textContent = `${(settings.watchDelay / 1000).toFixed(1)}초`
+      })
+      watchDelay.addEventListener('change', persist)
     }
   }
 

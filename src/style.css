@@ -334,6 +334,17 @@ svg.board.panning {
   accent-color: #eab308;
 }
 
+.sc-slider .sc-val {
+  flex: none;
+  width: 2.6rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-speed {
+  margin: 0.3rem 0 0.1rem;
+}
+
 .hint {
   font-size: 0.78rem;
   color: #888;
