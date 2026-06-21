@@ -218,6 +218,14 @@ export function mountGame(root: HTMLElement): void {
     return { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
   }
 
+  const capturePointer = (id: number): void => {
+    try {
+      svg.setPointerCapture(id)
+    } catch {
+      /* happy-dom 등 미지원 환경 무시 */
+    }
+  }
+
   svg.addEventListener('pointerdown', (e: PointerEvent) => {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     dragMoved = false
@@ -227,18 +235,18 @@ export function mountGame(root: HTMLElement): void {
     } else if (pointers.size === 2) {
       pinchDist = pinchInfo()?.dist ?? 0
     }
-    try {
-      svg.setPointerCapture(e.pointerId)
-    } catch {
-      /* happy-dom 등 미지원 환경 무시 */
-    }
+    // 주의: 여기서 setPointerCapture 하면 click 이 캡처 대상(svg)으로 리타깃되어
+    // 헥스(polygon) 클릭이 안 먹는다. 실제 드래그/핀치가 시작될 때만 캡처한다.
   })
   svg.addEventListener('pointermove', (e: PointerEvent) => {
     if (!pointers.has(e.pointerId)) return
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pointers.size >= 2) {
       // 두 손가락 핀치 줌(가운데 기준)
-      dragMoved = true
+      if (!dragMoved) {
+        dragMoved = true
+        capturePointer(e.pointerId)
+      }
       const info = pinchInfo()
       if (info && pinchDist > 0 && info.dist > 0) {
         const rect = svg.getBoundingClientRect()
@@ -252,6 +260,7 @@ export function mountGame(root: HTMLElement): void {
       if (!dragMoved && Math.hypot(dx, dy) > 4) {
         dragMoved = true
         svg.classList.add('panning')
+        capturePointer(e.pointerId)
       }
       if (dragMoved) {
         panByClient(dx, dy)
