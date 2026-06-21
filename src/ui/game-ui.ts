@@ -1,4 +1,4 @@
-// 핫시트 게임 UI: SVG 보드 렌더 + 클릭 입력 + 턴/액션 상태머신.
+// 핫시트 게임 UI: SVG 보드 렌더 + 클릭 입력 + 줌/팬 카메라 + 턴/액션 상태머신.
 // 엔진(순수)에만 의존한다. 엔진은 이 파일을 절대 import 하지 않는다.
 
 import {
@@ -7,6 +7,7 @@ import {
   createInitialState,
   detectHives,
   frontierCells,
+  hex,
   hexEquals,
   hexFromKey,
   isTilePlaceable,
@@ -23,13 +24,37 @@ const TILE_FILL: Record<Player, string> = { yellow: '#f4d35e', brown: '#c1812f' 
 const PIECE_FILL: Record<Player, string> = { yellow: '#d98a00', brown: '#3f2007' }
 const PLAYER_LABEL: Record<Player, string> = { yellow: '노랑', brown: '갈색' }
 const TILE_STROKE = '#6b5524'
-const HIVE_STROKE = '#eab308'
 
-// 진행 중인 턴의 선택 상태(아직 엔진에 커밋되지 않음).
+const BG_RADIUS = 12 // 옅은 배경 그리드 반경(헥스)
+const MIN_W = HEX_SIZE * 5 // 줌 인 한계(viewBox 폭)
+const MAX_W = HEX_SIZE * 130 // 줌 아웃 한계
+
+interface Camera {
+  cx: number
+  cy: number
+  w: number
+}
+
 type Draft =
-  | { readonly stage: 'chooseAction' } // ①/② 둘 다 가능 — 버튼 선택 대기
+  | { readonly stage: 'chooseAction' }
   | { readonly stage: 'tile'; readonly action: 'twoTiles' | 'tileAndPiece'; readonly first?: Hex }
   | { readonly stage: 'piece'; readonly action: 'tileAndPiece' | 'pieceOnly'; readonly tile?: Hex }
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v))
+}
+
+// 큐브 반경 R 안의 모든 헥스(배경 그리드용). 한 번만 계산.
+function backgroundHexes(radius: number): Hex[] {
+  const out: Hex[] = []
+  for (let q = -radius; q <= radius; q++) {
+    const r1 = Math.max(-radius, -q - radius)
+    const r2 = Math.min(radius, -q + radius)
+    for (let r = r1; r <= r2; r++) out.push(hex(q, r))
+  }
+  return out
+}
+const BG_HEXES = backgroundHexes(BG_RADIUS)
 
 export function mountGame(root: HTMLElement): void {
   let state: GameState = createInitialState()
@@ -38,14 +63,159 @@ export function mountGame(root: HTMLElement): void {
   let pieceKind: PieceKind = 'normal'
   let message = ''
 
+  let cam: Camera = { cx: 0, cy: 0, w: HEX_SIZE * 26 }
+  // 드래그 팬 상태
+  let pointerDown = false
+  let dragMoved = false
+  let lastX = 0
+  let lastY = 0
+
   root.innerHTML = `
     <div class="game">
-      <div class="board-wrap"><svg class="board" xmlns="${SVGNS}"></svg></div>
       <aside class="panel"></aside>
+      <div class="board-wrap">
+        <svg class="board" xmlns="${SVGNS}" tabindex="0">
+          <defs>
+            <filter id="hiveGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f59e0b" flood-opacity="0.95" />
+            </filter>
+          </defs>
+          <g class="content"></g>
+        </svg>
+      </div>
     </div>
   `
   const svg = root.querySelector('svg.board') as SVGSVGElement
+  const content = svg.querySelector('g.content') as SVGGElement
   const panel = root.querySelector('.panel') as HTMLElement
+
+  // ---- 카메라 ---------------------------------------------------------------
+
+  function svgAspect(): { cw: number; ch: number; aspect: number } {
+    const rect = svg.getBoundingClientRect()
+    const cw = rect.width > 0 ? rect.width : 800
+    const ch = rect.height > 0 ? rect.height : 600
+    return { cw, ch, aspect: ch / cw }
+  }
+
+  function applyCamera(): void {
+    const { aspect } = svgAspect()
+    const h = cam.w * aspect
+    svg.setAttribute(
+      'viewBox',
+      `${(cam.cx - cam.w / 2).toFixed(2)} ${(cam.cy - h / 2).toFixed(2)} ${cam.w.toFixed(2)} ${h.toFixed(2)}`,
+    )
+  }
+
+  function setInitialCamera(): void {
+    const a = hexToPixel(hex(0, 0))
+    const b = hexToPixel(hex(1, 0))
+    cam = { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, w: HEX_SIZE * 26 }
+    applyCamera()
+  }
+
+  function zoomAt(px: number, py: number, factor: number): void {
+    const { cw, ch, aspect } = svgAspect()
+    const w = cam.w
+    const h = w * aspect
+    const worldX = cam.cx - w / 2 + (px / cw) * w
+    const worldY = cam.cy - h / 2 + (py / ch) * h
+    const w2 = clamp(w * factor, MIN_W, MAX_W)
+    const h2 = w2 * aspect
+    cam.w = w2
+    cam.cx = worldX + w2 / 2 - (px / cw) * w2
+    cam.cy = worldY + h2 / 2 - (py / ch) * h2
+    applyCamera()
+  }
+
+  function panByClient(dx: number, dy: number): void {
+    const { cw, ch, aspect } = svgAspect()
+    cam.cx -= (dx / cw) * cam.w
+    cam.cy -= (dy / ch) * (cam.w * aspect)
+    applyCamera()
+  }
+
+  svg.addEventListener(
+    'wheel',
+    (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = svg.getBoundingClientRect()
+      const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1
+      zoomAt(e.clientX - rect.left, e.clientY - rect.top, factor)
+    },
+    { passive: false },
+  )
+
+  svg.addEventListener('pointerdown', (e: PointerEvent) => {
+    pointerDown = true
+    dragMoved = false
+    lastX = e.clientX
+    lastY = e.clientY
+    try {
+      svg.setPointerCapture(e.pointerId)
+    } catch {
+      /* happy-dom 등 미지원 환경 무시 */
+    }
+  })
+  svg.addEventListener('pointermove', (e: PointerEvent) => {
+    if (!pointerDown) return
+    const dx = e.clientX - lastX
+    const dy = e.clientY - lastY
+    if (!dragMoved && Math.hypot(dx, dy) > 4) {
+      dragMoved = true
+      svg.classList.add('panning')
+    }
+    if (dragMoved) {
+      panByClient(dx, dy)
+      lastX = e.clientX
+      lastY = e.clientY
+    }
+  })
+  const endPointer = (): void => {
+    pointerDown = false
+    svg.classList.remove('panning')
+  }
+  svg.addEventListener('pointerup', endPointer)
+  svg.addEventListener('pointercancel', endPointer)
+
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    const { aspect, cw, ch } = svgAspect()
+    const camH = cam.w * aspect
+    switch (e.key) {
+      case 'ArrowLeft':
+        cam.cx -= 0.12 * cam.w
+        break
+      case 'ArrowRight':
+        cam.cx += 0.12 * cam.w
+        break
+      case 'ArrowUp':
+        cam.cy -= 0.12 * camH
+        break
+      case 'ArrowDown':
+        cam.cy += 0.12 * camH
+        break
+      case '+':
+      case '=':
+        zoomAt(cw / 2, ch / 2, 1 / 1.15)
+        return
+      case '-':
+      case '_':
+        zoomAt(cw / 2, ch / 2, 1.15)
+        return
+      case '0':
+        setInitialCamera()
+        return
+      default:
+        return
+    }
+    e.preventDefault()
+    applyCamera()
+  })
+
+  window.addEventListener('resize', applyCamera)
+
+  // ---- 턴/액션 상태머신 -----------------------------------------------------
 
   function startTurn(): void {
     pieceKind = 'normal'
@@ -70,7 +240,6 @@ export function mountGame(root: HTMLElement): void {
   function onHexClick(h: Hex): void {
     if (draft === null) return
     const player = state.turn
-
     if (draft.stage === 'chooseAction') return
 
     if (draft.stage === 'tile') {
@@ -81,7 +250,6 @@ export function mountGame(root: HTMLElement): void {
         render()
         return
       }
-      // twoTiles
       if (draft.first === undefined) {
         if (!isTilePlaceable(state.board, h)) return
         draft = { stage: 'tile', action: 'twoTiles', first: h }
@@ -95,7 +263,6 @@ export function mountGame(root: HTMLElement): void {
       return
     }
 
-    // draft.stage === 'piece'
     const board2 =
       draft.action === 'tileAndPiece' && draft.tile !== undefined
         ? withTile(state.board, draft.tile, player)
@@ -114,7 +281,7 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
-  // ---- 렌더링 ----------------------------------------------------------------
+  // ---- 렌더링 ---------------------------------------------------------------
 
   function makeHexPolygon(
     center: Point,
@@ -124,6 +291,8 @@ export function mountGame(root: HTMLElement): void {
       strokeWidth: number
       opacity?: number
       dash?: boolean
+      filter?: string
+      interactive?: boolean
       onClick?: () => void
     },
   ): SVGPolygonElement {
@@ -134,9 +303,14 @@ export function mountGame(root: HTMLElement): void {
     poly.setAttribute('stroke-width', String(opts.strokeWidth))
     if (opts.opacity !== undefined) poly.setAttribute('opacity', String(opts.opacity))
     if (opts.dash) poly.setAttribute('stroke-dasharray', '4 3')
+    if (opts.filter) poly.setAttribute('filter', opts.filter)
+    if (opts.interactive === false) poly.style.pointerEvents = 'none'
     if (opts.onClick) {
       poly.style.cursor = 'pointer'
-      poly.addEventListener('click', opts.onClick)
+      const cb = opts.onClick
+      poly.addEventListener('click', () => {
+        if (!dragMoved) cb()
+      })
     }
     return poly
   }
@@ -144,7 +318,6 @@ export function mountGame(root: HTMLElement): void {
   function render(): void {
     const player = state.turn
 
-    // 이번 렌더에 표시할 보조 칸 결정 (판별 유니온 내로잉을 위해 if 로 분기)
     let provisionalFirst: Hex | undefined
     let provisionalTile: Hex | undefined
     let expectingTile = false
@@ -154,41 +327,35 @@ export function mountGame(root: HTMLElement): void {
     } else if (draft !== null && draft.stage === 'piece' && draft.action === 'tileAndPiece') {
       provisionalTile = draft.tile
     }
-
     const frontierBoard = provisionalFirst ? withTile(state.board, provisionalFirst, player) : state.board
     const frontier = expectingTile ? frontierCells(frontierBoard) : []
     const pieceStage = draft !== null && draft.stage === 'piece'
     const board2 = provisionalTile ? withTile(state.board, provisionalTile, player) : state.board
 
-    // viewBox 계산
-    const boundHexes: Hex[] = Object.keys(state.board).map(hexFromKey)
-    for (const f of frontier) boundHexes.push(f)
-    if (provisionalFirst) boundHexes.push(provisionalFirst)
-    if (provisionalTile) boundHexes.push(provisionalTile)
+    while (content.firstChild) content.removeChild(content.firstChild)
 
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    for (const h of boundHexes) {
-      const p = hexToPixel(h)
-      minX = Math.min(minX, p.x)
-      minY = Math.min(minY, p.y)
-      maxX = Math.max(maxX, p.x)
-      maxY = Math.max(maxY, p.y)
+    // 0) 옅은 배경 그리드(점선, 비인터랙티브)
+    const occupied = new Set(Object.keys(state.board))
+    for (const h of BG_HEXES) {
+      content.appendChild(
+        makeHexPolygon(hexToPixel(h), {
+          fill: 'none',
+          stroke: '#c9b88f',
+          strokeWidth: 0.6,
+          opacity: 0.3,
+          dash: true,
+          interactive: false,
+        }),
+      )
     }
-    const pad = HEX_SIZE * 1.5
-    svg.setAttribute('viewBox', `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`)
 
-    while (svg.firstChild) svg.removeChild(svg.firstChild)
-
-    // 1) 프론티어(타일 놓을 자리)
+    // 1) 프론티어(타일 놓을 자리) — 더 또렷한 점선
     for (const f of frontier) {
-      svg.appendChild(
+      content.appendChild(
         makeHexPolygon(hexToPixel(f), {
           fill: TILE_FILL[player],
           stroke: TILE_STROKE,
-          strokeWidth: 1,
+          strokeWidth: 1.2,
           opacity: 0.22,
           dash: true,
           onClick: () => onHexClick(f),
@@ -196,27 +363,42 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 2) 타일 + 벌집 윤곽
-    const hiveKeys = new Set<string>()
-    for (const hive of detectHives(state.board)) for (const k of hive.cells) hiveKeys.add(k)
+    // 2) 타일
     for (const key of Object.keys(state.board)) {
       const cell = state.board[key]!
       const h = hexFromKey(key)
-      const inHive = hiveKeys.has(key)
-      svg.appendChild(
+      content.appendChild(
         makeHexPolygon(hexToPixel(h), {
           fill: TILE_FILL[cell.tile.owner],
-          stroke: inHive ? HIVE_STROKE : TILE_STROKE,
-          strokeWidth: inHive ? 4 : 1.5,
+          stroke: TILE_STROKE,
+          strokeWidth: 1.5,
           onClick: () => onHexClick(h),
         }),
       )
     }
 
-    // 3) 잠정 타일(미확정) — 점선
+    // 3) 벌집 강조 — 금색 글로우 오버레이(가시성 ↑)
+    const hiveKeys = new Set<string>()
+    for (const hive of detectHives(state.board)) for (const k of hive.cells) hiveKeys.add(k)
+    for (const key of hiveKeys) {
+      const h = hexFromKey(key)
+      content.appendChild(
+        makeHexPolygon(hexToPixel(h), {
+          fill: '#fde68a',
+          stroke: '#f59e0b',
+          strokeWidth: 4.5,
+          opacity: 0.55,
+          filter: 'url(#hiveGlow)',
+          interactive: false,
+        }),
+      )
+    }
+    void occupied
+
+    // 4) 잠정 타일(미확정) — 점선
     for (const prov of [provisionalFirst, provisionalTile]) {
       if (!prov) continue
-      svg.appendChild(
+      content.appendChild(
         makeHexPolygon(hexToPixel(prov), {
           fill: TILE_FILL[player],
           stroke: '#111',
@@ -228,12 +410,12 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 4) 말 놓을 수 있는 타일 강조(말 단계)
+    // 5) 말 놓을 수 있는 타일 강조(말 단계)
     if (pieceStage) {
       for (const key of Object.keys(board2)) {
         const h = hexFromKey(key)
         if (validatePiecePlacement(board2, player, state.supplies[player], { at: h, kind: pieceKind }).ok) {
-          svg.appendChild(
+          content.appendChild(
             makeHexPolygon(hexToPixel(h), {
               fill: 'none',
               stroke: '#16a34a',
@@ -245,7 +427,7 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 5) 말(원) + 여왕벌 표식
+    // 6) 말(원) + 여왕벌 표식
     for (const key of Object.keys(state.board)) {
       const piece = state.board[key]!.piece
       if (!piece) continue
@@ -258,7 +440,7 @@ export function mountGame(root: HTMLElement): void {
       circle.setAttribute('stroke', '#fff')
       circle.setAttribute('stroke-width', '2.5')
       circle.style.pointerEvents = 'none'
-      svg.appendChild(circle)
+      content.appendChild(circle)
       if (piece.kind === 'queen') {
         const crown = document.createElementNS(SVGNS, 'text')
         crown.setAttribute('x', String(p.x))
@@ -269,7 +451,7 @@ export function mountGame(root: HTMLElement): void {
         crown.setAttribute('fill', '#fff')
         crown.style.pointerEvents = 'none'
         crown.textContent = '♛'
-        svg.appendChild(crown)
+        content.appendChild(crown)
       }
     }
 
@@ -313,6 +495,7 @@ export function mountGame(root: HTMLElement): void {
       if (draftHasSelection()) buttons.push(`<button data-act="cancel">취소</button>`)
     }
     if (history.length > 0) buttons.push(`<button data-act="undo">무르기</button>`)
+    buttons.push(`<button data-act="resetView">뷰 리셋</button>`)
     buttons.push(`<button data-act="new">새 게임</button>`)
 
     panel.innerHTML = `
@@ -328,7 +511,8 @@ export function mountGame(root: HTMLElement): void {
       </div>
       <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       <div class="buttons">${buttons.join('')}</div>
-      <p class="hint">모든 타일은 기존 타일에 붙여야 합니다. 같은 진영 말 5개를 일렬로 연결하면 승리.</p>
+      <p class="hint">같은 진영 말 5개를 일렬로 연결하면 승리. 타일은 기존 타일에 붙여야 합니다.</p>
+      <p class="hint nav">🖱️ 휠: 줌 · 드래그: 이동 · ⌨️ 화살표/＋－/0(리셋)</p>
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
@@ -384,6 +568,9 @@ export function mountGame(root: HTMLElement): void {
           startTurn()
         }
         break
+      case 'resetView':
+        setInitialCamera()
+        return
       case 'new':
         state = createInitialState()
         history = []
@@ -396,6 +583,7 @@ export function mountGame(root: HTMLElement): void {
     render()
   }
 
+  setInitialCamera()
   startTurn()
   render()
 }
