@@ -11,6 +11,7 @@ import {
   hex,
   hexEquals,
   hexFromKey,
+  hexKey,
   isTilePlaceable,
   opponent,
   totalHiveScores,
@@ -21,6 +22,7 @@ import {
 } from '../engine/index'
 import type { Ai, Difficulty, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
+import { createSound } from './sound'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -116,6 +118,8 @@ export function mountGame(root: HTMLElement): void {
 
   // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜 — 새 게임에도 방 설정은 유지)
   const settings = defaultSettings()
+  const sound = createSound()
+  sound.enabled = settings.sound
   let ai: Ai | null = null
   let aiThinking = false // 재진입 가드 + 입력 잠금
   let aiTimer: number | null = null
@@ -287,8 +291,16 @@ export function mountGame(root: HTMLElement): void {
   function applyAndAdvance(move: Move): void {
     history = [...history, state]
     lastMove = move
+    const mover = state.turn
     state = applyMove(state, move)
     message = ''
+    if (state.phase === 'finished' && state.result?.kind === 'win') sound.win()
+    else sound.place(mover)
+    // 훈수 모드면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
+    if (settings.hints && state.phase === 'playing') {
+      const opp = opponent(state.turn)
+      if (winningCells(state.board, opp, state.supplies[opp]).length > 0) sound.alert()
+    }
     startTurn()
     render()
     maybeScheduleAi()
@@ -355,6 +367,7 @@ export function mountGame(root: HTMLElement): void {
     const v = validatePiecePlacement(board2, player, state.supplies[player], placement)
     if (!v.ok) {
       message = v.reason
+      sound.invalid()
       render()
       return
     }
@@ -403,6 +416,7 @@ export function mountGame(root: HTMLElement): void {
 
   function render(): void {
     const player = state.turn
+    const lastKeys = lastMove ? new Set(moveCells(lastMove).map(hexKey)) : new Set<string>()
 
     let provisionalFirst: Hex | undefined
     let provisionalTile: Hex | undefined
@@ -458,6 +472,7 @@ export function mountGame(root: HTMLElement): void {
           fill: TILE_FILL[cell.tile.owner],
           stroke: TILE_STROKE,
           strokeWidth: 1.5,
+          cls: lastKeys.has(key) ? 'pop' : undefined,
           onClick: () => onHexClick(h),
         }),
       )
@@ -564,6 +579,7 @@ export function mountGame(root: HTMLElement): void {
       if (!piece) continue
       const p = hexToPixel(hexFromKey(key))
       const circle = document.createElementNS(SVGNS, 'circle')
+      if (lastKeys.has(key)) circle.classList.add('pop')
       circle.setAttribute('cx', String(p.x))
       circle.setAttribute('cy', String(p.y))
       circle.setAttribute('r', String(HEX_SIZE * 0.52))
@@ -655,6 +671,12 @@ export function mountGame(root: HTMLElement): void {
     }
     buttons.push(
       `<button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수 ${settings.hints ? '✓' : ''}</button>`,
+    )
+    buttons.push(
+      `<button data-act="toggleSound" class="${settings.sound ? 'active' : ''}">효과음 ${settings.sound ? '✓' : ''}</button>`,
+    )
+    buttons.push(
+      `<button data-act="toggleMusic" class="${sound.musicOn() ? 'active' : ''}">🎵 ${sound.musicOn() ? '켜짐' : 'BGM'}</button>`,
     )
     if (history.length > 0 && !aiThinking) buttons.push(`<button data-act="undo">무르기</button>`)
     buttons.push(`<button data-act="resetView">뷰 리셋</button>`)
@@ -756,6 +778,13 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'toggleHints':
         settings.hints = !settings.hints
+        break
+      case 'toggleSound':
+        settings.sound = !settings.sound
+        sound.enabled = settings.sound
+        break
+      case 'toggleMusic':
+        sound.toggleMusic()
         break
       case 'resetView':
         setInitialCamera()
