@@ -27,7 +27,9 @@ import { createSound } from './sound'
 const SVGNS = 'http://www.w3.org/2000/svg'
 
 const TILE_FILL: Record<Player, string> = { yellow: '#f4d35e', brown: '#c1812f' }
-const PIECE_FILL: Record<Player, string> = { yellow: '#d98a00', brown: '#3f2007' }
+// 말 = 벌. 몸통 색 + 줄무늬 색(진영 구분 + 벌 느낌). 흰 테두리로 타일과 대비.
+const PIECE_FILL: Record<Player, string> = { yellow: '#e0a106', brown: '#8a5418' }
+const PIECE_STRIPE: Record<Player, string> = { yellow: '#3a2600', brown: '#241200' }
 const PLAYER_LABEL: Record<Player, string> = { yellow: '노랑', brown: '갈색' }
 const TILE_STROKE = '#6b5524'
 
@@ -670,42 +672,86 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 6) 말(원) + 여왕벌 표식
+    // 6) 말 = 벌 (날개 + 몸통 + 줄무늬) + 여왕벌 왕관
     for (const key of Object.keys(state.board)) {
       const piece = state.board[key]!.piece
       if (!piece) continue
       const p = hexToPixel(hexFromKey(key))
-      const circle = document.createElementNS(SVGNS, 'circle')
-      circle.classList.add('piece')
-      if (lastKeys.has(key)) circle.classList.add('pop')
-      circle.setAttribute('cx', String(p.x))
-      circle.setAttribute('cy', String(p.y))
-      circle.setAttribute('r', String(HEX_SIZE * 0.52))
-      circle.setAttribute('fill', PIECE_FILL[piece.owner])
-      circle.setAttribute('stroke', '#fff')
-      circle.setAttribute('stroke-width', '2.5')
-      circle.style.pointerEvents = 'none'
-      content.appendChild(circle)
+      const r = HEX_SIZE * 0.52
+      const stripe = PIECE_STRIPE[piece.owner]
+
+      // 날개(몸통 뒤, 살짝 위로) — 투명한 흰 타원 2개
+      for (const dir of [-1, 1]) {
+        const wx = p.x + dir * r * 0.34
+        const wy = p.y - r * 0.5
+        const wing = document.createElementNS(SVGNS, 'ellipse')
+        wing.setAttribute('cx', String(wx))
+        wing.setAttribute('cy', String(wy))
+        wing.setAttribute('rx', String(r * 0.3))
+        wing.setAttribute('ry', String(r * 0.17))
+        wing.setAttribute('fill', '#ffffff')
+        wing.setAttribute('opacity', '0.8')
+        wing.setAttribute('stroke', stripe)
+        wing.setAttribute('stroke-width', '1')
+        wing.setAttribute('transform', `rotate(${dir * 22} ${wx} ${wy})`)
+        wing.style.pointerEvents = 'none'
+        content.appendChild(wing)
+      }
+
+      // 몸통(.piece — 테스트/검증이 세는 요소)
+      const body = document.createElementNS(SVGNS, 'circle')
+      body.classList.add('piece')
+      if (lastKeys.has(key)) body.classList.add('pop')
+      body.setAttribute('cx', String(p.x))
+      body.setAttribute('cy', String(p.y))
+      body.setAttribute('r', String(r))
+      body.setAttribute('fill', PIECE_FILL[piece.owner])
+      body.setAttribute('stroke', '#fff')
+      body.setAttribute('stroke-width', '2.5')
+      body.style.pointerEvents = 'none'
+      content.appendChild(body)
+
+      // 줄무늬 2줄
+      for (const [yy, half] of [
+        [-0.2, 0.6],
+        [0.16, 0.72],
+      ] as const) {
+        const s = document.createElementNS(SVGNS, 'line')
+        s.setAttribute('x1', String(p.x - r * half))
+        s.setAttribute('y1', String(p.y + r * yy))
+        s.setAttribute('x2', String(p.x + r * half))
+        s.setAttribute('y2', String(p.y + r * yy))
+        s.setAttribute('stroke', stripe)
+        s.setAttribute('stroke-width', String(r * 0.26))
+        s.setAttribute('stroke-linecap', 'round')
+        s.style.pointerEvents = 'none'
+        content.appendChild(s)
+      }
+
       // 직전 수의 말은 말 둘레 파란 링으로(타일의 칸 테두리와 구분)
       if (key === lastPieceKey) {
         const ring = document.createElementNS(SVGNS, 'circle')
         ring.setAttribute('cx', String(p.x))
         ring.setAttribute('cy', String(p.y))
-        ring.setAttribute('r', String(HEX_SIZE * 0.66))
+        ring.setAttribute('r', String(r * 1.28))
         ring.setAttribute('fill', 'none')
         ring.setAttribute('stroke', '#2563eb')
         ring.setAttribute('stroke-width', '3')
         ring.style.pointerEvents = 'none'
         content.appendChild(ring)
       }
+
+      // 여왕벌 왕관(줄무늬 위에)
       if (piece.kind === 'queen') {
         const crown = document.createElementNS(SVGNS, 'text')
         crown.setAttribute('x', String(p.x))
         crown.setAttribute('y', String(p.y))
         crown.setAttribute('text-anchor', 'middle')
         crown.setAttribute('dominant-baseline', 'central')
-        crown.setAttribute('font-size', String(HEX_SIZE * 0.7))
+        crown.setAttribute('font-size', String(r * 1.0))
         crown.setAttribute('fill', '#fff')
+        crown.setAttribute('stroke', stripe)
+        crown.setAttribute('stroke-width', '0.5')
         crown.style.pointerEvents = 'none'
         crown.textContent = '♛'
         content.appendChild(crown)
