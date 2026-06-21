@@ -17,6 +17,7 @@ import {
   hex,
   hexAdd,
   hexDistance,
+  hexEquals,
   hexFromKey,
   hexKey,
   hexNeighbors,
@@ -24,11 +25,11 @@ import {
   type Hex,
 } from './hex'
 import { opponent } from './types'
-import type { Board, GameState, Move, PiecePlacement, Player } from './types'
+import type { Board, GameState, Move, Player } from './types'
 import { cellAt, pieceAt, withPiece, withTile } from './state'
 import { findLines, type Line } from './lines'
 import { totalHiveScores } from './hive'
-import { completingCells, detectWin } from './victory'
+import { detectWin } from './victory'
 import {
   allowedMoveTypes,
   applyMove,
@@ -65,7 +66,7 @@ function cfgFor(difficulty: Difficulty): Cfg {
     case 'easy':
       return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
     case 'hard':
-      return { useBlock: true, beamWidth: 10, beamDepth: 4, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 8, beamDepth: 4, noise: 0, relevanceRadius: 2 }
     case 'medium':
     default:
       return { useBlock: true, beamWidth: 6, beamDepth: 3, noise: 0, relevanceRadius: 2 }
@@ -98,6 +99,7 @@ const W = {
   HIVE: 40,
   CENTER: 1,
   CONTEST: 130, // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
+  SEIZE: 45, // 상대 색 타일 위에 놓은 내 말 = 선점(TIP#2 "타일엔 주인이 없다")
 } as const
 
 const CENTER_HEX: Hex = hex(0, 0)
@@ -239,12 +241,24 @@ function hiveContestTerm(board: Board, me: Player): number {
   return contestBonus(board, me) - contestBonus(board, opponent(me))
 }
 
+// 상대 색 타일 위에 놓인 내 말 = 선점(주도권). 같은 색 타일 위 말은 중립. 반대칭.
+function seizeScore(board: Board, me: Player): number {
+  let s = 0
+  for (const key of Object.keys(board)) {
+    const cell = board[key]!
+    if (!cell.piece || cell.piece.owner === cell.tile.owner) continue
+    s += cell.piece.owner === me ? W.SEIZE : -W.SEIZE
+  }
+  return s
+}
+
 function evaluate(board: Board, me: Player): number {
   const opp = opponent(me)
   let s = lineScore(board, me) - lineScore(board, opp)
   const hs = totalHiveScores(board)
   s += W.HIVE * (hs[me] - hs[opp])
   s += hiveContestTerm(board, me)
+  s += seizeScore(board, me)
   s -= W.CENTER * centralityPenalty(board, me)
   return s
 }
@@ -258,31 +272,40 @@ interface Candidate {
   at: Hex
 }
 
-// 내 타일선을 늘리는/인접/중심 휴리스틱으로 ② 의 부차 타일 1개 선택. (한 턴에 1회 계산해 공용)
-function bestDevelopmentTile(board: Board, me: Player): Hex | null {
+function moveSig(m: Move): string {
+  switch (m.type) {
+    case 'twoTiles':
+      return `2${hexKey(m.first)}|${hexKey(m.second)}`
+    case 'tileAndPiece':
+      return `t${hexKey(m.tile)}|${hexKey(m.piece.at)}`
+    case 'pieceOnly':
+      return `p${hexKey(m.piece.at)}`
+  }
+}
+
+// 타일 놓을 만한 프론티어 칸을 휴리스틱(내 타일선 연장/인접/중심)으로 순위 매겨 상위 limit개.
+function rankedTileSpots(board: Board, me: Player, limit: number): Hex[] {
   const frontier = frontierCells(board)
-  if (frontier.length === 0) return null
+  if (frontier.length === 0) return []
   const extendCells = new Set<string>()
   for (const line of findLines(ownerTileMap(board, me), 2)) {
     const dir = HEX_AXES[line.axis]!
     extendCells.add(hexKey(hexAdd(hexFromKey(line.cells[line.cells.length - 1]!), dir)))
     extendCells.add(hexKey(hexSubtract(hexFromKey(line.cells[0]!), dir)))
   }
-  let best = frontier[0]!
-  let bestScore = -Infinity
-  for (const f of frontier) {
+  const score = (f: Hex): number => {
     let s = extendCells.has(hexKey(f)) ? 100 : 0
     for (const n of hexNeighbors(f)) {
       const c = cellAt(board, n)
       if (c && c.tile.owner === me) s += 5
     }
-    s -= hexDistance(f, CENTER_HEX) * 0.1
-    if (s > bestScore) {
-      bestScore = s
-      best = f
-    }
+    return s - hexDistance(f, CENTER_HEX) * 0.1
   }
-  return best
+  return frontier
+    .map((f) => ({ f, s: score(f) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, limit)
+    .map((x) => x.f)
 }
 
 function relevantCells(board: Board, me: Player, supply: GameState['supplies'][Player], cfg: Cfg): Hex[] {
@@ -333,46 +356,58 @@ function relevantCells(board: Board, me: Player, supply: GameState['supplies'][P
   return result
 }
 
+// 다양한 후보를 생성한다. 핵심: 기존(특히 상대) 타일 위 말 = 선점/허리 끊기,
+// 타일 2개(①) = 벌집/영역 발전 — 게임 특색을 살린다. 여왕벌은 AI 가 쓰지 않는다(확장 모드 전용).
 function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
   const allowed = allowedMoveTypes(state)
   if (allowed.length === 0) return []
   const me = state.turn
   const board = state.board
   const supply = state.supplies[me]
-  const canTileAndPiece = allowed.includes('tileAndPiece')
+  const canTaP = allowed.includes('tileAndPiece')
   const canPieceOnly = allowed.includes('pieceOnly')
-  const dev = canTileAndPiece ? bestDevelopmentTile(board, me) : null
+  const canTwo = allowed.includes('twoTiles')
 
   const out: Candidate[] = []
-  for (const x of relevantCells(board, me, supply, cfg)) {
-    const onExistingTile = cellAt(board, x) !== undefined
-    const placement: PiecePlacement = { at: x, kind: 'normal' }
-    if (onExistingTile) {
-      if (canTileAndPiece && dev) out.push({ move: { type: 'tileAndPiece', tile: dev, piece: placement }, at: x })
-      else if (canPieceOnly) out.push({ move: { type: 'pieceOnly', piece: placement }, at: x })
-    } else if (canTileAndPiece) {
-      out.push({ move: { type: 'tileAndPiece', tile: x, piece: { at: x, kind: 'normal' } }, at: x })
+  const seen = new Set<string>()
+  const add = (move: Move, at: Hex): void => {
+    const sig = moveSig(move)
+    if (!seen.has(sig)) {
+      seen.add(sig)
+      out.push({ move, at })
     }
   }
-  return out.filter((c) => validateMove(state, c.move).ok)
-}
 
-// 여왕벌을 셀 C 에 놓는 합법수(승리/차단 전용). 없으면 null.
-function queenPlacementMove(state: GameState, c: Hex, me: Player): Move | null {
-  const allowed = allowedMoveTypes(state)
-  const placement: PiecePlacement = { at: c, kind: 'queen' }
-  if (cellAt(state.board, c) !== undefined) {
-    if (allowed.includes('tileAndPiece')) {
-      const dev = bestDevelopmentTile(state.board, me)
-      if (dev) return { type: 'tileAndPiece', tile: dev, piece: placement }
+  const tileSpots = canTaP || canTwo ? rankedTileSpots(board, me, 8) : []
+
+  // 말 배치 (② 또는 말만)
+  for (const p of relevantCells(board, me, supply, cfg)) {
+    if (cellAt(board, p) !== undefined) {
+      // 기존 타일 위 말(상대 타일이면 선점/허리 끊기) — 부차 타일은 상위 후보 몇 개
+      if (canTaP) {
+        for (const t of tileSpots.slice(0, 2)) {
+          if (!hexEquals(t, p)) add({ type: 'tileAndPiece', tile: t, piece: { at: p, kind: 'normal' } }, p)
+        }
+      } else if (canPieceOnly) {
+        add({ type: 'pieceOnly', piece: { at: p, kind: 'normal' } }, p)
+      }
+    } else if (canTaP) {
+      // 프론티어: 타일 깔고 그 위에 말(선 확장)
+      add({ type: 'tileAndPiece', tile: p, piece: { at: p, kind: 'normal' } }, p)
     }
-    if (allowed.includes('pieceOnly')) return { type: 'pieceOnly', piece: placement }
-    return null
   }
-  if (allowed.includes('tileAndPiece') && isTilePlaceable(state.board, c)) {
-    return { type: 'tileAndPiece', tile: c, piece: placement }
+
+  // 타일 2개 (①) — 상위 타일 + (다른 상위 타일 | T1 의 빈 이웃으로 선 잇기)
+  if (canTwo) {
+    for (const t1 of tileSpots.slice(0, 4)) {
+      const seconds: Hex[] = []
+      for (const t2 of tileSpots) if (!hexEquals(t1, t2)) seconds.push(t2)
+      for (const n of hexNeighbors(t1)) if (cellAt(board, n) === undefined) seconds.push(n)
+      for (const t2 of seconds.slice(0, 3)) add({ type: 'twoTiles', first: t1, second: t2 }, t1)
+    }
   }
-  return null
+
+  return out.filter((c) => validateMove(state, c.move).ok)
 }
 
 // ---- 차단 -----------------------------------------------------------------
@@ -394,16 +429,7 @@ function findBlock(state: GameState, candidates: Candidate[], me: Player): Move 
       best = c.move
     }
   }
-  if (best) return best
-
-  // 일반 말로 못 막으면(잠긴 칸 등) 여왕벌로 차단 시도
-  if (!state.supplies[me].queenUsed) {
-    for (const c of threats) {
-      const qm = queenPlacementMove(state, c, me)
-      if (qm && validateMove(state, qm).ok) return qm
-    }
-  }
-  return null
+  return best
 }
 
 // ---- 빔 서치 (여러 수 앞) ---------------------------------------------------
@@ -504,18 +530,10 @@ function searchBestMove(
 function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
   const me = state.turn
   const board = state.board
-  const supply = state.supplies[me]
   const candidates = generateCandidates(state, cfg)
 
   // 1) 즉시 승리
   for (const c of candidates) if (isWinningMove(board, c.move, me)) return c.move
-  // 1b) 여왕벌로만 가능한 승리(상대 잠금 칸 등)
-  if (!supply.queenUsed) {
-    for (const c of completingCells(board, me)) {
-      const qm = queenPlacementMove(state, c, me)
-      if (qm && isWinningMove(board, qm, me) && validateMove(state, qm).ok) return qm
-    }
-  }
 
   // 2) 상대 즉시 승리 차단
   if (cfg.useBlock) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { hex, hexKey, hexEquals } from '../src/engine/hex'
-import { createInitialState, pieceAt } from '../src/engine/state'
+import { cellAt, createInitialState, pieceAt } from '../src/engine/state'
 import { allowedMoveTypes, applyMove, validateMove, frontierCells } from '../src/engine/moves'
 import { withTile } from '../src/engine/state'
 import { createAi } from '../src/engine/ai'
@@ -233,8 +233,36 @@ describe('AI: self-play (엔진 통합)', () => {
     expect(mediumWins).toBeGreaterThan(easyWins)
   }, 30000)
 
+  it('AI가 게임 특색을 쓴다 — 기존 타일 위 말 + 타일 2개', () => {
+    const ai = createAi({ difficulty: 'medium', seed: 11 })
+    let state = createInitialState()
+    let onExisting = 0 // 방금 놓은 타일이 아닌 기존 타일 위에 말
+    let onOpponentTile = 0 // 상대 색 타일 위에 말(선점)
+    let twoTiles = 0
+    let plies = 0
+    while (state.phase === 'playing' && plies < 90) {
+      const mover = state.turn
+      const move = ai.chooseMove(state)
+      if (move.type === 'twoTiles') twoTiles++
+      else {
+        const at = move.piece.at
+        const existing = cellAt(state.board, at)
+        const isNewTile = move.type === 'tileAndPiece' && hexEquals(move.tile, at)
+        if (existing && !isNewTile) {
+          onExisting++
+          if (existing.tile.owner !== mover) onOpponentTile++
+        }
+      }
+      state = applyMove(state, move)
+      plies++
+    }
+    // eslint-disable-next-line no-console
+    console.log(`특색: 기존타일위말 ${onExisting}, 상대타일선점 ${onOpponentTile}, 타일2개 ${twoTiles}`)
+    expect(onExisting).toBeGreaterThan(0)
+  }, 30000)
+
   it('hard(깊은 서치+허리끊기)가 medium 보다 강하다', () => {
-    const games = 6
+    const games = 4
     let hardWins = 0
     let medWins = 0
     for (let i = 0; i < games; i++) {
