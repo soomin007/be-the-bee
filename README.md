@@ -1,5 +1,7 @@
 # Be the Bee 🐝
 
+**▶ 플레이: https://soomin007.github.io/be-the-bee/** (핫시트 2인 · vs AI · AI 관전)
+
 2인용 육각(hex) 그리드 추상 전략 보드게임 "Be the Bee"의 웹 디지털 구현.
 
 웹 우선(TypeScript)이며, 핵심은 나중에 네이티브(예: Capacitor)로 감싸도 재작성이
