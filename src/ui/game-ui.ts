@@ -4,6 +4,7 @@
 import {
   allowedMoveTypes,
   applyMove,
+  createAi,
   createInitialState,
   detectHives,
   frontierCells,
@@ -15,7 +16,7 @@ import {
   validatePiecePlacement,
   withTile,
 } from '../engine/index'
-import type { GameState, Hex, Move, PieceKind, Player } from '../engine/index'
+import type { Ai, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
@@ -39,6 +40,16 @@ type Draft =
   | { readonly stage: 'chooseAction' }
   | { readonly stage: 'tile'; readonly action: 'twoTiles' | 'tileAndPiece'; readonly first?: Hex }
   | { readonly stage: 'piece'; readonly action: 'tileAndPiece' | 'pieceOnly'; readonly tile?: Hex }
+
+// 플레이 모드: 사람 둘 / 갈색만 AI / 양쪽 AI 관전
+type Mode = 'hotseat' | 'vsAi' | 'watch'
+const MODE_LABEL: Record<Mode, string> = {
+  hotseat: '사람 vs 사람',
+  vsAi: 'vs AI (갈색)',
+  watch: 'AI 관전',
+}
+const NEXT_MODE: Record<Mode, Mode> = { hotseat: 'vsAi', vsAi: 'watch', watch: 'hotseat' }
+const AI_DELAY_MS = 350
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
@@ -69,6 +80,14 @@ export function mountGame(root: HTMLElement): void {
   let dragMoved = false
   let lastX = 0
   let lastY = 0
+
+  // AI 상태
+  let mode: Mode = 'hotseat'
+  let ai: Ai | null = null
+  let aiThinking = false // 재진입 가드 + 입력 잠금
+  let aiTimer: number | null = null
+  const aiControls = (turn: Player): boolean =>
+    mode === 'watch' || (mode === 'vsAi' && turn === 'brown')
 
   root.innerHTML = `
     <div class="game">
@@ -235,9 +254,37 @@ export function mountGame(root: HTMLElement): void {
     message = ''
     startTurn()
     render()
+    maybeScheduleAi()
+  }
+
+  function clearAiTimer(): void {
+    if (aiTimer !== null) {
+      clearTimeout(aiTimer)
+      aiTimer = null
+    }
+    aiThinking = false
+  }
+
+  // AI 차례면 잠시 뒤 한 수를 둔다. 단일 타이머 + aiThinking 가드로 중복 예약 방지.
+  // 패스 규칙으로 같은 AI가 연속으로 둘 수 있어, applyAndAdvance 끝에서 재호출된다.
+  function maybeScheduleAi(): void {
+    if (ai === null || state.phase !== 'playing') return
+    if (!aiControls(state.turn) || aiThinking) return
+    aiThinking = true
+    render() // "생각 중" 표시 + 입력 잠금
+    aiTimer = window.setTimeout(() => {
+      aiTimer = null
+      aiThinking = false
+      try {
+        applyAndAdvance(ai!.chooseMove(state))
+      } catch {
+        render()
+      }
+    }, AI_DELAY_MS)
   }
 
   function onHexClick(h: Hex): void {
+    if (aiThinking || aiControls(state.turn)) return
     if (draft === null) return
     const player = state.turn
     if (draft.stage === 'chooseAction') return
@@ -476,13 +523,17 @@ export function mountGame(root: HTMLElement): void {
         header = w === 'draw' ? '무승부' : `🏆 ${PLAYER_LABEL[w]} 승리 (점수)`
         instruction = `타일 소진 — 벌집 점수 노랑 ${state.result.scores.yellow} : ${state.result.scores.brown} 갈색`
       }
+    } else if (aiThinking || aiControls(state.turn)) {
+      header = `${PLAYER_LABEL[state.turn]} 차례`
+      instruction = mode === 'watch' ? '🤖 AI끼리 관전 중…' : '🤖 AI가 생각 중…'
     } else {
       header = `${PLAYER_LABEL[state.turn]} 차례`
       instruction = instructionText()
     }
 
+    const humanTurn = state.phase === 'playing' && !aiThinking && !aiControls(state.turn)
     const buttons: string[] = []
-    if (state.phase === 'playing' && draft !== null) {
+    if (humanTurn && draft !== null) {
       if (draft.stage === 'chooseAction') {
         buttons.push(`<button data-act="twoTiles">타일 2개 (①)</button>`)
         buttons.push(`<button data-act="tileAndPiece">타일 + 말 (②)</button>`)
@@ -494,7 +545,8 @@ export function mountGame(root: HTMLElement): void {
       }
       if (draftHasSelection()) buttons.push(`<button data-act="cancel">취소</button>`)
     }
-    if (history.length > 0) buttons.push(`<button data-act="undo">무르기</button>`)
+    buttons.push(`<button data-act="cycleMode" class="${mode !== 'hotseat' ? 'active' : ''}">모드: ${MODE_LABEL[mode]}</button>`)
+    if (history.length > 0 && !aiThinking) buttons.push(`<button data-act="undo">무르기</button>`)
     buttons.push(`<button data-act="resetView">뷰 리셋</button>`)
     buttons.push(`<button data-act="new">새 게임</button>`)
 
@@ -562,16 +614,25 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'undo':
         if (history.length > 0) {
+          clearAiTimer()
           state = history[history.length - 1]!
           history = history.slice(0, -1)
           message = ''
           startTurn()
         }
         break
+      case 'cycleMode':
+        clearAiTimer()
+        mode = NEXT_MODE[mode]
+        ai = mode === 'hotseat' ? null : createAi({ difficulty: 'medium' })
+        message = ''
+        startTurn()
+        break
       case 'resetView':
         setInitialCamera()
         return
       case 'new':
+        clearAiTimer()
         state = createInitialState()
         history = []
         message = ''
@@ -581,6 +642,7 @@ export function mountGame(root: HTMLElement): void {
         return
     }
     render()
+    maybeScheduleAi()
   }
 
   setInitialCamera()

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mountGame } from '../src/ui/game-ui'
 
 function click(el: Element): void {
@@ -68,5 +68,29 @@ describe('핫시트 UI (headless DOM)', () => {
     click(newBtn!)
     expect(root.querySelector('.panel')!.textContent).toContain('노랑 차례')
     expect(root.querySelectorAll('svg.board circle').length).toBe(0)
+  })
+
+  it('vs AI 모드: 사람 첫 수 후 AI(갈색)가 자동으로 둔다', () => {
+    vi.useFakeTimers()
+    try {
+      mountGame(root)
+      // 모드 순환: 사람 vs 사람 → vs AI
+      const cyc = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'cycleMode')!
+      click(cyc)
+      expect(root.querySelector('.panel')!.textContent).toContain('vs AI')
+
+      // 사람(노랑) 첫 수: 타일 → 말
+      const frontier = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('opacity') === '0.22')
+      click(frontier[0]!)
+      const targets = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('stroke') === '#16a34a')
+      click(targets[0]!)
+      expect(root.querySelectorAll('svg.board circle').length).toBe(1) // 노랑 말 1
+
+      // AI 타이머 진행 → 갈색이 한 수 둔다
+      vi.advanceTimersByTime(400)
+      expect(root.querySelectorAll('svg.board circle').length).toBeGreaterThanOrEqual(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
