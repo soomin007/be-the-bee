@@ -10,6 +10,7 @@ describe('핫시트 UI (headless DOM)', () => {
   let root: HTMLDivElement
 
   beforeEach(() => {
+    localStorage.clear() // 저장된 설정이 테스트 간 새지 않게
     document.body.innerHTML = ''
     root = document.createElement('div')
     document.body.appendChild(root)

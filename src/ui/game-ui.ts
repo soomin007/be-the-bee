@@ -81,6 +81,46 @@ function defaultSettings(): RoomSettings {
   }
 }
 
+const SETTINGS_KEY = 'be-the-bee/settings'
+const MODES: Mode[] = ['hotseat', 'vsAi', 'watch']
+const DIFFS: Difficulty[] = ['easy', 'medium', 'hard']
+
+function clampVol(v: unknown, fallback: number): number {
+  return typeof v === 'number' && v >= 0 && v <= 1 ? v : fallback
+}
+
+// 저장된 설정을 기본값과 병합해 불러온다(누락/이상값은 기본값). 손상돼도 안전.
+function loadSettings(): RoomSettings {
+  const d = defaultSettings()
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (!raw) return d
+    const s = JSON.parse(raw) as Partial<RoomSettings>
+    return {
+      mode: MODES.includes(s.mode as Mode) ? (s.mode as Mode) : d.mode,
+      aiDifficulty: DIFFS.includes(s.aiDifficulty as Difficulty) ? (s.aiDifficulty as Difficulty) : d.aiDifficulty,
+      hints: typeof s.hints === 'boolean' ? s.hints : d.hints,
+      queen: typeof s.queen === 'boolean' ? s.queen : d.queen,
+      bgmTrack:
+        Number.isInteger(s.bgmTrack) && (s.bgmTrack as number) >= 0 && (s.bgmTrack as number) < BGM_TRACKS.length
+          ? (s.bgmTrack as number)
+          : d.bgmTrack,
+      bgmVolume: clampVol(s.bgmVolume, d.bgmVolume),
+      sfxVolume: clampVol(s.sfxVolume, d.sfxVolume),
+    }
+  } catch {
+    return d
+  }
+}
+
+function saveSettings(s: RoomSettings): void {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
+  } catch {
+    /* 사생활 모드 등 — 무시 */
+  }
+}
+
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
@@ -147,7 +187,8 @@ export function mountGame(root: HTMLElement): void {
   let pinchDist = 0
 
   // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜 — 새 게임에도 방 설정은 유지)
-  const settings = defaultSettings()
+  const settings = loadSettings()
+  const persist = (): void => saveSettings(settings)
   const sound = createSound()
   sound.setSfxVolume(settings.sfxVolume)
   sound.setBgmVolume(settings.bgmVolume)
@@ -163,6 +204,7 @@ export function mountGame(root: HTMLElement): void {
   const rebuildAi = (): void => {
     ai = settings.mode === 'hotseat' ? null : createAi({ difficulty: settings.aiDifficulty })
   }
+  rebuildAi() // 불러온 모드가 vs AI/관전이면 AI 준비
 
   root.innerHTML = `
     <div class="game">
@@ -985,6 +1027,7 @@ export function mountGame(root: HTMLElement): void {
       trackSel.addEventListener('change', () => {
         settings.bgmTrack = Number(trackSel.value)
         sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file)
+        persist()
       })
     }
     const bgmVol = panel.querySelector('input[data-ctl="bgmVol"]') as HTMLInputElement | null
@@ -993,6 +1036,7 @@ export function mountGame(root: HTMLElement): void {
         settings.bgmVolume = Number(bgmVol.value) / 100
         sound.setBgmVolume(settings.bgmVolume)
       })
+      bgmVol.addEventListener('change', persist)
     }
     const sfxVol = panel.querySelector('input[data-ctl="sfxVol"]') as HTMLInputElement | null
     if (sfxVol) {
@@ -1000,7 +1044,10 @@ export function mountGame(root: HTMLElement): void {
         settings.sfxVolume = Number(sfxVol.value) / 100
         sound.setSfxVolume(settings.sfxVolume)
       })
-      sfxVol.addEventListener('change', () => sound.place('yellow')) // 레벨 미리듣기
+      sfxVol.addEventListener('change', () => {
+        sound.place('yellow') // 레벨 미리듣기
+        persist()
+      })
     }
   }
 
@@ -1039,6 +1086,7 @@ export function mountGame(root: HTMLElement): void {
       rebuildAi()
       openMenu = null
       message = ''
+      persist()
       startTurn()
       render()
       maybeScheduleAi()
@@ -1049,6 +1097,7 @@ export function mountGame(root: HTMLElement): void {
       settings.aiDifficulty = act.slice('setDiff:'.length) as Difficulty
       rebuildAi()
       openMenu = null
+      persist()
       render()
       maybeScheduleAi()
       return
@@ -1139,6 +1188,7 @@ export function mountGame(root: HTMLElement): void {
       default:
         return
     }
+    persist()
     render()
     maybeScheduleAi()
   }
@@ -1146,4 +1196,5 @@ export function mountGame(root: HTMLElement): void {
   setInitialCamera()
   startTurn()
   render()
+  maybeScheduleAi() // 불러온 모드가 관전이면 AI 가 바로 시작
 }
