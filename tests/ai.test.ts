@@ -186,8 +186,9 @@ describe('AI: 합법성 / allowedMoveTypes', () => {
   })
 
   it('무작위로 도달한 상태들에서 항상 합법수를 낸다 (퍼즈)', () => {
+    // 합법성은 수 생성/폴백 문제라 탐색 깊이와 무관 → 빠른 easy(1수)로 검증.
     const rng = mulberry(99)
-    const ai = createAi({ seed: 5 })
+    const ai = createAi({ difficulty: 'easy', seed: 5 })
     let state = createInitialState()
     for (let i = 0; i < 120 && state.phase === 'playing'; i++) {
       const aiMove = ai.chooseMove(state)
@@ -214,6 +215,24 @@ describe('AI: self-play (엔진 통합)', () => {
     expect(state.result).toBeDefined()
   })
 
+  it('medium(빔 서치)가 easy(1수)보다 강하다', () => {
+    const games = 6
+    let mediumWins = 0
+    let easyWins = 0
+    for (let i = 0; i < games; i++) {
+      const med = createAi({ difficulty: 'medium', seed: 100 + i })
+      const esy = createAi({ difficulty: 'easy', seed: 200 + i })
+      const medIsYellow = i % 2 === 0
+      const winner = medIsYellow ? playGame(med, esy) : playGame(esy, med)
+      const medSide: Player = medIsYellow ? 'yellow' : 'brown'
+      if (winner === medSide) mediumWins++
+      else if (winner !== 'draw') easyWins++
+    }
+    // eslint-disable-next-line no-console
+    console.log(`medium ${mediumWins} : ${easyWins} easy (무 ${games - mediumWins - easyWins})`)
+    expect(mediumWins).toBeGreaterThan(easyWins)
+  }, 30000)
+
   it('같은 seed·상태면 같은 수를 낸다 (결정성)', () => {
     const board = build(
       [...mixedRow(0, 3, 0)],
@@ -228,6 +247,20 @@ describe('AI: self-play (엔진 통합)', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b))
   })
 })
+
+// 한 판을 끝까지 두고 승자를 반환.
+function playGame(yellowAi: ReturnType<typeof createAi>, brownAi: ReturnType<typeof createAi>): Player | 'draw' {
+  let state = createInitialState()
+  let plies = 0
+  while (state.phase === 'playing' && plies < 400) {
+    const ai = state.turn === 'yellow' ? yellowAi : brownAi
+    state = applyMove(state, ai.chooseMove(state))
+    plies++
+  }
+  if (state.result?.kind === 'win') return state.result.winner
+  if (state.result?.kind === 'score') return state.result.winner
+  return 'draw'
+}
 
 // ---- 테스트용 무작위 합법수 생성 -------------------------------------------
 

@@ -1,9 +1,16 @@
 // 휴리스틱 AI. 순수 TS, DOM 금지. 절대 throw 하지 않고 항상 합법수를 반환한다.
 //
 // 이 게임의 승리 조건은 헥스판 5목(Gomoku)과 본질이 같고 분기 계수가 매우 크다.
-// 따라서 깊은 minimax 대신: ① 즉시 승리 → ② 상대 즉시 승리 차단 → ③ 1수 휴리스틱 평가.
+// 전폭 minimax 는 부적합하므로 빔 서치(상위 후보 K개만 여러 수 앞)로 탐색한다:
+//   ① 즉시 승리 → ② 상대 즉시 승리 차단 → ③ negamax 빔 서치(평가가 리프).
 // 평가는 lines.ts 의 findLines 를 재사용해 2/3/4목 위협을 점수화한다.
-// 난이도는 나중에 "깊이"가 아니라 빔 서치로 올린다(Cfg seam만 마련).
+//
+// 설명서 PDF 초보자 전략 TIP 반영:
+//  - TIP#3 "말 5목이 전부": 말 라인 가중치 ≫ 벌집(W.HIVE 작게). 벌집은 수단일 뿐.
+//  - TIP#1 "허리 끊기": 상대의 열린 3목을 미리 끊기 — 1수 평가로는 못 보지만 빔 서치가
+//    "안 끊으면 다음 수에 열린 4목 → 패배"를 내다보고 끊는다.
+//  - TIP#2 "타일엔 주인 없다": 벌집 완성 전엔 상대 타일 위에도 말을 놓아 선점 가능
+//    (validatePiecePlacement 가 이미 허용 — 평가는 라인 기여로 자연히 선점을 선호).
 
 import {
   HEX_AXES,
@@ -24,6 +31,7 @@ import { totalHiveScores } from './hive'
 import { detectWin } from './victory'
 import {
   allowedMoveTypes,
+  applyMove,
   frontierCells,
   isTilePlaceable,
   validateMove,
@@ -51,9 +59,16 @@ interface Cfg {
   relevanceRadius: number
 }
 
-// v1: 셋 다 medium 으로 resolve. 동작은 1종, 배선만 마련.
-function cfgFor(_difficulty: Difficulty): Cfg {
-  return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
+function cfgFor(difficulty: Difficulty): Cfg {
+  switch (difficulty) {
+    case 'easy':
+      return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
+    case 'hard':
+      return { useBlock: true, beamWidth: 8, beamDepth: 4, noise: 0, relevanceRadius: 2 }
+    case 'medium':
+    default:
+      return { useBlock: true, beamWidth: 6, beamDepth: 3, noise: 0, relevanceRadius: 2 }
+  }
 }
 
 export function createAi(opts: AiOptions = {}): Ai {
@@ -84,6 +99,17 @@ const W = {
 } as const
 
 const CENTER_HEX: Hex = hex(0, 0)
+const WIN_SCORE = 1e7
+const MAX_CANDIDATES = 24 // 노드당 후보 상한(서치 분기 제한)
+
+function minDistToPieces(h: Hex, pieces: Hex[]): number {
+  let m = Infinity
+  for (const ph of pieces) {
+    const d = hexDistance(h, ph)
+    if (d < m) m = d
+  }
+  return m
+}
 
 // ---- 시드 PRNG (동점 tie-break / 재현성) -----------------------------------
 
@@ -302,6 +328,16 @@ function relevantCells(board: Board, me: Player, supply: GameState['supplies'][P
     }
     if (supply.tiles >= 1) for (const f of frontierCells(board)) add(f)
   }
+
+  // 후보가 너무 많으면(흩어진 보드) 액션 근처 가까운 것부터 상한까지
+  if (result.length > MAX_CANDIDATES) {
+    const withDist = result.map((h) => ({
+      h,
+      d: pieces.length === 0 ? hexDistance(h, CENTER_HEX) : minDistToPieces(h, pieces),
+    }))
+    withDist.sort((a, b) => a.d - b.d)
+    return withDist.slice(0, MAX_CANDIDATES).map((x) => x.h)
+  }
   return result
 }
 
@@ -378,6 +414,99 @@ function findBlock(state: GameState, candidates: Candidate[], me: Player): Move 
   return null
 }
 
+// ---- 빔 서치 (여러 수 앞) ---------------------------------------------------
+
+// 점수 종료(타일 소진) 리프 값: 점수 승은 5목 승의 절반쯤으로 평가.
+function scoreLeaf(state: GameState, me: Player): number {
+  const r = state.result
+  if (!r || r.kind !== 'score') return 0
+  const diff = r.scores[me] - r.scores[opponent(me)]
+  const sign = diff > 0 ? 1 : diff < 0 ? -1 : 0
+  return sign * (WIN_SCORE / 2) + diff * W.HIVE
+}
+
+// 후보를 1수 평가로 정렬해 상위 beamWidth개만 남긴다(분기 제한).
+function beamCandidates(state: GameState, cfg: Cfg): Candidate[] {
+  const cands = generateCandidates(state, cfg)
+  if (cfg.beamWidth <= 0 || cands.length <= cfg.beamWidth) return cands
+  const me = state.turn
+  return cands
+    .map((c) => ({ c, s: evaluate(resultBoard(state.board, c.move, me), me) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, cfg.beamWidth)
+    .map((x) => x.c)
+}
+
+// negamax + 알파-베타. 반환값은 state.turn(둘 차례) 관점의 점수.
+function negamax(state: GameState, depth: number, alpha: number, beta: number, cfg: Cfg): number {
+  const me = state.turn
+  if (depth <= 0) return evaluate(state.board, me)
+  const cands = beamCandidates(state, cfg)
+  if (cands.length === 0) return evaluate(state.board, me)
+  const ply = cfg.beamDepth - depth // 빠른 승리 선호용
+  let best = -Infinity
+  for (const c of cands) {
+    let next: GameState
+    try {
+      next = applyMove(state, c.move)
+    } catch {
+      continue
+    }
+    let value: number
+    if (next.phase === 'finished') {
+      value = next.result?.kind === 'win' ? WIN_SCORE - ply : scoreLeaf(next, me)
+    } else if (next.turn === me) {
+      value = negamax(next, depth - 1, alpha, beta, cfg) // 패스: 같은 사람 → 창 유지
+    } else {
+      value = -negamax(next, depth - 1, -beta, -alpha, cfg)
+    }
+    if (value > best) best = value
+    if (best > alpha) alpha = best
+    if (alpha >= beta) break // 컷오프
+  }
+  return best
+}
+
+// 루트: 상위 후보를 각각 깊이 탐색해 최선의 수(동점은 시드 RNG).
+function searchBestMove(
+  state: GameState,
+  cfg: Cfg,
+  rng: () => number,
+  candidates: Candidate[],
+): Move | null {
+  const me = state.turn
+  const roots = candidates
+    .map((c) => ({ move: c.move, s: evaluate(resultBoard(state.board, c.move, me), me) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, Math.max(cfg.beamWidth, 1))
+
+  let bestVal = -Infinity
+  let ties: Move[] = []
+  for (const r of roots) {
+    let next: GameState
+    try {
+      next = applyMove(state, r.move)
+    } catch {
+      continue
+    }
+    let val: number
+    if (next.phase === 'finished') {
+      val = next.result?.kind === 'win' ? WIN_SCORE : scoreLeaf(next, me)
+    } else if (next.turn === me) {
+      val = negamax(next, cfg.beamDepth - 1, -Infinity, Infinity, cfg)
+    } else {
+      val = -negamax(next, cfg.beamDepth - 1, -Infinity, Infinity, cfg)
+    }
+    if (val > bestVal + 1e-9) {
+      bestVal = val
+      ties = [r.move]
+    } else if (Math.abs(val - bestVal) <= 1e-9) {
+      ties.push(r.move)
+    }
+  }
+  return ties.length > 0 ? ties[Math.floor(rng() * ties.length)]! : null
+}
+
 // ---- 메인 선택 -------------------------------------------------------------
 
 function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
@@ -402,7 +531,13 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
     if (block) return block
   }
 
-  // 3) 평가 최댓값(동점은 시드 RNG)
+  // 3) 빔 서치(여러 수 앞) — medium/hard. 상대 3목 등 한 수 너머의 위협을 본다.
+  if (cfg.beamWidth > 0 && cfg.beamDepth > 1) {
+    const searched = searchBestMove(state, cfg, rng, candidates)
+    if (searched) return searched
+  }
+
+  // 3') 1수 평가(easy / 폴백)
   let ties: Move[] = []
   let bestScore = -Infinity
   for (const c of candidates) {
