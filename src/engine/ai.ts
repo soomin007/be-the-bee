@@ -66,10 +66,10 @@ function cfgFor(difficulty: Difficulty): Cfg {
     case 'easy':
       return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
     case 'hard':
-      return { useBlock: true, beamWidth: 8, beamDepth: 5, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 8, beamDepth: 4, noise: 0, relevanceRadius: 2 }
     case 'medium':
     default:
-      return { useBlock: true, beamWidth: 6, beamDepth: 3, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 6, beamDepth: 2, noise: 0, relevanceRadius: 2 }
   }
 }
 
@@ -100,7 +100,7 @@ const W = {
   CENTER: 1,
   CONTEST: 130, // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
   SEIZE: 45, // 상대 색 타일 위에 놓은 내 말 = 선점(TIP#2 "타일엔 주인이 없다")
-  FORK: 22000, // 동시 위협(살아있는 위협 2개 이상) — 상대가 다 못 막음 = 주도권
+  FORK: 10000, // 동시 위협(살아있는 위협 2개 이상) — 상대가 다 못 막음 = 주도권
 } as const
 
 const CENTER_HEX: Hex = hex(0, 0)
@@ -430,23 +430,40 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
   return out.filter((c) => validateMove(state, c.move).ok)
 }
 
-// ---- 차단 -----------------------------------------------------------------
+// ---- 승리/차단 (후보 캡과 무관하게 직접 셀 점유) ----------------------------
 
-function findBlock(state: GameState, candidates: Candidate[], me: Player): Move | null {
+// 셀에 내 일반 말을 놓는 합법수. 없으면 null. (승리·차단용 — 후보 생성/캡과 독립)
+function placementMove(state: GameState, cell: Hex, me: Player): Move | null {
+  const allowed = allowedMoveTypes(state)
+  const piece = { at: cell, kind: 'normal' as const }
+  if (cellAt(state.board, cell) !== undefined) {
+    if (allowed.includes('tileAndPiece')) {
+      const dev = rankedTileSpots(state.board, me, 8).find((t) => !hexEquals(t, cell))
+      if (dev) return { type: 'tileAndPiece', tile: dev, piece }
+    }
+    if (allowed.includes('pieceOnly')) return { type: 'pieceOnly', piece }
+    return null
+  }
+  if (allowed.includes('tileAndPiece') && isTilePlaceable(state.board, cell)) {
+    return { type: 'tileAndPiece', tile: cell, piece }
+  }
+  return null
+}
+
+// 상대 즉시 승리 차단 — 위협 셀(winningCells, 캡 무관)을 내 말로 점유. 평가 최고 차단을 고른다.
+function findBlock(state: GameState, me: Player): Move | null {
   const opp = opponent(me)
   const threats = winningCells(state.board, opp, state.supplies[opp])
   if (threats.length === 0) return null
-  const threatKeys = new Set(threats.map(hexKey))
-
-  // 일반 말로 위협 셀을 점유하는 후보 중 평가 최고
   let best: Move | null = null
   let bestScore = -Infinity
-  for (const c of candidates) {
-    if (!threatKeys.has(hexKey(c.at))) continue
-    const s = evaluate(resultBoard(state.board, c.move, me), me)
+  for (const cell of threats) {
+    const m = placementMove(state, cell, me)
+    if (!m || !validateMove(state, m).ok) continue
+    const s = evaluate(resultBoard(state.board, m, me), me)
     if (s > bestScore) {
       bestScore = s
-      best = c.move
+      best = m
     }
   }
   return best
@@ -550,14 +567,18 @@ function searchBestMove(
 function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
   const me = state.turn
   const board = state.board
+  const supply = state.supplies[me]
   const candidates = generateCandidates(state, cfg)
 
-  // 1) 즉시 승리
-  for (const c of candidates) if (isWinningMove(board, c.move, me)) return c.move
+  // 1) 즉시 승리 — 후보 캡과 무관하게 winningCells 로 확실히 찾는다(붐벼도 자기 승리수를 안 놓침)
+  for (const cell of winningCells(board, me, supply)) {
+    const m = placementMove(state, cell, me)
+    if (m && isWinningMove(board, m, me)) return m
+  }
 
   // 2) 상대 즉시 승리 차단
   if (cfg.useBlock) {
-    const block = findBlock(state, candidates, me)
+    const block = findBlock(state, me)
     if (block) return block
   }
 

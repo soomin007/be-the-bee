@@ -3,6 +3,7 @@ import { hex, hexKey, hexEquals } from '../src/engine/hex'
 import { cellAt, createInitialState, pieceAt } from '../src/engine/state'
 import { allowedMoveTypes, applyMove, validateMove, frontierCells } from '../src/engine/moves'
 import { withTile } from '../src/engine/state'
+import { detectWin } from '../src/engine/victory'
 import { createAi } from '../src/engine/ai'
 import type { Board, GameState, Move, Player, PlayerSupply } from '../src/engine/types'
 
@@ -88,6 +89,24 @@ describe('AI: 즉시 승리', () => {
       expect(hexEquals(at, hex(4, 0)) || hexEquals(at, hex(-1, 0))).toBe(true)
     }
     const applied = applyMove(state, move)
+    expect(applied.result).toEqual({ kind: 'win', winner: 'brown' })
+  })
+})
+
+describe('AI: 붐비는 보드에서도 승리/차단 (후보 캡 무관)', () => {
+  it('말이 많아도 자기 승리수(한쪽 막힌 4목 완성)를 놓치지 않는다', () => {
+    // 3행 띠 + q 패리티 색칠 → 벌집(5타일 일렬) 없음(승리 칸 안 잠김). 빈 타일이 많아 후보 캡(24) 초과.
+    const board: Board = {}
+    for (let q = -4; q <= 8; q++) for (let r = -1; r <= 1; r++) {
+      board[hexKey(hex(q, r))] = { tile: { owner: q % 2 === 0 ? 'yellow' : 'brown' } }
+    }
+    // 갈색 4목 (0,0)..(3,0), (4,0) 빈 칸(승리), (-1,0) 노랑이 막음
+    for (let q = 0; q <= 3; q++) board[hexKey(hex(q, 0))] = { tile: board[hexKey(hex(q, 0))]!.tile, piece: { owner: 'brown', kind: 'normal' } }
+    board[hexKey(hex(-1, 0))] = { tile: board[hexKey(hex(-1, 0))]!.tile, piece: { owner: 'yellow', kind: 'normal' } }
+
+    expect(detectWin(board)).toBeNull()
+    const state = makeState(board, 'brown')
+    const applied = applyMove(state, createAi({ difficulty: 'medium', seed: 1 }).chooseMove(state))
     expect(applied.result).toEqual({ kind: 'win', winner: 'brown' })
   })
 })
@@ -261,22 +280,24 @@ describe('AI: self-play (엔진 통합)', () => {
     expect(onExisting).toBeGreaterThan(0)
   }, 30000)
 
-  it('hard(깊은 서치+허리끊기)가 medium 보다 강하다', () => {
-    const games = 2
+  // 난이도 노브 = 탐색 깊이(easy 1수 / medium 깊이2 / hard 깊이4). medium·hard 모두 easy 보다 강한지
+  // 검증한다(hard vs medium 자체 대국은 둘 다 유능해 마진이 노이즈라 비교 대상으로 부적합).
+  it('hard(깊은 서치)가 easy(1수)보다 강하다', () => {
+    const games = 4
     let hardWins = 0
-    let medWins = 0
+    let easyWins = 0
     for (let i = 0; i < games; i++) {
       const hard = createAi({ difficulty: 'hard', seed: 300 + i })
-      const med = createAi({ difficulty: 'medium', seed: 400 + i })
+      const esy = createAi({ difficulty: 'easy', seed: 500 + i })
       const hardIsYellow = i % 2 === 0
-      const winner = hardIsYellow ? playGame(hard, med) : playGame(med, hard)
+      const winner = hardIsYellow ? playGame(hard, esy) : playGame(esy, hard)
       const hardSide: Player = hardIsYellow ? 'yellow' : 'brown'
       if (winner === hardSide) hardWins++
-      else if (winner !== 'draw') medWins++
+      else if (winner !== 'draw') easyWins++
     }
     // eslint-disable-next-line no-console
-    console.log(`hard ${hardWins} : ${medWins} medium (무 ${games - hardWins - medWins})`)
-    expect(hardWins).toBeGreaterThan(medWins)
+    console.log(`hard ${hardWins} : ${easyWins} easy (무 ${games - hardWins - easyWins})`)
+    expect(hardWins).toBeGreaterThan(easyWins)
   }, 60000)
 
   it('같은 seed·상태면 같은 수를 낸다 (결정성)', () => {
