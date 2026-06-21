@@ -19,7 +19,7 @@ import {
   winningLine,
   withTile,
 } from '../engine/index'
-import type { Ai, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
+import type { Ai, Difficulty, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
@@ -52,7 +52,21 @@ const MODE_LABEL: Record<Mode, string> = {
   watch: 'AI 관전',
 }
 const NEXT_MODE: Record<Mode, Mode> = { hotseat: 'vsAi', vsAi: 'watch', watch: 'hotseat' }
+const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움' }
+const NEXT_DIFF: Record<Difficulty, Difficulty> = { easy: 'medium', medium: 'hard', hard: 'easy' }
 const AI_DELAY_MS = 350
+
+// 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
+// 방장이 정해 양쪽에 공통 적용되는 "방 설정"이 되도록 한 곳에 모아 둔다(직렬화 가능).
+interface RoomSettings {
+  mode: Mode
+  aiDifficulty: Difficulty
+  hints: boolean // 훈수 모드: 위험/승리 칸 힌트 표시
+  sound: boolean // 효과음
+}
+function defaultSettings(): RoomSettings {
+  return { mode: 'hotseat', aiDifficulty: 'medium', hints: false, sound: true }
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
@@ -100,13 +114,16 @@ export function mountGame(root: HTMLElement): void {
   let lastX = 0
   let lastY = 0
 
-  // AI 상태
-  let mode: Mode = 'hotseat'
+  // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜 — 새 게임에도 방 설정은 유지)
+  const settings = defaultSettings()
   let ai: Ai | null = null
   let aiThinking = false // 재진입 가드 + 입력 잠금
   let aiTimer: number | null = null
   const aiControls = (turn: Player): boolean =>
-    mode === 'watch' || (mode === 'vsAi' && turn === 'brown')
+    settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === 'brown')
+  const rebuildAi = (): void => {
+    ai = settings.mode === 'hotseat' ? null : createAi({ difficulty: settings.aiDifficulty })
+  }
 
   root.innerHTML = `
     <div class="game">
@@ -493,9 +510,10 @@ export function mountGame(root: HTMLElement): void {
         )
       }
     }
+    // 위험/승리 칸 힌트는 훈수 모드에서만(설명서엔 없는 보조 — 방 설정으로 공통 적용)
     dangerCells = []
     winNowCells = []
-    if (state.phase === 'playing') {
+    if (settings.hints && state.phase === 'playing') {
       const opp = opponent(state.turn)
       dangerCells = winningCells(state.board, opp, state.supplies[opp])
       winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn])
@@ -609,7 +627,7 @@ export function mountGame(root: HTMLElement): void {
       }
     } else if (aiThinking || aiControls(state.turn)) {
       header = `${PLAYER_LABEL[state.turn]} 차례`
-      instruction = mode === 'watch' ? '🤖 AI끼리 관전 중…' : '🤖 AI가 생각 중…'
+      instruction = settings.mode === 'watch' ? '🤖 AI끼리 관전 중…' : '🤖 AI가 생각 중…'
     } else {
       header = `${PLAYER_LABEL[state.turn]} 차례`
       instruction = instructionText()
@@ -629,7 +647,15 @@ export function mountGame(root: HTMLElement): void {
       }
       if (draftHasSelection()) buttons.push(`<button data-act="cancel">취소</button>`)
     }
-    buttons.push(`<button data-act="cycleMode" class="${mode !== 'hotseat' ? 'active' : ''}">모드: ${MODE_LABEL[mode]}</button>`)
+    buttons.push(
+      `<button data-act="cycleMode" class="${settings.mode !== 'hotseat' ? 'active' : ''}">모드: ${MODE_LABEL[settings.mode]}</button>`,
+    )
+    if (settings.mode !== 'hotseat') {
+      buttons.push(`<button data-act="cycleDifficulty">난이도: ${DIFF_LABEL[settings.aiDifficulty]}</button>`)
+    }
+    buttons.push(
+      `<button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수 ${settings.hints ? '✓' : ''}</button>`,
+    )
     if (history.length > 0 && !aiThinking) buttons.push(`<button data-act="undo">무르기</button>`)
     buttons.push(`<button data-act="resetView">뷰 리셋</button>`)
     buttons.push(`<button data-act="new">새 게임</button>`)
@@ -718,10 +744,18 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'cycleMode':
         clearAiTimer()
-        mode = NEXT_MODE[mode]
-        ai = mode === 'hotseat' ? null : createAi({ difficulty: 'medium' })
+        settings.mode = NEXT_MODE[settings.mode]
+        rebuildAi()
         message = ''
         startTurn()
+        break
+      case 'cycleDifficulty':
+        clearAiTimer()
+        settings.aiDifficulty = NEXT_DIFF[settings.aiDifficulty]
+        rebuildAi()
+        break
+      case 'toggleHints':
+        settings.hints = !settings.hints
         break
       case 'resetView':
         setInitialCamera()
