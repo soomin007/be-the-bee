@@ -345,6 +345,44 @@ svg.board.panning {
   margin: 0.3rem 0 0.1rem;
 }
 
+/* 복기 패널 */
+.status.replay {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+.replay-nav {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+}
+.replay-nav button {
+  flex: 1;
+  padding: 0.4rem 0.1rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.replay-nav button[data-act='replayPlay'] {
+  flex: 1.6;
+}
+.replay-nav button[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+.replay-nav button.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+.replay-exit {
+  width: 100%;
+  margin-top: 0.4rem;
+  background: #fff;
+  border: 1px solid #c9b88f;
+}
+.replay-exit:hover {
+  background: #f5efdf;
+}
+
 .hint {
   font-size: 0.78rem;
   color: #888;

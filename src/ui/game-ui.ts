@@ -175,6 +175,9 @@ function lastPieceCell(move: Move): Hex | null {
 export function mountGame(root: HTMLElement): void {
   let state: GameState = createInitialState()
   let history: GameState[] = []
+  let moveLog: Move[] = [] // 둔 수의 순서(history 와 보조를 맞춤) — 복기용
+  let replayIndex: number | null = null // null = 실시간, 그 외 = timeline 의 그 국면을 본다
+  let replayTimer: number | null = null // 복기 자동 재생 타이머
   let draft: Draft | null = null
   let pieceKind: PieceKind = 'normal'
   let message = ''
@@ -455,8 +458,106 @@ export function mountGame(root: HTMLElement): void {
     else draft = { stage: 'chooseAction' }
   }
 
+  // 처음부터 현재까지의 모든 국면. timeline[k] = k수째 둔 뒤의 국면(moveLog[k-1] 이 만든 국면).
+  function timeline(): GameState[] {
+    return [...history, state]
+  }
+
+  function stopReplayTimer(): void {
+    if (replayTimer !== null) {
+      clearTimeout(replayTimer)
+      replayTimer = null
+    }
+  }
+
+  // 복기 자동 재생 — watchDelay 간격으로 한 수씩 앞으로.
+  function replayTick(): void {
+    if (replayIndex === null) return
+    if (replayIndex >= moveLog.length) {
+      stopReplayTimer()
+      render()
+      return
+    }
+    replayIndex += 1
+    render()
+    if (replayIndex >= moveLog.length) {
+      stopReplayTimer()
+      render()
+      return
+    }
+    replayTimer = window.setTimeout(replayTick, settings.watchDelay)
+  }
+
+  // idx 번째 수(1-based)를 사람이 읽을 수 있게 기술. idx=0 은 시작 국면.
+  function describeMove(idx: number): string {
+    if (idx <= 0) return '시작 국면'
+    const before = timeline()[idx - 1]!
+    const mv = moveLog[idx - 1]!
+    const mover = before.turn
+    const pc = lastPieceCell(mv)
+    const tiles = lastTileCells(mv)
+    const what = pc ? (tiles.length > 0 ? '타일+말' : '말') : '타일'
+    const where = pc
+      ? `(${pc.q}, ${pc.r})`
+      : tiles.map((c) => `(${c.q}, ${c.r})`).join(' · ')
+    return `${idx}수 · ${PLAYER_LABEL[mover]} ${what} → ${where}`
+  }
+
+  // 복기 컨트롤(보기 전용 — state/history/moveLog 를 건드리지 않는다).
+  function handleReplay(act: string): void {
+    const n = moveLog.length
+    switch (act) {
+      case 'replayEnter':
+        if (n === 0) return
+        clearAiTimer()
+        stopReplayTimer()
+        draft = null
+        message = ''
+        openMenu = null
+        modalDismissed = true
+        replayIndex = 0
+        break
+      case 'replayExit':
+        stopReplayTimer()
+        replayIndex = null
+        startTurn()
+        render()
+        maybeScheduleAi()
+        return
+      case 'replayFirst':
+        stopReplayTimer()
+        replayIndex = 0
+        break
+      case 'replayPrev':
+        stopReplayTimer()
+        replayIndex = Math.max(0, (replayIndex ?? 0) - 1)
+        break
+      case 'replayNext':
+        stopReplayTimer()
+        replayIndex = Math.min(n, (replayIndex ?? 0) + 1)
+        break
+      case 'replayLast':
+        stopReplayTimer()
+        replayIndex = n
+        break
+      case 'replayPlay':
+        if (replayTimer !== null) {
+          stopReplayTimer()
+        } else {
+          if ((replayIndex ?? 0) >= n) replayIndex = 0
+          replayTimer = window.setTimeout(replayTick, settings.watchDelay)
+        }
+        break
+      default:
+        return
+    }
+    render()
+  }
+
   function applyAndAdvance(move: Move): void {
+    replayIndex = null // 실시간 수가 들어오면 복기 종료
     history = [...history, state]
+    moveLog = [...moveLog, move]
     lastMove = move
     const mover = state.turn
     state = applyMove(state, move)
@@ -586,8 +687,16 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function render(): void {
+    // 복기 중이면 과거 국면을 본다(보기 전용 오버레이 — 실제 상태는 그대로).
+    const replaying = replayIndex !== null
+    const viewState: GameState = replaying ? timeline()[replayIndex!]! : state
+    const viewLast: Move | null = replaying
+      ? replayIndex! >= 1
+        ? moveLog[replayIndex! - 1]!
+        : null
+      : lastMove
     const player = state.turn
-    const lastKeys = lastMove ? new Set(moveCells(lastMove).map(hexKey)) : new Set<string>()
+    const lastKeys = viewLast ? new Set(moveCells(viewLast).map(hexKey)) : new Set<string>()
 
     let provisionalFirst: Hex | undefined
     let provisionalTile: Hex | undefined
@@ -606,7 +715,7 @@ export function mountGame(root: HTMLElement): void {
     while (content.firstChild) content.removeChild(content.firstChild)
 
     // 0) 옅은 배경 그리드(점선, 비인터랙티브)
-    const occupied = new Set(Object.keys(state.board))
+    const occupied = new Set(Object.keys(viewState.board))
     for (const h of BG_HEXES) {
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
@@ -635,8 +744,8 @@ export function mountGame(root: HTMLElement): void {
     }
 
     // 2) 타일
-    for (const key of Object.keys(state.board)) {
-      const cell = state.board[key]!
+    for (const key of Object.keys(viewState.board)) {
+      const cell = viewState.board[key]!
       const h = hexFromKey(key)
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
@@ -651,7 +760,7 @@ export function mountGame(root: HTMLElement): void {
 
     // 3) 벌집 강조 — 금색 글로우 오버레이(가시성 ↑)
     const hiveKeys = new Set<string>()
-    for (const hive of detectHives(state.board)) for (const k of hive.cells) hiveKeys.add(k)
+    for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveKeys.add(k)
     for (const key of hiveKeys) {
       const h = hexFromKey(key)
       content.appendChild(
@@ -683,10 +792,10 @@ export function mountGame(root: HTMLElement): void {
     }
 
     // 4.5) 직전 수 강조 — 타일은 칸 파란 점선(말 둘레 링은 말 그릴 때). + 리치 힌트
-    const lpc = lastMove ? lastPieceCell(lastMove) : null
+    const lpc = viewLast ? lastPieceCell(viewLast) : null
     const lastPieceKey = lpc ? hexKey(lpc) : null
-    if (lastMove) {
-      for (const c of lastTileCells(lastMove)) {
+    if (viewLast) {
+      for (const c of lastTileCells(viewLast)) {
         content.appendChild(
           makeHexPolygon(hexToPixel(c), {
             fill: 'none',
@@ -701,7 +810,7 @@ export function mountGame(root: HTMLElement): void {
     // 위험/승리 칸 힌트는 훈수 모드에서만(설명서엔 없는 보조 — 방 설정으로 공통 적용)
     dangerCells = []
     winNowCells = []
-    if (settings.hints && state.phase === 'playing') {
+    if (settings.hints && state.phase === 'playing' && !replaying) {
       const opp = opponent(state.turn)
       dangerCells = winningCells(state.board, opp, state.supplies[opp])
       winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn])
@@ -747,8 +856,8 @@ export function mountGame(root: HTMLElement): void {
     }
 
     // 6) 말 = 벌 (날개 + 몸통 + 줄무늬) + 여왕벌 왕관
-    for (const key of Object.keys(state.board)) {
-      const piece = state.board[key]!.piece
+    for (const key of Object.keys(viewState.board)) {
+      const piece = viewState.board[key]!.piece
       if (!piece) continue
       const p = hexToPixel(hexFromKey(key))
       const r = HEX_SIZE * 0.52
@@ -832,9 +941,9 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 7) 승리 이펙트 — 이긴 5목 라인 강조(초록 굵은 펄스)
-    if (state.phase === 'finished' && state.result?.kind === 'win') {
-      const line = winningLine(state.board)
+    // 7) 승리 이펙트 — 이긴 5목 라인 강조(초록 굵은 펄스). 복기에선 마지막 국면에서만.
+    if (viewState.phase === 'finished' && viewState.result?.kind === 'win') {
+      const line = winningLine(viewState.board)
       if (line) {
         for (const key of line.cells) {
           content.appendChild(
@@ -906,6 +1015,7 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-sub">${sub}</div>
           <div class="modal-actions">
             <button data-act="new">다시 하기</button>
+            <button data-act="replayEnter">복기 보기</button>
             <button data-act="closeModal">닫기</button>
           </div>
         </div>
@@ -916,7 +1026,57 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
+  function renderReplayPanel(idx: number): void {
+    const n = moveLog.length
+    const vs = timeline()[idx]!
+    const scores = totalHiveScores(vs.board)
+    const playing = replayTimer !== null
+    const disPrev = idx <= 0 ? 'disabled' : ''
+    const disNext = idx >= n ? 'disabled' : ''
+    panel.innerHTML = `
+      <h2>🐝 복기</h2>
+      <div class="status replay">
+        <div class="status-header">복기 — ${idx} / ${n} 수</div>
+        <div class="instruction">${describeMove(idx)}</div>
+      </div>
+      <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
+      <div class="replay-nav">
+        <button data-act="replayFirst" ${disPrev} title="처음으로">⏮</button>
+        <button data-act="replayPrev" ${disPrev} title="이전 수">◀</button>
+        <button data-act="replayPlay" class="${playing ? 'active' : ''}">${playing ? '⏸ 멈춤' : '▶ 재생'}</button>
+        <button data-act="replayNext" ${disNext} title="다음 수">▶</button>
+        <button data-act="replayLast" ${disNext} title="마지막으로">⏭</button>
+      </div>
+      <div class="sc-slider">
+        <span class="sc-label">진행</span>
+        <input type="range" data-ctl="replaySeek" min="0" max="${n}" step="1" value="${idx}">
+        <span class="sc-val">${idx}/${n}</span>
+      </div>
+      <button class="replay-exit" data-act="replayExit">복기 종료 ✕</button>
+      <p class="hint">◀ ▶ 한 수씩 · ▶재생 자동 진행(관전 간격 적용) · 파란 강조 = 그 수</p>
+    `
+    for (const btn of Array.from(panel.querySelectorAll('button'))) {
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+    const seek = panel.querySelector('input[data-ctl="replaySeek"]') as HTMLInputElement | null
+    if (seek) {
+      const val = seek.nextElementSibling as HTMLElement | null
+      seek.addEventListener('input', () => {
+        if (val) val.textContent = `${Number(seek.value)}/${n}` // 끄는 동안 숫자만 갱신
+      })
+      seek.addEventListener('change', () => {
+        stopReplayTimer()
+        replayIndex = Number(seek.value)
+        render()
+      })
+    }
+  }
+
   function renderPanel(): void {
+    if (replayIndex !== null) {
+      renderReplayPanel(replayIndex)
+      return
+    }
     const scores = totalHiveScores(state.board)
     const supplyLine = (p: Player): string => {
       const s = state.supplies[p]
@@ -968,6 +1128,7 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
+        <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="resetView">뷰 리셋</button>
         <button data-act="new">새 게임</button>
       </div>`
@@ -1107,8 +1268,16 @@ export function mountGame(root: HTMLElement): void {
   function onPanelAction(act: string | null): void {
     if (act === null) return
 
+    // 복기 컨트롤(보기 전용) — 별도 처리 후 종료
+    if (act.startsWith('replay')) {
+      handleReplay(act)
+      return
+    }
+
     // 모드/난이도 메뉴 선택
     if (act.startsWith('setMode:')) {
+      stopReplayTimer()
+      replayIndex = null
       clearAiTimer()
       settings.mode = act.slice('setMode:'.length) as Mode
       rebuildAi()
@@ -1121,6 +1290,8 @@ export function mountGame(root: HTMLElement): void {
       return
     }
     if (act.startsWith('setDiff:')) {
+      stopReplayTimer()
+      replayIndex = null
       clearAiTimer()
       settings.aiDifficulty = act.slice('setDiff:'.length) as Difficulty
       rebuildAi()
@@ -1157,11 +1328,14 @@ export function mountGame(root: HTMLElement): void {
       case 'undo':
         if (history.length > 0) {
           clearAiTimer()
+          stopReplayTimer()
+          replayIndex = null
           // 사람 차례가 될 때까지 되돌린다 — vs AI 에선 AI 수와 내 수를 함께 무른다.
           // (한 수만 무르면 AI 차례로 돌아가 AI 가 즉시 다시 둬 무효가 됨)
           do {
             state = history[history.length - 1]!
             history = history.slice(0, -1)
+            moveLog = moveLog.slice(0, -1) // history 와 보조 맞춤
           } while (history.length > 0 && aiControls(state.turn))
           message = ''
           lastMove = null
@@ -1206,8 +1380,11 @@ export function mountGame(root: HTMLElement): void {
         return
       case 'new':
         clearAiTimer()
+        stopReplayTimer()
+        replayIndex = null
         state = createInitialState()
         history = []
+        moveLog = []
         message = ''
         lastMove = null
         modalDismissed = false

@@ -95,4 +95,45 @@ describe('핫시트 UI (headless DOM)', () => {
       vi.useRealTimers()
     }
   })
+
+  it('복기: 과거 국면을 되감아 보고, 종료하면 실시간으로 돌아온다', () => {
+    mountGame(root)
+    const pieceCount = (): number => root.querySelectorAll('svg.board circle.piece').length
+    const findAct = (act: string): HTMLButtonElement | undefined =>
+      Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === act) as
+        | HTMLButtonElement
+        | undefined
+    const playMove = (): void => {
+      // 2수째부터는 ①/② 선택 단계가 먼저 — ②(타일+말) 선택
+      const choose = findAct('tileAndPiece')
+      if (choose) click(choose)
+      const frontier = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('opacity') === '0.22')
+      click(frontier[0]!)
+      const targets = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('stroke') === '#16a34a')
+      click(targets[0]!)
+    }
+    playMove() // 노랑
+    playMove() // 갈색
+    expect(pieceCount()).toBe(2)
+
+    // 복기 진입 → 시작 국면(0수) — 말 0개
+    click(findAct('replayEnter')!)
+    expect(root.querySelector('.panel')!.textContent).toContain('복기')
+    expect(pieceCount()).toBe(0)
+
+    // 다음 수 → 말 1개, 다시 → 2개
+    click(findAct('replayNext')!)
+    expect(pieceCount()).toBe(1)
+    click(findAct('replayNext')!)
+    expect(pieceCount()).toBe(2)
+
+    // 이전 수 → 1개
+    click(findAct('replayPrev')!)
+    expect(pieceCount()).toBe(1)
+
+    // 종료 → 실시간 복귀(2개)
+    click(findAct('replayExit')!)
+    expect(root.querySelector('.panel')!.textContent).not.toContain('복기 종료')
+    expect(pieceCount()).toBe(2)
+  })
 })
