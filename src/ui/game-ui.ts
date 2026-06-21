@@ -22,7 +22,7 @@ import {
 } from '../engine/index'
 import type { Ai, Difficulty, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
-import { createSound } from './sound'
+import { createSound, BGM_TRACKS } from './sound'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -66,11 +66,21 @@ interface RoomSettings {
   mode: Mode
   aiDifficulty: Difficulty
   hints: boolean // 훈수 모드: 위험/승리 칸 힌트 표시
-  sound: boolean // 효과음
   queen: boolean // 여왕벌 모드(확장 — 숙련자용). 기본 꺼짐. AI 는 사용 안 함
+  bgmTrack: number // BGM_TRACKS 인덱스
+  bgmVolume: number // 0~1
+  sfxVolume: number // 0~1 (0 = 효과음 끔)
 }
 function defaultSettings(): RoomSettings {
-  return { mode: 'hotseat', aiDifficulty: 'medium', hints: false, sound: true, queen: false }
+  return {
+    mode: 'hotseat',
+    aiDifficulty: 'medium',
+    hints: false,
+    queen: false,
+    bgmTrack: 0,
+    bgmVolume: 0.35,
+    sfxVolume: 0.6,
+  }
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -141,7 +151,9 @@ export function mountGame(root: HTMLElement): void {
   // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜 — 새 게임에도 방 설정은 유지)
   const settings = defaultSettings()
   const sound = createSound()
-  sound.enabled = settings.sound
+  sound.setSfxVolume(settings.sfxVolume)
+  sound.setBgmVolume(settings.bgmVolume)
+  sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file)
   let ai: Ai | null = null
   let aiThinking = false // 재진입 가드 + 입력 잠금
   let aiTimer: number | null = null
@@ -882,12 +894,6 @@ export function mountGame(root: HTMLElement): void {
     buttons.push(
       `<button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드 ${settings.queen ? '✓' : ''}</button>`,
     )
-    buttons.push(
-      `<button data-act="toggleSound" class="${settings.sound ? 'active' : ''}">효과음 ${settings.sound ? '✓' : ''}</button>`,
-    )
-    buttons.push(
-      `<button data-act="toggleMusic" class="${sound.musicOn() ? 'active' : ''}">🎵 ${sound.musicOn() ? '켜짐' : 'BGM'}</button>`,
-    )
     if (history.length > 0 && !aiThinking) buttons.push(`<button data-act="undo">무르기</button>`)
     buttons.push(`<button data-act="resetView">뷰 리셋</button>`)
     buttons.push(`<button data-act="new">새 게임</button>`)
@@ -900,6 +906,19 @@ export function mountGame(root: HTMLElement): void {
         reach = `<div class="reach danger">⚠️ ${PLAYER_LABEL[opponent(state.turn)]} 리치! 다음 한 수로 5목 — 막으세요</div>`
       }
     }
+
+    const trackOpts = BGM_TRACKS.map(
+      (t, i) => `<option value="${i}" ${i === settings.bgmTrack ? 'selected' : ''}>${t.title}</option>`,
+    ).join('')
+    const soundCtl = `
+      <div class="sound-ctl">
+        <div class="sc-row">
+          <button data-act="toggleMusic" class="${sound.musicOn() ? 'active' : ''}">🎵 ${sound.musicOn() ? '정지' : '재생'}</button>
+          <select data-ctl="bgmTrack" aria-label="배경음악 선택">${trackOpts}</select>
+        </div>
+        <label class="sc-slider">🎵 음량 <input type="range" data-ctl="bgmVol" min="0" max="100" value="${Math.round(settings.bgmVolume * 100)}"></label>
+        <label class="sc-slider">🔊 효과음 <input type="range" data-ctl="sfxVol" min="0" max="100" value="${Math.round(settings.sfxVolume * 100)}"></label>
+      </div>`
 
     panel.innerHTML = `
       <h2>🐝 Be the Bee</h2>
@@ -915,12 +934,35 @@ export function mountGame(root: HTMLElement): void {
       </div>
       <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       <div class="buttons">${buttons.join('')}</div>
+      ${soundCtl}
       <p class="hint">같은 진영 말 5개를 일렬로 연결하면 승리. 타일은 기존 타일에 붙여야 합니다.</p>
       <p class="hint nav">🖱️ 휠: 줌 · 드래그: 이동 · ⌨️ 화살표/＋－/0(리셋)</p>
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+    const trackSel = panel.querySelector('select[data-ctl="bgmTrack"]') as HTMLSelectElement | null
+    if (trackSel) {
+      trackSel.addEventListener('change', () => {
+        settings.bgmTrack = Number(trackSel.value)
+        sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file)
+      })
+    }
+    const bgmVol = panel.querySelector('input[data-ctl="bgmVol"]') as HTMLInputElement | null
+    if (bgmVol) {
+      bgmVol.addEventListener('input', () => {
+        settings.bgmVolume = Number(bgmVol.value) / 100
+        sound.setBgmVolume(settings.bgmVolume)
+      })
+    }
+    const sfxVol = panel.querySelector('input[data-ctl="sfxVol"]') as HTMLInputElement | null
+    if (sfxVol) {
+      sfxVol.addEventListener('input', () => {
+        settings.sfxVolume = Number(sfxVol.value) / 100
+        sound.setSfxVolume(settings.sfxVolume)
+      })
+      sfxVol.addEventListener('change', () => sound.place('yellow')) // 레벨 미리듣기
     }
   }
 
@@ -996,10 +1038,6 @@ export function mountGame(root: HTMLElement): void {
       case 'toggleQueen':
         settings.queen = !settings.queen
         if (!settings.queen && pieceKind === 'queen') pieceKind = 'normal'
-        break
-      case 'toggleSound':
-        settings.sound = !settings.sound
-        sound.enabled = settings.sound
         break
       case 'toggleMusic':
         sound.toggleMusic()

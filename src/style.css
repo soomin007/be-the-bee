@@ -189,6 +189,61 @@ svg.board.panning {
   border-color: #eab308;
 }
 
+.sound-ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+  padding: 0.6rem;
+  border: 1px solid #e6dcc3;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+
+.sc-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.sc-row button {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #c9b88f;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.sc-row button.active {
+  background: #fde68a;
+  border-color: #eab308;
+}
+
+.sc-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem;
+  border: 1px solid #c9b88f;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.85rem;
+}
+
+.sc-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: #6b5524;
+}
+
+.sc-slider input[type='range'] {
+  flex: 1;
+  accent-color: #eab308;
+}
+
 .hint {
   font-size: 0.78rem;
   color: #888;
