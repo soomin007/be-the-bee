@@ -48,7 +48,7 @@ describe('핫시트 UI (headless DOM)', () => {
     // 첫 수 완료 → 턴 교대
     expect(root.querySelector('.panel')!.textContent).toContain('갈색 차례')
     // 말 하나가 그려졌다
-    expect(root.querySelectorAll('svg.board circle').length).toBe(1)
+    expect(root.querySelectorAll('svg.board circle.piece').length).toBe(1)
   })
 
   it('새 게임 버튼은 초기 상태로 되돌린다', () => {
@@ -62,12 +62,12 @@ describe('핫시트 UI (headless DOM)', () => {
       (p) => p.getAttribute('stroke') === '#16a34a',
     )
     click(targets[0]!)
-    expect(root.querySelectorAll('svg.board circle').length).toBe(1)
+    expect(root.querySelectorAll('svg.board circle.piece').length).toBe(1)
 
     const newBtn = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'new')
     click(newBtn!)
     expect(root.querySelector('.panel')!.textContent).toContain('노랑 차례')
-    expect(root.querySelectorAll('svg.board circle').length).toBe(0)
+    expect(root.querySelectorAll('svg.board circle.piece').length).toBe(0)
   })
 
   it('vs AI 모드: 사람 첫 수 후 AI(갈색)가 자동으로 둔다', () => {
@@ -84,11 +84,11 @@ describe('핫시트 UI (headless DOM)', () => {
       click(frontier[0]!)
       const targets = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('stroke') === '#16a34a')
       click(targets[0]!)
-      expect(root.querySelectorAll('svg.board circle').length).toBe(1) // 노랑 말 1
+      expect(root.querySelectorAll('svg.board circle.piece').length).toBe(1) // 노랑 말 1
 
       // AI 타이머 진행 → 갈색이 한 수 둔다
       vi.advanceTimersByTime(400)
-      expect(root.querySelectorAll('svg.board circle').length).toBeGreaterThanOrEqual(2)
+      expect(root.querySelectorAll('svg.board circle.piece').length).toBeGreaterThanOrEqual(2)
     } finally {
       vi.useRealTimers()
     }

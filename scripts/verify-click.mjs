@@ -27,8 +27,8 @@ await page.waitForSelector('svg.board polygon[stroke="#16a34a"]')
 await clickCenter(page.locator('svg.board polygon[stroke="#16a34a"]').first())
 await page.waitForTimeout(200)
 
-// 검증: 말(circle) 1개가 그려졌고 갈색 차례로 넘어갔는가
-const circles = await page.locator('svg.board circle').count()
+// 검증: 말(circle.piece) 1개가 그려졌고 갈색 차례로 넘어갔는가
+const circles = await page.locator('svg.board circle.piece').count()
 const panel = (await page.locator('.panel').textContent()) ?? ''
 await browser.close()
 

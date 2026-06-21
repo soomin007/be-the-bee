@@ -87,7 +87,7 @@ function backgroundHexes(radius: number): Hex[] {
 }
 const BG_HEXES = backgroundHexes(BG_RADIUS)
 
-// 한 수가 건드린 칸들(직전 수 강조용).
+// 한 수가 건드린 칸들(등장 애니메이션용).
 function moveCells(move: Move): Hex[] {
   switch (move.type) {
     case 'twoTiles':
@@ -97,6 +97,23 @@ function moveCells(move: Move): Hex[] {
     case 'pieceOnly':
       return [move.piece.at]
   }
+}
+
+// 직전 수에서 타일이 놓인 칸들(칸 테두리로 표시).
+function lastTileCells(move: Move): Hex[] {
+  switch (move.type) {
+    case 'twoTiles':
+      return [move.first, move.second]
+    case 'tileAndPiece':
+      return [move.tile]
+    case 'pieceOnly':
+      return []
+  }
+}
+
+// 직전 수에서 말이 놓인 칸(말 둘레 링으로 표시). 없으면 null.
+function lastPieceCell(move: Move): Hex | null {
+  return move.type === 'twoTiles' ? null : move.piece.at
 }
 
 export function mountGame(root: HTMLElement): void {
@@ -144,6 +161,7 @@ export function mountGame(root: HTMLElement): void {
           </defs>
           <g class="content"></g>
         </svg>
+        <div class="action-bar"></div>
       </div>
     </div>
     <div class="modal-layer"></div>
@@ -151,6 +169,7 @@ export function mountGame(root: HTMLElement): void {
   const svg = root.querySelector('svg.board') as SVGSVGElement
   const content = svg.querySelector('g.content') as SVGGElement
   const panel = root.querySelector('.panel') as HTMLElement
+  const actionBar = root.querySelector('.action-bar') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
 
   // ---- 카메라 ---------------------------------------------------------------
@@ -284,6 +303,36 @@ export function mountGame(root: HTMLElement): void {
 
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return
+
+    // 인게임 행동 단축키 (사람 차례에만)
+    if (state.phase === 'playing' && !aiThinking && !aiControls(state.turn) && draft !== null) {
+      if (draft.stage === 'chooseAction' && e.key === '1') {
+        e.preventDefault()
+        onPanelAction('twoTiles')
+        return
+      }
+      if (draft.stage === 'chooseAction' && e.key === '2') {
+        e.preventDefault()
+        onPanelAction('tileAndPiece')
+        return
+      }
+      if (e.key === 'Escape' && draftHasSelection()) {
+        e.preventDefault()
+        onPanelAction('cancel')
+        return
+      }
+      if (
+        (e.key === 'q' || e.key === 'Q') &&
+        draft.stage === 'piece' &&
+        settings.queen &&
+        !state.supplies[state.turn].queenUsed
+      ) {
+        e.preventDefault()
+        onPanelAction('queen')
+        return
+      }
+    }
+
     const { aspect, cw, ch } = svgAspect()
     const camH = cam.w * aspect
     switch (e.key) {
@@ -557,9 +606,11 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 4.5) 직전 수 강조(파란 점선) + 리치(한 수로 5목) 힌트
+    // 4.5) 직전 수 강조 — 타일은 칸 파란 점선(말 둘레 링은 말 그릴 때). + 리치 힌트
+    const lpc = lastMove ? lastPieceCell(lastMove) : null
+    const lastPieceKey = lpc ? hexKey(lpc) : null
     if (lastMove) {
-      for (const c of moveCells(lastMove)) {
+      for (const c of lastTileCells(lastMove)) {
         content.appendChild(
           makeHexPolygon(hexToPixel(c), {
             fill: 'none',
@@ -625,6 +676,7 @@ export function mountGame(root: HTMLElement): void {
       if (!piece) continue
       const p = hexToPixel(hexFromKey(key))
       const circle = document.createElementNS(SVGNS, 'circle')
+      circle.classList.add('piece')
       if (lastKeys.has(key)) circle.classList.add('pop')
       circle.setAttribute('cx', String(p.x))
       circle.setAttribute('cy', String(p.y))
@@ -634,6 +686,18 @@ export function mountGame(root: HTMLElement): void {
       circle.setAttribute('stroke-width', '2.5')
       circle.style.pointerEvents = 'none'
       content.appendChild(circle)
+      // 직전 수의 말은 말 둘레 파란 링으로(타일의 칸 테두리와 구분)
+      if (key === lastPieceKey) {
+        const ring = document.createElementNS(SVGNS, 'circle')
+        ring.setAttribute('cx', String(p.x))
+        ring.setAttribute('cy', String(p.y))
+        ring.setAttribute('r', String(HEX_SIZE * 0.66))
+        ring.setAttribute('fill', 'none')
+        ring.setAttribute('stroke', '#2563eb')
+        ring.setAttribute('stroke-width', '3')
+        ring.style.pointerEvents = 'none'
+        content.appendChild(ring)
+      }
       if (piece.kind === 'queen') {
         const crown = document.createElementNS(SVGNS, 'text')
         crown.setAttribute('x', String(p.x))
@@ -667,7 +731,34 @@ export function mountGame(root: HTMLElement): void {
     }
 
     renderPanel()
+    renderActionBar()
     renderModal()
+  }
+
+  // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에 — 설정 버튼과 분리.
+  function renderActionBar(): void {
+    if (state.phase !== 'playing' || aiThinking || aiControls(state.turn) || draft === null) {
+      actionBar.innerHTML = ''
+      return
+    }
+    const items: string[] = []
+    if (draft.stage === 'chooseAction') {
+      items.push(`<span class="ab-prompt">${PLAYER_LABEL[state.turn]} 차례 — 행동 선택</span>`)
+      items.push(`<button data-act="twoTiles">① 타일 2개<kbd>1</kbd></button>`)
+      items.push(`<button data-act="tileAndPiece">② 타일 + 말<kbd>2</kbd></button>`)
+    } else {
+      items.push(`<span class="ab-prompt">${instructionText()}</span>`)
+      if (draft.stage === 'piece' && settings.queen && !state.supplies[state.turn].queenUsed) {
+        items.push(
+          `<button data-act="queen" class="${pieceKind === 'queen' ? 'active' : ''}">여왕벌로 놓기 ${pieceKind === 'queen' ? '✓' : ''}<kbd>Q</kbd></button>`,
+        )
+      }
+      if (draftHasSelection()) items.push(`<button data-act="cancel">취소<kbd>Esc</kbd></button>`)
+    }
+    actionBar.innerHTML = items.join('')
+    for (const btn of Array.from(actionBar.querySelectorAll('button'))) {
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
   }
 
   function renderModal(): void {
@@ -731,20 +822,8 @@ export function mountGame(root: HTMLElement): void {
       instruction = instructionText()
     }
 
-    const humanTurn = state.phase === 'playing' && !aiThinking && !aiControls(state.turn)
+    // 인게임 행동(①/②·여왕벌로 놓기·취소)은 보드 아래 액션 바에서. 패널은 설정/메타만.
     const buttons: string[] = []
-    if (humanTurn && draft !== null) {
-      if (draft.stage === 'chooseAction') {
-        buttons.push(`<button data-act="twoTiles">타일 2개 (①)</button>`)
-        buttons.push(`<button data-act="tileAndPiece">타일 + 말 (②)</button>`)
-      }
-      if (settings.queen && draft.stage === 'piece' && !state.supplies[state.turn].queenUsed) {
-        buttons.push(
-          `<button data-act="queen" class="${pieceKind === 'queen' ? 'active' : ''}">여왕벌로 놓기 ${pieceKind === 'queen' ? '✓' : ''}</button>`,
-        )
-      }
-      if (draftHasSelection()) buttons.push(`<button data-act="cancel">취소</button>`)
-    }
     buttons.push(
       `<button data-act="cycleMode" class="${settings.mode !== 'hotseat' ? 'active' : ''}">모드: ${MODE_LABEL[settings.mode]}</button>`,
     )
