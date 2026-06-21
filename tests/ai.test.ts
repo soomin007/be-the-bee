@@ -233,6 +233,24 @@ describe('AI: self-play (엔진 통합)', () => {
     expect(mediumWins).toBeGreaterThan(easyWins)
   }, 30000)
 
+  it('hard(깊은 서치+허리끊기)가 medium 보다 강하다', () => {
+    const games = 6
+    let hardWins = 0
+    let medWins = 0
+    for (let i = 0; i < games; i++) {
+      const hard = createAi({ difficulty: 'hard', seed: 300 + i })
+      const med = createAi({ difficulty: 'medium', seed: 400 + i })
+      const hardIsYellow = i % 2 === 0
+      const winner = hardIsYellow ? playGame(hard, med) : playGame(med, hard)
+      const hardSide: Player = hardIsYellow ? 'yellow' : 'brown'
+      if (winner === hardSide) hardWins++
+      else if (winner !== 'draw') medWins++
+    }
+    // eslint-disable-next-line no-console
+    console.log(`hard ${hardWins} : ${medWins} medium (무 ${games - hardWins - medWins})`)
+    expect(hardWins).toBeGreaterThan(medWins)
+  }, 60000)
+
   it('같은 seed·상태면 같은 수를 낸다 (결정성)', () => {
     const board = build(
       [...mixedRow(0, 3, 0)],

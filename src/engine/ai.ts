@@ -65,7 +65,7 @@ function cfgFor(difficulty: Difficulty): Cfg {
     case 'easy':
       return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
     case 'hard':
-      return { useBlock: true, beamWidth: 8, beamDepth: 4, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 10, beamDepth: 4, noise: 0, relevanceRadius: 2 }
     case 'medium':
     default:
       return { useBlock: true, beamWidth: 6, beamDepth: 3, noise: 0, relevanceRadius: 2 }
@@ -97,6 +97,7 @@ const W = {
   CLOSED_2: 20,
   HIVE: 40,
   CENTER: 1,
+  CONTEST: 130, // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
 } as const
 
 const CENTER_HEX: Hex = hex(0, 0)
@@ -217,11 +218,33 @@ function centralityPenalty(board: Board, p: Player): number {
   return d
 }
 
+// p 가 상대의 발전 타일선(길이 3·4, 곧 벌집) 위에 놓은 p 의 말 = 선점(허리 끊기) 보너스.
+// 벌집이 잠기기 전에 그 타일을 차지하면, 잠금 후에도 내 말이 남고 상대의 그 칸 사용을 막는다.
+function contestBonus(board: Board, p: Player): number {
+  const enemyTiles = ownerTileMap(board, opponent(p))
+  let s = 0
+  for (const line of findLines(enemyTiles, 3)) {
+    if (line.cells.length >= 5) continue // 이미 벌집(잠김)
+    const weight = line.cells.length === 4 ? W.CONTEST : W.CONTEST * 0.5 // 4목 임박일수록 가치↑
+    for (const key of line.cells) {
+      const piece = board[key]!.piece
+      if (piece && piece.owner === p) s += weight
+    }
+  }
+  return s
+}
+
+// 설명서 TIP#1 "허리 끊기"·TIP#2 "타일 선점" — me 관점, 반대칭.
+function hiveContestTerm(board: Board, me: Player): number {
+  return contestBonus(board, me) - contestBonus(board, opponent(me))
+}
+
 function evaluate(board: Board, me: Player): number {
   const opp = opponent(me)
   let s = lineScore(board, me) - lineScore(board, opp)
   const hs = totalHiveScores(board)
   s += W.HIVE * (hs[me] - hs[opp])
+  s += hiveContestTerm(board, me)
   s -= W.CENTER * centralityPenalty(board, me)
   return s
 }
