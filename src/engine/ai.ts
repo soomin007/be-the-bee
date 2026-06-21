@@ -28,7 +28,7 @@ import type { Board, GameState, Move, PiecePlacement, Player } from './types'
 import { cellAt, pieceAt, withPiece, withTile } from './state'
 import { findLines, type Line } from './lines'
 import { totalHiveScores } from './hive'
-import { detectWin } from './victory'
+import { completingCells, detectWin } from './victory'
 import {
   allowedMoveTypes,
   applyMove,
@@ -36,6 +36,7 @@ import {
   isTilePlaceable,
   validateMove,
   validatePiecePlacement,
+  winningCells,
 } from './moves'
 
 // ---- 공개 인터페이스 (난이도 seam) -----------------------------------------
@@ -225,39 +226,7 @@ function evaluate(board: Board, me: Player): number {
   return s
 }
 
-// ---- 위협 셀 (승리/차단) ---------------------------------------------------
-
-// player 의 말을 놓으면 5목이 완성되는 빈 셀들(도달 가능성은 따지지 않음).
-// 5목을 만들려면 새 말이 기존 말과 축으로 인접해야 하므로, 후보는 player 말의 이웃뿐.
-function completingCells(board: Board, player: Player): Hex[] {
-  const out: Hex[] = []
-  const seen = new Set<string>()
-  for (const ph of pieceHexes(board)) {
-    if (board[hexKey(ph)]!.piece!.owner !== player) continue
-    for (const n of hexNeighbors(ph)) {
-      const k = hexKey(n)
-      if (seen.has(k)) continue
-      seen.add(k)
-      if (pieceAt(board, n) !== undefined) continue
-      const tiled = cellAt(board, n) !== undefined ? board : withTile(board, n, player)
-      if (detectWin(withPiece(tiled, n, { owner: player, kind: 'normal' })) === player) out.push(n)
-    }
-  }
-  return out
-}
-
-// 상대가 다음 한 수로 실제 5목을 완성할 수 있는 셀(도달 가능성 포함).
-function opponentWinningCells(board: Board, opp: Player, oppSupply: GameState['supplies'][Player]): Hex[] {
-  return completingCells(board, opp).filter((c) => {
-    if (cellAt(board, c) !== undefined) {
-      return (
-        validatePiecePlacement(board, opp, oppSupply, { at: c, kind: 'normal' }).ok ||
-        (!oppSupply.queenUsed && validatePiecePlacement(board, opp, oppSupply, { at: c, kind: 'queen' }).ok)
-      )
-    }
-    return oppSupply.tiles >= 1 && isTilePlaceable(board, c)
-  })
-}
+// 위협 셀(완성 가능 셀)은 engine/victory(completingCells)·moves(winningCells)에서 공유한다.
 
 // ---- 이동 생성 -------------------------------------------------------------
 
@@ -387,7 +356,7 @@ function queenPlacementMove(state: GameState, c: Hex, me: Player): Move | null {
 
 function findBlock(state: GameState, candidates: Candidate[], me: Player): Move | null {
   const opp = opponent(me)
-  const threats = opponentWinningCells(state.board, opp, state.supplies[opp])
+  const threats = winningCells(state.board, opp, state.supplies[opp])
   if (threats.length === 0) return null
   const threatKeys = new Set(threats.map(hexKey))
 

@@ -12,8 +12,10 @@ import {
   hexEquals,
   hexFromKey,
   isTilePlaceable,
+  opponent,
   totalHiveScores,
   validatePiecePlacement,
+  winningCells,
   withTile,
 } from '../engine/index'
 import type { Ai, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
@@ -67,12 +69,28 @@ function backgroundHexes(radius: number): Hex[] {
 }
 const BG_HEXES = backgroundHexes(BG_RADIUS)
 
+// 한 수가 건드린 칸들(직전 수 강조용).
+function moveCells(move: Move): Hex[] {
+  switch (move.type) {
+    case 'twoTiles':
+      return [move.first, move.second]
+    case 'tileAndPiece':
+      return hexEquals(move.tile, move.piece.at) ? [move.tile] : [move.tile, move.piece.at]
+    case 'pieceOnly':
+      return [move.piece.at]
+  }
+}
+
 export function mountGame(root: HTMLElement): void {
   let state: GameState = createInitialState()
   let history: GameState[] = []
   let draft: Draft | null = null
   let pieceKind: PieceKind = 'normal'
   let message = ''
+  let lastMove: Move | null = null
+  // 리치(한 수로 5목) 칸 — render 가 채우고 renderPanel 이 읽는다.
+  let dangerCells: Hex[] = []
+  let winNowCells: Hex[] = []
 
   let cam: Camera = { cx: 0, cy: 0, w: HEX_SIZE * 26 }
   // 드래그 팬 상태
@@ -250,6 +268,7 @@ export function mountGame(root: HTMLElement): void {
 
   function applyAndAdvance(move: Move): void {
     history = [...history, state]
+    lastMove = move
     state = applyMove(state, move)
     message = ''
     startTurn()
@@ -339,6 +358,7 @@ export function mountGame(root: HTMLElement): void {
       opacity?: number
       dash?: boolean
       filter?: string
+      cls?: string
       interactive?: boolean
       onClick?: () => void
     },
@@ -351,6 +371,7 @@ export function mountGame(root: HTMLElement): void {
     if (opts.opacity !== undefined) poly.setAttribute('opacity', String(opts.opacity))
     if (opts.dash) poly.setAttribute('stroke-dasharray', '4 3')
     if (opts.filter) poly.setAttribute('filter', opts.filter)
+    if (opts.cls) poly.setAttribute('class', opts.cls)
     if (opts.interactive === false) poly.style.pointerEvents = 'none'
     if (opts.onClick) {
       poly.style.cursor = 'pointer'
@@ -457,6 +478,50 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
+    // 4.5) 직전 수 강조(파란 점선) + 리치(한 수로 5목) 힌트
+    if (lastMove) {
+      for (const c of moveCells(lastMove)) {
+        content.appendChild(
+          makeHexPolygon(hexToPixel(c), {
+            fill: 'none',
+            stroke: '#2563eb',
+            strokeWidth: 3,
+            dash: true,
+            interactive: false,
+          }),
+        )
+      }
+    }
+    dangerCells = []
+    winNowCells = []
+    if (state.phase === 'playing') {
+      const opp = opponent(state.turn)
+      dangerCells = winningCells(state.board, opp, state.supplies[opp])
+      winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn])
+      for (const c of dangerCells) {
+        content.appendChild(
+          makeHexPolygon(hexToPixel(c), {
+            fill: 'none',
+            stroke: '#dc2626',
+            strokeWidth: 3.5,
+            cls: 'pulse',
+            interactive: false,
+          }),
+        )
+      }
+      for (const c of winNowCells) {
+        content.appendChild(
+          makeHexPolygon(hexToPixel(c), {
+            fill: 'none',
+            stroke: '#f59e0b',
+            strokeWidth: 3.5,
+            cls: 'pulse',
+            interactive: false,
+          }),
+        )
+      }
+    }
+
     // 5) 말 놓을 수 있는 타일 강조(말 단계)
     if (pieceStage) {
       for (const key of Object.keys(board2)) {
@@ -550,6 +615,15 @@ export function mountGame(root: HTMLElement): void {
     buttons.push(`<button data-act="resetView">뷰 리셋</button>`)
     buttons.push(`<button data-act="new">새 게임</button>`)
 
+    let reach = ''
+    if (state.phase === 'playing') {
+      if (winNowCells.length > 0) {
+        reach = `<div class="reach win">✨ ${PLAYER_LABEL[state.turn]} 리치! 여기 두면 승리</div>`
+      } else if (dangerCells.length > 0) {
+        reach = `<div class="reach danger">⚠️ ${PLAYER_LABEL[opponent(state.turn)]} 리치! 다음 한 수로 5목 — 막으세요</div>`
+      }
+    }
+
     panel.innerHTML = `
       <h2>🐝 Be the Bee</h2>
       <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
@@ -557,6 +631,7 @@ export function mountGame(root: HTMLElement): void {
         <div class="instruction">${instruction}</div>
         ${message ? `<div class="message">⚠️ ${message}</div>` : ''}
       </div>
+      ${reach}
       <div class="supplies">
         <div>${supplyLine('yellow')}</div>
         <div>${supplyLine('brown')}</div>
@@ -618,6 +693,7 @@ export function mountGame(root: HTMLElement): void {
           state = history[history.length - 1]!
           history = history.slice(0, -1)
           message = ''
+          lastMove = null
           startTurn()
         }
         break
@@ -636,6 +712,7 @@ export function mountGame(root: HTMLElement): void {
         state = createInitialState()
         history = []
         message = ''
+        lastMove = null
         startTurn()
         break
       default:

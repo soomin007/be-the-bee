@@ -20,7 +20,7 @@ import type {
 } from './types'
 import { cellAt, withPiece, withTile } from './state'
 import { lockedTiles, totalHiveScores } from './hive'
-import { detectWin } from './victory'
+import { completingCells, detectWin } from './victory'
 
 export type ValidationResult = { readonly ok: true } | { readonly ok: false; readonly reason: string }
 
@@ -183,6 +183,23 @@ export function applyMove(state: GameState, move: Move): GameState {
   // 상대가 못 두면 패스되어 같은 사람이 계속 둔다.
   const turn = otherCanMove ? other : player
   return { board, turn, supplies, moveNumber, phase: 'playing' }
+}
+
+/**
+ * player 가 "다음 한 수로" 실제 5목을 완성할 수 있는 셀(도달 가능성 포함).
+ * 기존 타일이면 그 위에 말을 놓을 수 있어야 하고(잠금/여왕벌 고려),
+ * 빈 프론티어면 타일이 남아 있어야 한다(한 수로 타일+말). 위협/리치 표시·AI 차단에 쓴다.
+ */
+export function winningCells(board: Board, player: Player, supply: PlayerSupply): Hex[] {
+  return completingCells(board, player).filter((c) => {
+    if (cellAt(board, c) !== undefined) {
+      return (
+        validatePiecePlacement(board, player, supply, { at: c, kind: 'normal' }).ok ||
+        (!supply.queenUsed && validatePiecePlacement(board, player, supply, { at: c, kind: 'queen' }).ok)
+      )
+    }
+    return supply.tiles >= 1 && isTilePlaceable(board, c)
+  })
 }
 
 /** 빈 칸 중 기존 타일에 인접한 곳들(UI에서 타일 놓을 자리 표시용). */

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { hex, hexKey } from '../src/engine/hex'
 import type { Board, Player } from '../src/engine/types'
 import { detectHives, hiveScore, totalHiveScores, lockedTiles } from '../src/engine/hive'
-import { detectWin } from '../src/engine/victory'
+import { completingCells, detectWin } from '../src/engine/victory'
+import { winningCells } from '../src/engine/moves'
+import type { PlayerSupply } from '../src/engine/types'
 
 // 헬퍼: 타일/말을 깔아 보드를 만든다.
 function build(tiles: Array<[ReturnType<typeof hex>, Player]>, pieces: Array<[ReturnType<typeof hex>, Player]> = []): Board {
@@ -80,5 +82,29 @@ describe('승리(말 5목)', () => {
     const board = build(row(0, 4, 0).map((h) => [h, 'yellow'] as [ReturnType<typeof hex>, Player]))
     expect(detectWin(board)).toBeNull()
     expect(detectHives(board)).toHaveLength(1)
+  })
+})
+
+describe('완성 가능 칸 (리치/차단 공유)', () => {
+  const full: PlayerSupply = { tiles: 30, pieces: 30, queenUsed: false }
+
+  it('completingCells: 말 4목의 빈 양끝을 5목 완성 칸으로 찾는다', () => {
+    const tiles = row(0, 4, 0).map((h) => [h, 'yellow'] as [ReturnType<typeof hex>, Player])
+    const pieces = [0, 1, 2, 3].map((q) => [hex(q, 0), 'brown'] as [ReturnType<typeof hex>, Player])
+    const cells = completingCells(build(tiles, pieces), 'brown')
+    const keys = new Set(cells.map(hexKey))
+    expect(keys.has(hexKey(hex(4, 0)))).toBe(true)
+  })
+
+  it('winningCells: 타일이 남아 있으면 프론티어 끝도 도달 가능 완성 칸', () => {
+    // (4,0)에는 타일 없음(프론티어). 타일이 있으면 한 수로 타일+말 → 완성 가능
+    const tiles = row(0, 3, 0).map((h) => [h, 'yellow'] as [ReturnType<typeof hex>, Player])
+    const pieces = [0, 1, 2, 3].map((q) => [hex(q, 0), 'brown'] as [ReturnType<typeof hex>, Player])
+    const board = build(tiles, pieces)
+    const reachable = winningCells(board, 'brown', full)
+    expect(new Set(reachable.map(hexKey)).has(hexKey(hex(4, 0)))).toBe(true)
+    // 타일이 0개면 프론티어 끝은 도달 불가
+    const noTiles = winningCells(board, 'brown', { tiles: 0, pieces: 30, queenUsed: false })
+    expect(new Set(noTiles.map(hexKey)).has(hexKey(hex(4, 0)))).toBe(false)
   })
 })
