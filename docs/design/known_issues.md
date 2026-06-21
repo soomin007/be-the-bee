@@ -8,6 +8,14 @@
 
 ## 2026-06-21
 
+### UI: setPointerCapture 가 click 을 리타깃해 보드 클릭이 안 먹음
+- **증상**: 설정 버튼은 눌리는데 SVG 보드 클릭이 안 됨(휠 줌·드래그 팬은 정상).
+- **원인**: 모든 pointerdown 에서 `svg.setPointerCapture` 호출 → 브라우저가 `click` 을 캡처
+  대상(svg)으로 리타깃 → 헥스(polygon)의 click 핸들러가 안 불림. 카메라 도입 때부터 잠복,
+  vs AI/관전만 쓰다 직접 클릭에서 노출. happy-dom 단위 테스트로는 재현 불가.
+- **재발 방지**: 실제 드래그/핀치가 시작될 때만 캡처. 포인터 상호작용을 바꾸면
+  `npm run verify:click`(Playwright, 실제 chromium)로 보드 클릭을 검증한다.
+
 ### AI 평가: 자기 타일선 발전을 보상하니 오히려 약해짐
 - **증상**: 벌집 관련 항을 추가하자 medium이 easy를 못 이김(4:2 → 3:3).
 - **원인**: 평가가 "내 타일선 발전(DEV_HIVE)"을 보상 → AI가 말 대신 타일을 쌓음.
