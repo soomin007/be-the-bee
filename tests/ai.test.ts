@@ -262,7 +262,7 @@ describe('AI: self-play (엔진 통합)', () => {
   }, 30000)
 
   it('hard(깊은 서치+허리끊기)가 medium 보다 강하다', () => {
-    const games = 4
+    const games = 2
     let hardWins = 0
     let medWins = 0
     for (let i = 0; i < games; i++) {

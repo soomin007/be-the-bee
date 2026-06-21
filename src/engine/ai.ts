@@ -66,7 +66,7 @@ function cfgFor(difficulty: Difficulty): Cfg {
     case 'easy':
       return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
     case 'hard':
-      return { useBlock: true, beamWidth: 8, beamDepth: 4, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 8, beamDepth: 5, noise: 0, relevanceRadius: 2 }
     case 'medium':
     default:
       return { useBlock: true, beamWidth: 6, beamDepth: 3, noise: 0, relevanceRadius: 2 }
@@ -100,6 +100,7 @@ const W = {
   CENTER: 1,
   CONTEST: 130, // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
   SEIZE: 45, // 상대 색 타일 위에 놓은 내 말 = 선점(TIP#2 "타일엔 주인이 없다")
+  FORK: 22000, // 동시 위협(살아있는 위협 2개 이상) — 상대가 다 못 막음 = 주도권
 } as const
 
 const CENTER_HEX: Hex = hex(0, 0)
@@ -193,22 +194,40 @@ function openEnds(board: Board, line: Line<Player>): number {
 }
 
 function runWeight(len: number, ends: number): number {
-  if (len >= 4) return ends >= 2 ? W.OPEN_4 : ends === 1 ? W.CLOSED_4 : W.CLOSED_4 * 0.25
-  if (len === 3) return ends >= 2 ? W.OPEN_3 : ends === 1 ? W.CLOSED_3 : 0
-  if (len === 2) return ends >= 2 ? W.OPEN_2 : ends === 1 ? W.CLOSED_2 : 0
+  // 양끝이 다 막히면 5목으로 못 늘어남 → 거의 무가치(죽은 줄을 물고 늘어지지 않게).
+  if (ends === 0) return len >= 4 ? 60 : 0
+  if (len >= 4) return ends >= 2 ? W.OPEN_4 : W.CLOSED_4
+  if (len === 3) return ends >= 2 ? W.OPEN_3 : W.CLOSED_3
+  if (len === 2) return ends >= 2 ? W.OPEN_2 : W.CLOSED_2
   return 0
 }
 
-function lineScore(board: Board, p: Player): number {
-  let s = 0
+interface SideStats {
+  score: number
+  threats: number // 살아있는 위협 수(열린 끝 있는 4목, 열린 3목)
+}
+
+function sideStats(board: Board, p: Player): SideStats {
+  let score = 0
+  let threats = 0
   for (const line of findLines(ownerPieceMap(board, p), 2)) {
-    if (line.cells.length >= 5) {
-      s += W.OPEN_4 * 10
+    const len = line.cells.length
+    if (len >= 5) {
+      score += W.OPEN_4 * 10
+      threats += 2
       continue
     }
-    s += runWeight(line.cells.length, openEnds(board, line))
+    const ends = openEnds(board, line)
+    score += runWeight(len, ends)
+    if (len >= 4 && ends >= 1) threats++
+    else if (len === 3 && ends >= 2) threats++
   }
-  return s
+  return { score, threats }
+}
+
+// 동시 위협(포크): 위협이 2개 이상이면 상대가 다 못 막는다 → 사실상 주도권/승리.
+function forkBonus(threats: number): number {
+  return threats >= 2 ? W.FORK * (threats - 1) : 0
 }
 
 function centralityPenalty(board: Board, p: Player): number {
@@ -254,7 +273,9 @@ function seizeScore(board: Board, me: Player): number {
 
 function evaluate(board: Board, me: Player): number {
   const opp = opponent(me)
-  let s = lineScore(board, me) - lineScore(board, opp)
+  const m = sideStats(board, me)
+  const o = sideStats(board, opp)
+  let s = m.score + forkBonus(m.threats) - (o.score + forkBonus(o.threats))
   const hs = totalHiveScores(board)
   s += W.HIVE * (hs[me] - hs[opp])
   s += hiveContestTerm(board, me)
@@ -383,11 +404,10 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
   // 말 배치 (② 또는 말만)
   for (const p of relevantCells(board, me, supply, cfg)) {
     if (cellAt(board, p) !== undefined) {
-      // 기존 타일 위 말(상대 타일이면 선점/허리 끊기) — 부차 타일은 상위 후보 몇 개
+      // 기존 타일 위 말(상대 타일이면 선점/허리 끊기) — 부차 타일은 최상위 1개(throwaway)
       if (canTaP) {
-        for (const t of tileSpots.slice(0, 2)) {
-          if (!hexEquals(t, p)) add({ type: 'tileAndPiece', tile: t, piece: { at: p, kind: 'normal' } }, p)
-        }
+        const t = tileSpots.find((ts) => !hexEquals(ts, p))
+        if (t) add({ type: 'tileAndPiece', tile: t, piece: { at: p, kind: 'normal' } }, p)
       } else if (canPieceOnly) {
         add({ type: 'pieceOnly', piece: { at: p, kind: 'normal' } }, p)
       }
