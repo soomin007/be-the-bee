@@ -112,11 +112,12 @@ export function mountGame(root: HTMLElement): void {
   let winNowCells: Hex[] = []
 
   let cam: Camera = { cx: 0, cy: 0, w: HEX_SIZE * 26 }
-  // 드래그 팬 상태
-  let pointerDown = false
+  // 포인터(마우스/터치) 추적 — 1개=팬, 2개=핀치 줌
+  const pointers = new Map<number, { x: number; y: number }>()
   let dragMoved = false
   let lastX = 0
   let lastY = 0
+  let pinchDist = 0
 
   // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜 — 새 게임에도 방 설정은 유지)
   const settings = defaultSettings()
@@ -209,11 +210,23 @@ export function mountGame(root: HTMLElement): void {
     { passive: false },
   )
 
+  function pinchInfo(): { dist: number; mx: number; my: number } | null {
+    const v = [...pointers.values()]
+    if (v.length < 2) return null
+    const a = v[0]!
+    const b = v[1]!
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
+  }
+
   svg.addEventListener('pointerdown', (e: PointerEvent) => {
-    pointerDown = true
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     dragMoved = false
-    lastX = e.clientX
-    lastY = e.clientY
+    if (pointers.size === 1) {
+      lastX = e.clientX
+      lastY = e.clientY
+    } else if (pointers.size === 2) {
+      pinchDist = pinchInfo()?.dist ?? 0
+    }
     try {
       svg.setPointerCapture(e.pointerId)
     } catch {
@@ -221,22 +234,41 @@ export function mountGame(root: HTMLElement): void {
     }
   })
   svg.addEventListener('pointermove', (e: PointerEvent) => {
-    if (!pointerDown) return
-    const dx = e.clientX - lastX
-    const dy = e.clientY - lastY
-    if (!dragMoved && Math.hypot(dx, dy) > 4) {
+    if (!pointers.has(e.pointerId)) return
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.size >= 2) {
+      // 두 손가락 핀치 줌(가운데 기준)
       dragMoved = true
-      svg.classList.add('panning')
-    }
-    if (dragMoved) {
-      panByClient(dx, dy)
-      lastX = e.clientX
-      lastY = e.clientY
+      const info = pinchInfo()
+      if (info && pinchDist > 0 && info.dist > 0) {
+        const rect = svg.getBoundingClientRect()
+        zoomAt(info.mx - rect.left, info.my - rect.top, pinchDist / info.dist)
+      }
+      if (info) pinchDist = info.dist
+    } else {
+      // 한 손가락/마우스 드래그 팬
+      const dx = e.clientX - lastX
+      const dy = e.clientY - lastY
+      if (!dragMoved && Math.hypot(dx, dy) > 4) {
+        dragMoved = true
+        svg.classList.add('panning')
+      }
+      if (dragMoved) {
+        panByClient(dx, dy)
+        lastX = e.clientX
+        lastY = e.clientY
+      }
     }
   })
-  const endPointer = (): void => {
-    pointerDown = false
-    svg.classList.remove('panning')
+  const endPointer = (e: PointerEvent): void => {
+    pointers.delete(e.pointerId)
+    if (pointers.size < 2) pinchDist = 0
+    if (pointers.size === 1) {
+      const v = [...pointers.values()][0]!
+      lastX = v.x
+      lastY = v.y
+    }
+    if (pointers.size === 0) svg.classList.remove('panning')
   }
   svg.addEventListener('pointerup', endPointer)
   svg.addEventListener('pointercancel', endPointer)
