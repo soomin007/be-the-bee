@@ -65,9 +65,10 @@ interface RoomSettings {
   aiDifficulty: Difficulty
   hints: boolean // 훈수 모드: 위험/승리 칸 힌트 표시
   sound: boolean // 효과음
+  queen: boolean // 여왕벌 모드(확장 — 숙련자용). 기본 꺼짐. AI 는 사용 안 함
 }
 function defaultSettings(): RoomSettings {
-  return { mode: 'hotseat', aiDifficulty: 'medium', hints: false, sound: true }
+  return { mode: 'hotseat', aiDifficulty: 'medium', hints: false, sound: true, queen: false }
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -656,9 +657,9 @@ export function mountGame(root: HTMLElement): void {
         buttons.push(`<button data-act="twoTiles">타일 2개 (①)</button>`)
         buttons.push(`<button data-act="tileAndPiece">타일 + 말 (②)</button>`)
       }
-      if (draft.stage === 'piece' && !state.supplies[state.turn].queenUsed) {
+      if (settings.queen && draft.stage === 'piece' && !state.supplies[state.turn].queenUsed) {
         buttons.push(
-          `<button data-act="queen" class="${pieceKind === 'queen' ? 'active' : ''}">여왕벌 ${pieceKind === 'queen' ? '✓' : ''}</button>`,
+          `<button data-act="queen" class="${pieceKind === 'queen' ? 'active' : ''}">여왕벌로 놓기 ${pieceKind === 'queen' ? '✓' : ''}</button>`,
         )
       }
       if (draftHasSelection()) buttons.push(`<button data-act="cancel">취소</button>`)
@@ -671,6 +672,9 @@ export function mountGame(root: HTMLElement): void {
     }
     buttons.push(
       `<button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수 ${settings.hints ? '✓' : ''}</button>`,
+    )
+    buttons.push(
+      `<button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드 ${settings.queen ? '✓' : ''}</button>`,
     )
     buttons.push(
       `<button data-act="toggleSound" class="${settings.sound ? 'active' : ''}">효과음 ${settings.sound ? '✓' : ''}</button>`,
@@ -778,6 +782,10 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'toggleHints':
         settings.hints = !settings.hints
+        break
+      case 'toggleQueen':
+        settings.queen = !settings.queen
+        if (!settings.queen && pieceKind === 'queen') pieceKind = 'normal'
         break
       case 'toggleSound':
         settings.sound = !settings.sound
