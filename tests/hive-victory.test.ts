@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { hex, hexKey } from '../src/engine/hex'
 import type { Board, Player } from '../src/engine/types'
 import { detectHives, hiveScore, totalHiveScores, lockedTiles } from '../src/engine/hive'
-import { completingCells, detectWin } from '../src/engine/victory'
+import { completingCells, detectWin, winningLine } from '../src/engine/victory'
 import { winningCells } from '../src/engine/moves'
 import type { PlayerSupply } from '../src/engine/types'
 
@@ -76,6 +76,14 @@ describe('승리(말 5목)', () => {
     const tiles = row(0, 3, 0).map((h) => [h, 'yellow'] as [ReturnType<typeof hex>, Player])
     const pieces = row(0, 3, 0).map((h) => [h, 'brown'] as [ReturnType<typeof hex>, Player])
     expect(detectWin(build(tiles, pieces))).toBeNull()
+  })
+
+  it('winningLine: 이긴 5목의 5칸을 돌려준다', () => {
+    const tiles = row(0, 4, 0).map((h) => [h, 'yellow'] as [ReturnType<typeof hex>, Player])
+    const pieces = row(0, 4, 0).map((h) => [h, 'brown'] as [ReturnType<typeof hex>, Player])
+    const line = winningLine(build(tiles, pieces))
+    expect(line?.owner).toBe('brown')
+    expect(line?.cells).toHaveLength(5)
   })
 
   it('타일선과 말선은 독립 — 타일이 5목이어도 말이 없으면 승리 아님', () => {

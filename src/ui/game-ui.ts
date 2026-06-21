@@ -16,6 +16,7 @@ import {
   totalHiveScores,
   validatePiecePlacement,
   winningCells,
+  winningLine,
   withTile,
 } from '../engine/index'
 import type { Ai, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
@@ -564,6 +565,24 @@ export function mountGame(root: HTMLElement): void {
         crown.style.pointerEvents = 'none'
         crown.textContent = '♛'
         content.appendChild(crown)
+      }
+    }
+
+    // 7) 승리 이펙트 — 이긴 5목 라인 강조(초록 굵은 펄스)
+    if (state.phase === 'finished' && state.result?.kind === 'win') {
+      const line = winningLine(state.board)
+      if (line) {
+        for (const key of line.cells) {
+          content.appendChild(
+            makeHexPolygon(hexToPixel(hexFromKey(key)), {
+              fill: 'none',
+              stroke: '#16a34a',
+              strokeWidth: 6,
+              cls: 'pulse',
+              interactive: false,
+            }),
+          )
+        }
       }
     }
 

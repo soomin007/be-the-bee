@@ -6,18 +6,28 @@ import { hexFromKey, hexKey, hexNeighbors, type Hex } from './hex'
 import { findLines } from './lines'
 import type { Board, Player } from './types'
 
+export interface WinningLine {
+  readonly owner: Player
+  readonly cells: readonly string[] // hexKey, 축 정렬
+}
+
 /**
- * 말 5목을 이룬 진영을 반환(없으면 null). 여왕벌도 소유자의 말로 센다(§8.2).
- * 정상 진행에서는 한 번에 한쪽만 5목이 되지만, 방어적으로 먼저 찾은 쪽을 반환한다.
+ * 말 5목 라인을 반환(없으면 null). 여왕벌도 소유자의 말로 센다(§8.2).
+ * 정상 진행에서는 한 번에 한쪽만 5목이 되지만, 방어적으로 먼저 찾은 라인을 반환한다.
  */
-export function detectWin(board: Board): Player | null {
+export function winningLine(board: Board): WinningLine | null {
   const pieceOwners = new Map<string, Player>()
   for (const key of Object.keys(board)) {
     const piece = board[key]!.piece
     if (piece !== undefined) pieceOwners.set(key, piece.owner)
   }
   const lines = findLines(pieceOwners, LINE_LENGTH)
-  return lines.length > 0 ? lines[0]!.value : null
+  return lines.length > 0 ? { owner: lines[0]!.value, cells: lines[0]!.cells } : null
+}
+
+/** 말 5목을 이룬 진영을 반환(없으면 null). */
+export function detectWin(board: Board): Player | null {
+  return winningLine(board)?.owner ?? null
 }
 
 /**
