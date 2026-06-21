@@ -8,6 +8,24 @@
 
 ## 2026-06-21
 
+### 배포: 무료 플랜은 비공개 레포 GitHub Pages 미지원
+- **증상**: `gh api POST .../pages` 가 HTTP 422 "Your current plan does not support GitHub Pages".
+- **원인**: GitHub Pages 무료는 **public 레포만**. private 은 Pro 이상 필요.
+- **재발 방지**: 배포 전 레포 가시성 확인. private 유지가 필요하면 Cloudflare Pages/Netlify 등
+  대안. 공개 전환은 되돌리기 어려운 외부 노출이므로 반드시 사용자 확인 후 진행.
+
+### AI: 빔 서치가 무작위 흩뿌림 보드에서 타임아웃
+- **증상**: 퍼즈 테스트(무작위 120수)에서 depth-3 서치가 5s 테스트 한계 초과.
+- **원인**: 무작위 플레이가 타일을 넓게 흩뿌려 프론티어·후보가 폭증. 실제 AI 플레이(집중)는 빠름.
+- **재발 방지**: 알파-베타 + 노드당 후보 상한(MAX_CANDIDATES). 합법성 퍼즈는 깊이와 무관하므로
+  빠른 easy(1수)로 검증하고, 깊은 서치는 self-play(집중 보드)로 검증.
+
+### 빌드: 누락 import 가 try/catch 폴백에 가려짐
+- **증상**: ai.ts 에 `applyMove` import 누락인데 테스트가 통과(서치가 실제로 안 돌고 폴백됨).
+- **원인**: `chooseMove` 의 try/catch 가 ReferenceError 를 삼켜 폴백수로 대체.
+- **재발 방지**: `check:engine`(tsc)로 미사용/미정의 잡기 + 동작 검증(예: medium>easy 승률)으로
+  "실제로 그 경로가 도는지" 확인. catch 가 버그를 가릴 수 있음을 유념.
+
 ### 테스트: 대칭 위치에서 특정 승리/차단 칸을 단정하면 깨짐
 - **증상**: AI 즉시승리 테스트가 4목의 한쪽 끝(4,0)만 정답으로 단정 → 실패.
 - **원인**: 4목의 양끝이 모두 빈 칸이면 어느 쪽에 둬도 5목(대칭). AI가 반대편 끝을 선택.

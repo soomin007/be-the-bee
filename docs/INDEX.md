@@ -19,6 +19,7 @@
 | **다음 작업·미착수 (진행 단일 소스)** | [`design/backlog.md`](design/backlog.md) |
 | 반복 금지 함정·오류 이력 | [`design/known_issues.md`](design/known_issues.md) |
 | 세션별 변경 흐름 | [`../session_logs/`](../session_logs/) |
+| 배포(GitHub Pages 자동) | `.github/workflows/deploy.yml` · ▶ https://soomin007.github.io/be-the-bee/ |
 
 ## 원칙
 - **진행/우선순위 = backlog**, 개요 = README, 규칙 = rules.md, 아키텍처·운영 = CLAUDE.md.
