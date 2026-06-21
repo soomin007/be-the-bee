@@ -28,6 +28,6 @@ const html = `<!doctype html><html><head><style>
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 520, height: 420 } })
 await page.setContent(html)
-await page.screenshot({ path: 'docs/design/theme-modal.png' })
+await page.screenshot({ path: 'docs/design/shots/theme-modal.png' })
 await browser.close()
-console.log('saved docs/design/theme-modal.png')
+console.log('saved docs/design/shots/theme-modal.png')

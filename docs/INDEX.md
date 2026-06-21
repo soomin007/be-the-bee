@@ -21,6 +21,7 @@
 | 벌 컨셉 비주얼 테마(제안) | [`design/bee_theme.md`](design/bee_theme.md) |
 | BGM 생성 프롬프트(Suno) | [`design/bgm_prompt.md`](design/bgm_prompt.md) |
 | 세션별 변경 흐름 | [`../session_logs/`](../session_logs/) |
+| 개발용 점검·미리보기 도구 | [`../scripts/README.md`](../scripts/README.md) (verify-* 회귀 / shot-* → `design/shots/`) |
 | 배포(GitHub Pages 자동) | `.github/workflows/deploy.yml` · ▶ https://soomin007.github.io/be-the-bee/ |
 
 ## 원칙
