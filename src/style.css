@@ -1,0 +1,25 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+.placeholder {
+  text-align: center;
+  padding: 2rem;
+}
+
+.placeholder h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+code {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+}

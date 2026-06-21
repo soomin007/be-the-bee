@@ -1,0 +1,9 @@
+{
+  "//": "엔진 순수성 검증용. DOM/Node 전역을 빼서, src/engine 이 브라우저·DOM·Node API를 건드리면 컴파일이 실패하게 만든다. `npm run check:engine` 으로 검사.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/engine"]
+}

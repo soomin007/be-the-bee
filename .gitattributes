@@ -1,0 +1,8 @@
+# 텍스트 파일은 저장소에서 LF로 통일 (크로스플랫폼 일관성)
+* text=auto eol=lf
+
+# 바이너리 파일은 변환하지 않음
+*.pdf binary
+*.png binary
+*.jpg binary
+*.svg text
