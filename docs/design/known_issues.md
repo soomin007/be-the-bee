@@ -8,6 +8,13 @@
 
 ## 2026-06-21
 
+### AI 평가: 자기 타일선 발전을 보상하니 오히려 약해짐
+- **증상**: 벌집 관련 항을 추가하자 medium이 easy를 못 이김(4:2 → 3:3).
+- **원인**: 평가가 "내 타일선 발전(DEV_HIVE)"을 보상 → AI가 말 대신 타일을 쌓음.
+  설명서 TIP#3("벌집에 끌려가지 마라 — 말 5목이 전부")과 정면 충돌.
+- **재발 방지**: 벌집/타일은 수단. 보상은 **상대 발전 타일선 위 내 말 선점(허리 끊기)** 처럼
+  말-우선 전략에만. 평가 변경 후엔 self-play 승률(medium>easy, hard>medium)로 회귀 확인.
+
 ### 배포: 무료 플랜은 비공개 레포 GitHub Pages 미지원
 - **증상**: `gh api POST .../pages` 가 HTTP 422 "Your current plan does not support GitHub Pages".
 - **원인**: GitHub Pages 무료는 **public 레포만**. private 은 Pro 이상 필요.
