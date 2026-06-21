@@ -168,7 +168,18 @@ svg.board.panning {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.settings-summary {
+  font-size: 0.82rem;
+  color: #6b5524;
+  text-align: center;
+  margin: 0 0 1rem;
+}
+
+.settings-summary b {
+  color: #b8860b;
 }
 
 .settings-grid > button,

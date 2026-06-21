@@ -921,6 +921,10 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="resetView">뷰 리셋</button>
         <button data-act="new">새 게임</button>
       </div>`
+    const settingsSummary =
+      settings.mode === 'hotseat'
+        ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat}</div>`
+        : `<div class="settings-summary">🎮 ${MODE_LABEL[settings.mode]} · 난이도 <b>${DIFF_LABEL[settings.aiDifficulty]}</b></div>`
 
     let reach = ''
     if (state.phase === 'playing') {
@@ -966,6 +970,7 @@ export function mountGame(root: HTMLElement): void {
       </div>
       <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       ${settingsHtml}
+      ${settingsSummary}
       ${soundCtl}
       <p class="hint">같은 진영 말 5개를 일렬로 연결하면 승리. 타일은 기존 타일에 붙여야 합니다.</p>
       <p class="hint nav">🖱️ 휠: 줌 · 드래그: 이동 · ⌨️ 화살표/＋－/0(리셋)</p>
@@ -1075,11 +1080,16 @@ export function mountGame(root: HTMLElement): void {
       case 'undo':
         if (history.length > 0) {
           clearAiTimer()
-          state = history[history.length - 1]!
-          history = history.slice(0, -1)
+          // 사람 차례가 될 때까지 되돌린다 — vs AI 에선 AI 수와 내 수를 함께 무른다.
+          // (한 수만 무르면 AI 차례로 돌아가 AI 가 즉시 다시 둬 무효가 됨)
+          do {
+            state = history[history.length - 1]!
+            history = history.slice(0, -1)
+          } while (history.length > 0 && aiControls(state.turn))
           message = ''
           lastMove = null
           modalDismissed = false
+          openMenu = null
           startTurn()
         }
         break
