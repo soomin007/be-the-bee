@@ -195,6 +195,79 @@ svg.board.panning {
   animation: piece-pop 0.28s ease-out;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  animation: bee-fade 0.2s ease-out;
+}
+
+.modal-card {
+  background: #fffdf7;
+  border: 2px solid #eab308;
+  border-radius: 16px;
+  padding: 1.6rem 2rem;
+  text-align: center;
+  max-width: 90vw;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.3);
+  animation: modal-pop 0.25s ease-out;
+}
+
+.modal-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-bottom: 0.4rem;
+}
+
+.modal-sub {
+  color: #555;
+  margin-bottom: 1.2rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+}
+
+.modal-actions button {
+  padding: 0.6rem 1.1rem;
+  border: 1px solid #c9b88f;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.modal-actions button:first-child {
+  background: #fde68a;
+  border-color: #eab308;
+  font-weight: 700;
+}
+
+@keyframes bee-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 @media (max-width: 720px) {
   .game {
     flex-direction: column;

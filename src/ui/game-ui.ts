@@ -106,6 +106,7 @@ export function mountGame(root: HTMLElement): void {
   let pieceKind: PieceKind = 'normal'
   let message = ''
   let lastMove: Move | null = null
+  let modalDismissed = false // 결과 모달 닫음 여부
   // 리치(한 수로 5목) 칸 — render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
@@ -144,10 +145,12 @@ export function mountGame(root: HTMLElement): void {
         </svg>
       </div>
     </div>
+    <div class="modal-layer"></div>
   `
   const svg = root.querySelector('svg.board') as SVGSVGElement
   const content = svg.querySelector('g.content') as SVGGElement
   const panel = root.querySelector('.panel') as HTMLElement
+  const modalLayer = root.querySelector('.modal-layer') as HTMLElement
 
   // ---- 카메라 ---------------------------------------------------------------
 
@@ -295,6 +298,7 @@ export function mountGame(root: HTMLElement): void {
     const mover = state.turn
     state = applyMove(state, move)
     message = ''
+    modalDismissed = false
     if (state.phase === 'finished' && state.result?.kind === 'win') sound.win()
     else sound.place(mover)
     // 훈수 모드면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
@@ -622,6 +626,42 @@ export function mountGame(root: HTMLElement): void {
     }
 
     renderPanel()
+    renderModal()
+  }
+
+  function renderModal(): void {
+    const r = state.result
+    if (state.phase !== 'finished' || r === undefined || modalDismissed) {
+      modalLayer.innerHTML = ''
+      return
+    }
+    let title: string
+    let sub: string
+    if (r.kind === 'win') {
+      title = `🏆 ${PLAYER_LABEL[r.winner]} 승리!`
+      sub = '같은 색 말 5개를 일렬로 연결했습니다.'
+    } else if (r.winner === 'draw') {
+      title = '🤝 무승부'
+      sub = `타일 소진 — 벌집 점수 노랑 ${r.scores.yellow} : ${r.scores.brown} 갈색`
+    } else {
+      title = `🏆 ${PLAYER_LABEL[r.winner]} 승리 (점수)`
+      sub = `타일 소진 — 벌집 점수 노랑 ${r.scores.yellow} : ${r.scores.brown} 갈색`
+    }
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          <div class="modal-title">${title}</div>
+          <div class="modal-sub">${sub}</div>
+          <div class="modal-actions">
+            <button data-act="new">다시 하기</button>
+            <button data-act="closeModal">닫기</button>
+          </div>
+        </div>
+      </div>
+    `
+    for (const btn of Array.from(modalLayer.querySelectorAll('button'))) {
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
   }
 
   function renderPanel(): void {
@@ -765,8 +805,12 @@ export function mountGame(root: HTMLElement): void {
           history = history.slice(0, -1)
           message = ''
           lastMove = null
+          modalDismissed = false
           startTurn()
         }
+        break
+      case 'closeModal':
+        modalDismissed = true
         break
       case 'cycleMode':
         clearAiTimer()
@@ -803,6 +847,7 @@ export function mountGame(root: HTMLElement): void {
         history = []
         message = ''
         lastMove = null
+        modalDismissed = false
         startTurn()
         break
       default:
