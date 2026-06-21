@@ -27,11 +27,12 @@
 - **재발 방지**: 알파-베타 + 노드당 후보 상한(MAX_CANDIDATES). 합법성 퍼즈는 깊이와 무관하므로
   빠른 easy(1수)로 검증하고, 깊은 서치는 self-play(집중 보드)로 검증.
 
-### 빌드: 누락 import 가 try/catch 폴백에 가려짐
-- **증상**: ai.ts 에 `applyMove` import 누락인데 테스트가 통과(서치가 실제로 안 돌고 폴백됨).
-- **원인**: `chooseMove` 의 try/catch 가 ReferenceError 를 삼켜 폴백수로 대체.
-- **재발 방지**: `check:engine`(tsc)로 미사용/미정의 잡기 + 동작 검증(예: medium>easy 승률)으로
-  "실제로 그 경로가 도는지" 확인. catch 가 버그를 가릴 수 있음을 유념.
+### 빌드: 누락 import 가 try/catch 폴백에 가려짐 (★ 두 번 발생)
+- **증상**: ai.ts 에 import 누락(세션5 `applyMove`, 세션7 `hexEquals`)인데 vitest 는 통과처럼 보임
+  — 실제로는 `chooseMove` 의 try/catch 가 ReferenceError 를 삼켜 폴백수로 둠(강도 테스트가 3:3로 무너짐).
+- **원인**: vitest(esbuild)는 타입체크를 안 함. catch 가 런타임 에러를 가림.
+- **재발 방지**: AI/엔진 수정 후 **반드시 `npm run check:engine` 를 먼저** 돌려 미정의/미사용 잡기.
+  강도/행동 테스트(medium>easy, 기존타일위말>0)로 "그 경로가 실제로 도는지" 확인.
 
 ### 테스트: 대칭 위치에서 특정 승리/차단 칸을 단정하면 깨짐
 - **증상**: AI 즉시승리 테스트가 4목의 한쪽 끝(4,0)만 정답으로 단정 → 실패.
