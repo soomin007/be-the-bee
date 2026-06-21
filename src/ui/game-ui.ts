@@ -55,9 +55,7 @@ const MODE_LABEL: Record<Mode, string> = {
   vsAi: 'vs AI (갈색)',
   watch: 'AI 관전',
 }
-const NEXT_MODE: Record<Mode, Mode> = { hotseat: 'vsAi', vsAi: 'watch', watch: 'hotseat' }
 const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움' }
-const NEXT_DIFF: Record<Difficulty, Difficulty> = { easy: 'medium', medium: 'hard', hard: 'easy' }
 const AI_DELAY_MS = 350
 
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
@@ -78,7 +76,7 @@ function defaultSettings(): RoomSettings {
     hints: false,
     queen: false,
     bgmTrack: 0,
-    bgmVolume: 0.35,
+    bgmVolume: 0.4,
     sfxVolume: 0.6,
   }
 }
@@ -154,6 +152,9 @@ export function mountGame(root: HTMLElement): void {
   sound.setSfxVolume(settings.sfxVolume)
   sound.setBgmVolume(settings.bgmVolume)
   sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file)
+  let openMenu: 'mode' | 'difficulty' | null = null // 모드/난이도 펼침 메뉴
+  let lastBgmVolume = settings.bgmVolume || 0.35 // 뮤트 복원용
+  let lastSfxVolume = settings.sfxVolume || 0.6
   let ai: Ai | null = null
   let aiThinking = false // 재진입 가드 + 입력 잠금
   let aiTimer: number | null = null
@@ -382,6 +383,16 @@ export function mountGame(root: HTMLElement): void {
 
   window.addEventListener('resize', applyCamera)
 
+  // 메뉴(모드/난이도) 바깥을 클릭하면 닫는다
+  window.addEventListener('click', (e: MouseEvent) => {
+    if (openMenu === null) return
+    const t = e.target as Element | null
+    if (!t || !t.closest('.menu-wrap')) {
+      openMenu = null
+      render()
+    }
+  })
+
   // ---- 턴/액션 상태머신 -----------------------------------------------------
 
   function startTurn(): void {
@@ -403,6 +414,7 @@ export function mountGame(root: HTMLElement): void {
     state = applyMove(state, move)
     message = ''
     modalDismissed = false
+    openMenu = null
     if (state.phase === 'finished' && state.result?.kind === 'win') sound.win()
     else sound.place(mover)
     // 훈수 모드면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
@@ -880,23 +892,35 @@ export function mountGame(root: HTMLElement): void {
       instruction = instructionText()
     }
 
-    // 인게임 행동(①/②·여왕벌로 놓기·취소)은 보드 아래 액션 바에서. 패널은 설정/메타만.
-    const buttons: string[] = []
-    buttons.push(
-      `<button data-act="cycleMode" class="${settings.mode !== 'hotseat' ? 'active' : ''}">모드: ${MODE_LABEL[settings.mode]}</button>`,
+    // 모드/난이도는 버튼을 누르면 그 밑에 펼쳐지는 메뉴, 나머지는 토글. (보드 아래 액션 바와 분리)
+    const menu = (kind: 'mode' | 'difficulty', items: string[]): string =>
+      openMenu === kind ? `<div class="menu-popup">${items.join('')}</div>` : ''
+    const modeMenu = menu(
+      'mode',
+      (['hotseat', 'vsAi', 'watch'] as Mode[]).map(
+        (m) => `<button data-act="setMode:${m}" class="${settings.mode === m ? 'active' : ''}">${MODE_LABEL[m]}</button>`,
+      ),
     )
-    if (settings.mode !== 'hotseat') {
-      buttons.push(`<button data-act="cycleDifficulty">난이도: ${DIFF_LABEL[settings.aiDifficulty]}</button>`)
-    }
-    buttons.push(
-      `<button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수 ${settings.hints ? '✓' : ''}</button>`,
+    const diffMenu = menu(
+      'difficulty',
+      (['easy', 'medium', 'hard'] as Difficulty[]).map(
+        (d) => `<button data-act="setDiff:${d}" class="${settings.aiDifficulty === d ? 'active' : ''}">${DIFF_LABEL[d]}</button>`,
+      ),
     )
-    buttons.push(
-      `<button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드 ${settings.queen ? '✓' : ''}</button>`,
-    )
-    if (history.length > 0 && !aiThinking) buttons.push(`<button data-act="undo">무르기</button>`)
-    buttons.push(`<button data-act="resetView">뷰 리셋</button>`)
-    buttons.push(`<button data-act="new">새 게임</button>`)
+    const settingsHtml = `
+      <div class="settings-grid">
+        <div class="menu-wrap">
+          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}">모드 ▾</button>${modeMenu}
+        </div>
+        <div class="menu-wrap">
+          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'hotseat' ? 'disabled' : ''}>난이도 ▾</button>${diffMenu}
+        </div>
+        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
+        <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
+        <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
+        <button data-act="resetView">뷰 리셋</button>
+        <button data-act="new">새 게임</button>
+      </div>`
 
     let reach = ''
     if (state.phase === 'playing') {
@@ -916,8 +940,16 @@ export function mountGame(root: HTMLElement): void {
           <button data-act="toggleMusic" class="${sound.musicOn() ? 'active' : ''}">🎵 ${sound.musicOn() ? '정지' : '재생'}</button>
           <select data-ctl="bgmTrack" aria-label="배경음악 선택">${trackOpts}</select>
         </div>
-        <label class="sc-slider">🎵 음량 <input type="range" data-ctl="bgmVol" min="0" max="100" value="${Math.round(settings.bgmVolume * 100)}"></label>
-        <label class="sc-slider">🔊 효과음 <input type="range" data-ctl="sfxVol" min="0" max="100" value="${Math.round(settings.sfxVolume * 100)}"></label>
+        <div class="sc-slider">
+          <button class="mute" data-act="muteBgm" title="음소거">${settings.bgmVolume > 0 ? '🔊' : '🔇'}</button>
+          <span class="sc-label">BGM</span>
+          <input type="range" data-ctl="bgmVol" min="0" max="100" step="10" value="${Math.round(settings.bgmVolume * 100)}">
+        </div>
+        <div class="sc-slider">
+          <button class="mute" data-act="muteSfx" title="음소거">${settings.sfxVolume > 0 ? '🔊' : '🔇'}</button>
+          <span class="sc-label">효과음</span>
+          <input type="range" data-ctl="sfxVol" min="0" max="100" step="10" value="${Math.round(settings.sfxVolume * 100)}">
+        </div>
       </div>`
 
     panel.innerHTML = `
@@ -933,13 +965,14 @@ export function mountGame(root: HTMLElement): void {
         <div>${supplyLine('brown')}</div>
       </div>
       <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
-      <div class="buttons">${buttons.join('')}</div>
+      ${settingsHtml}
       ${soundCtl}
       <p class="hint">같은 진영 말 5개를 일렬로 연결하면 승리. 타일은 기존 타일에 붙여야 합니다.</p>
       <p class="hint nav">🖱️ 휠: 줌 · 드래그: 이동 · ⌨️ 화살표/＋－/0(리셋)</p>
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
+      if (btn.hasAttribute('disabled')) continue
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
     }
     const trackSel = panel.querySelector('select[data-ctl="bgmTrack"]') as HTMLSelectElement | null
@@ -992,7 +1025,40 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function onPanelAction(act: string | null): void {
+    if (act === null) return
+
+    // 모드/난이도 메뉴 선택
+    if (act.startsWith('setMode:')) {
+      clearAiTimer()
+      settings.mode = act.slice('setMode:'.length) as Mode
+      rebuildAi()
+      openMenu = null
+      message = ''
+      startTurn()
+      render()
+      maybeScheduleAi()
+      return
+    }
+    if (act.startsWith('setDiff:')) {
+      clearAiTimer()
+      settings.aiDifficulty = act.slice('setDiff:'.length) as Difficulty
+      rebuildAi()
+      openMenu = null
+      render()
+      maybeScheduleAi()
+      return
+    }
+
+    // 메뉴 토글이 아닌 행동은 열린 메뉴를 닫는다
+    if (act !== 'menuMode' && act !== 'menuDifficulty') openMenu = null
+
     switch (act) {
+      case 'menuMode':
+        openMenu = openMenu === 'mode' ? null : 'mode'
+        break
+      case 'menuDifficulty':
+        if (settings.mode !== 'hotseat') openMenu = openMenu === 'difficulty' ? null : 'difficulty'
+        break
       case 'twoTiles':
         draft = { stage: 'tile', action: 'twoTiles' }
         break
@@ -1020,18 +1086,6 @@ export function mountGame(root: HTMLElement): void {
       case 'closeModal':
         modalDismissed = true
         break
-      case 'cycleMode':
-        clearAiTimer()
-        settings.mode = NEXT_MODE[settings.mode]
-        rebuildAi()
-        message = ''
-        startTurn()
-        break
-      case 'cycleDifficulty':
-        clearAiTimer()
-        settings.aiDifficulty = NEXT_DIFF[settings.aiDifficulty]
-        rebuildAi()
-        break
       case 'toggleHints':
         settings.hints = !settings.hints
         break
@@ -1041,6 +1095,24 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'toggleMusic':
         sound.toggleMusic()
+        break
+      case 'muteBgm':
+        if (settings.bgmVolume > 0) {
+          lastBgmVolume = settings.bgmVolume
+          settings.bgmVolume = 0
+        } else {
+          settings.bgmVolume = lastBgmVolume || 0.4
+        }
+        sound.setBgmVolume(settings.bgmVolume)
+        break
+      case 'muteSfx':
+        if (settings.sfxVolume > 0) {
+          lastSfxVolume = settings.sfxVolume
+          settings.sfxVolume = 0
+        } else {
+          settings.sfxVolume = lastSfxVolume || 0.6
+        }
+        sound.setSfxVolume(settings.sfxVolume)
         break
       case 'resetView':
         setInitialCamera()

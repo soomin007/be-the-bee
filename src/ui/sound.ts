@@ -12,14 +12,14 @@ export interface BgmTrack {
 
 // public/bgm/ 의 곡들. 빌드 시 dist/bgm/ 로 포함되어 배포 URL에서도 동작.
 export const BGM_TRACKS: BgmTrack[] = [
-  { file: 'board-game-lounge.mp3', title: '보드게임 라운지' },
-  { file: 'board-game-lounge-2.mp3', title: '보드게임 라운지 2' },
-  { file: 'puzzle-quest.mp3', title: '퍼즐 퀘스트' },
-  { file: 'puzzle-quest-2.mp3', title: '퍼즐 퀘스트 2' },
-  { file: 'midnight-study.mp3', title: '미드나잇 스터디' },
-  { file: 'midnight-study-2.mp3', title: '미드나잇 스터디 2' },
-  { file: 'bonus-1.mp3', title: '보너스 1' },
-  { file: 'bonus-2.mp3', title: '보너스 2' },
+  { file: 'board-game-lounge.mp3', title: 'Board Game Lounge' },
+  { file: 'board-game-lounge-2.mp3', title: 'Board Game Lounge II' },
+  { file: 'puzzle-quest.mp3', title: 'Puzzle Quest' },
+  { file: 'puzzle-quest-2.mp3', title: 'Puzzle Quest II' },
+  { file: 'midnight-study.mp3', title: 'Midnight Study' },
+  { file: 'midnight-study-2.mp3', title: 'Midnight Study II' },
+  { file: 'bonus-1.mp3', title: 'Hive Gambit' }, // Suno 제목 "벌집의 한 수"
+  { file: 'bonus-2.mp3', title: 'Hive Gambit II' },
 ]
 
 type OscType = 'sine' | 'triangle' | 'square' | 'sawtooth'

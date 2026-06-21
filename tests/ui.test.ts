@@ -74,10 +74,11 @@ describe('핫시트 UI (headless DOM)', () => {
     vi.useFakeTimers()
     try {
       mountGame(root)
-      // 모드 순환: 사람 vs 사람 → vs AI
-      const cyc = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'cycleMode')!
-      click(cyc)
-      expect(root.querySelector('.panel')!.textContent).toContain('vs AI')
+      // 모드 메뉴 열고 vs AI 선택
+      const menuBtn = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'menuMode')!
+      click(menuBtn)
+      const vsAiOpt = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'setMode:vsAi')!
+      click(vsAiOpt)
 
       // 사람(노랑) 첫 수: 타일 → 말
       const frontier = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('opacity') === '0.22')
