@@ -18,6 +18,8 @@
 | 단계별 큰 그림(로드맵) | [`ROADMAP.md`](ROADMAP.md) |
 | **다음 작업·미착수 (진행 단일 소스)** | [`design/backlog.md`](design/backlog.md) |
 | 반복 금지 함정·오류 이력 | [`design/known_issues.md`](design/known_issues.md) |
+| 벌 컨셉 비주얼 테마(제안) | [`design/bee_theme.md`](design/bee_theme.md) |
+| BGM 생성 프롬프트(Suno) | [`design/bgm_prompt.md`](design/bgm_prompt.md) |
 | 세션별 변경 흐름 | [`../session_logs/`](../session_logs/) |
 | 배포(GitHub Pages 자동) | `.github/workflows/deploy.yml` · ▶ https://soomin007.github.io/be-the-bee/ |
 
