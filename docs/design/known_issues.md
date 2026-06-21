@@ -8,6 +8,12 @@
 
 ## 2026-06-21
 
+### 프로세스: 새 테스트 파일이 커밋에서 누락됨
+- **증상**: UI 커밋(`092be30`)에 `tests/ui.test.ts`가 빠짐(다음 커밋 후 `?? tests/ui.test.ts`로 발견).
+- **원인**: `git add src package.json ...`처럼 경로를 콕 집어 add하면서 새 파일을 빠뜨림.
+- **재발 방지**: 커밋 전 `git status`로 untracked/staged를 눈으로 확인. 새 파일이 포함된
+  작업은 관련 디렉터리 전체(`git add src tests`)를 add하거나 `git add -A` 후 status 검토.
+
 ### 환경: winget 설치 후 PATH가 현재 셸에 반영 안 됨
 - **증상**: `winget install`로 Node/gh 설치 직후 `node`/`npm`/`gh`가 "not recognized".
 - **원인**: winget은 레지스트리 PATH를 갱신하지만, 이미 떠 있는 셸/프로세스는 재시작 전까지
