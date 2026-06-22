@@ -8,6 +8,16 @@
 
 ## 2026-06-22
 
+### AI: 잠긴 벌집 승리 칸 오판으로 vs AI 가 "생각 중"에서 영구 정지
+- **증상**: vs AI/관전에서 갈색 "리치! 여기 두면 승리"인데 AI가 못 두고 "생각 중"에서 멈춤.
+- **원인**: `winningCells` 는 `supply.queenUsed=false` 면 잠긴 상대 벌집 칸도 **여왕벌 가능성**으로
+  승리 칸에 포함한다. AI 는 여왕벌을 안 써 그 칸에 normal 말을 두려다 `applyMove` 가 throw →
+  game-ui 의 setTimeout catch 가 복구 없이 render 만 해 영구 정지. `ai.ts` 의 "항상 합법수 반환"
+  계약을 placementMove 가 미검증 수로 어긴 것이 근본.
+- **재발 방지**: 승리/차단용 수 생성기(placementMove)는 **반드시 validateMove 통과 수만** 반환.
+  UI 의 리치 표시는 모드(여왕벌 ON/OFF)를 반영해 호출(OFF면 queenUsed=true 사본). AI 수는
+  적용 전 한 번 더 validateMove(방어). 관련 회귀 테스트: "잠긴 벌집 승리 칸" 케이스.
+
 ### 검증: fill="none" SVG 폴리곤은 내부 클릭이 아래로 통과 → Playwright 가 거부
 - **증상**: verify/shot 스크립트가 초록 타깃 링(`stroke=#16a34a`) 클릭에서 무한 재시도 후
   타임아웃("...intercepts pointer events", 아래 타일 폴리곤이 가로챔).
