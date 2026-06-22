@@ -124,6 +124,8 @@ interface RoomSettings {
   themeId: string // 컬러 테마(themes.ts COLOR_THEMES 의 id)
   personaYellow: Persona // 관전 시 노랑 AI 성향
   personaBrown: Persona // 갈색 AI 성향(vsAi 상대 + 관전 갈색)
+  difficultyYellow: Difficulty // 관전 시 노랑 AI 난이도(색깔별)
+  difficultyBrown: Difficulty // 관전 시 갈색 AI 난이도(색깔별)
 }
 function defaultSettings(): RoomSettings {
   return {
@@ -139,6 +141,8 @@ function defaultSettings(): RoomSettings {
     themeId: DEFAULT_THEME_ID,
     personaYellow: 'aggressive', // 관전 기본 대진을 대비되게(공격 vs 균형)
     personaBrown: 'balanced',
+    difficultyYellow: 'medium',
+    difficultyBrown: 'medium',
   }
 }
 
@@ -151,6 +155,12 @@ const PERSONA_LABEL: Record<Persona, string> = {
   aggressive: '공격형',
   defensive: '수비형',
   hive: '벌집형',
+}
+const PERSONA_DESC: Record<Persona, string> = {
+  balanced: '공격과 수비를 고르게',
+  aggressive: '내 말 공격·동시 위협(포크) 우선',
+  defensive: '상대 위협 차단·허리 끊기 우선',
+  hive: '벌집·타일선 발전을 더 챙김',
 }
 type ActionBarPos = 'top' | 'bottom'
 const ACTION_BAR_POSITIONS: ActionBarPos[] = ['top', 'bottom']
@@ -187,6 +197,8 @@ function loadSettings(): RoomSettings {
       themeId: COLOR_THEMES.some((t) => t.id === s.themeId) ? (s.themeId as string) : d.themeId,
       personaYellow: PERSONAS.includes(s.personaYellow as Persona) ? (s.personaYellow as Persona) : d.personaYellow,
       personaBrown: PERSONAS.includes(s.personaBrown as Persona) ? (s.personaBrown as Persona) : d.personaBrown,
+      difficultyYellow: DIFFS.includes(s.difficultyYellow as Difficulty) ? (s.difficultyYellow as Difficulty) : d.difficultyYellow,
+      difficultyBrown: DIFFS.includes(s.difficultyBrown as Difficulty) ? (s.difficultyBrown as Difficulty) : d.difficultyBrown,
     }
   } catch {
     return d
@@ -307,14 +319,17 @@ export function mountGame(root: HTMLElement): void {
   const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
   const rebuildAi = (): void => {
     // 같은 시드면 두 AI 가 결정론적으로 같은 대국을 반복 → 시드를 진영별로 다르게.
+    // 관전은 색깔별 난이도·성향, vsAi(갈색)는 단일 난이도(aiDifficulty)·성향.
     aiYellow =
       settings.mode === 'watch'
-        ? createAi({ difficulty: settings.aiDifficulty, persona: settings.personaYellow, seed: 0x1111 })
+        ? createAi({ difficulty: settings.difficultyYellow, persona: settings.personaYellow, seed: 0x1111 })
         : null
-    aiBrown =
-      settings.mode === 'hotseat'
-        ? null
-        : createAi({ difficulty: settings.aiDifficulty, persona: settings.personaBrown, seed: 0x2222 })
+    if (settings.mode === 'hotseat') {
+      aiBrown = null
+    } else {
+      const diff = settings.mode === 'watch' ? settings.difficultyBrown : settings.aiDifficulty
+      aiBrown = createAi({ difficulty: diff, persona: settings.personaBrown, seed: 0x2222 })
+    }
   }
   rebuildAi() // 불러온 모드가 vs AI/관전이면 AI 준비
 
@@ -821,6 +836,8 @@ export function mountGame(root: HTMLElement): void {
       const opp = opponent(state.turn)
       if (winningCells(state.board, opp, state.supplies[opp]).length > 0) sound.alert()
     }
+    // 관전 대결이 끝나면 자동으로 멈춤 — 새 게임이 저절로 또 돌지 않게.
+    if (state.phase === 'finished' && settings.mode === 'watch') watchRunning = false
     startTurn()
     autoSaveNow() // 매 수 자동 저장 → 새로고침해도 이어하기
     render()
@@ -1452,7 +1469,7 @@ export function mountGame(root: HTMLElement): void {
           <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" title="플레이 모드 바꾸기">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
         </div>
         <div class="menu-wrap">
-          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'hotseat' ? 'disabled' : ''} title="AI 난이도 바꾸기">${settings.mode === 'hotseat' ? '난이도' : DIFF_LABEL[settings.aiDifficulty]} ▾</button>${diffMenu}
+          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
         </div>
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
@@ -1469,18 +1486,29 @@ export function mountGame(root: HTMLElement): void {
     const settingsSummary =
       settings.mode === 'hotseat'
         ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat}</div>`
-        : `<div class="settings-summary">🎮 ${MODE_LABEL[settings.mode]} · 난이도 <b>${DIFF_LABEL[settings.aiDifficulty]}</b></div>`
+        : settings.mode === 'watch'
+          ? `<div class="settings-summary">🎮 ${MODE_LABEL.watch} · 노랑 <b>${DIFF_LABEL[settings.difficultyYellow]}</b> / 갈색 <b>${DIFF_LABEL[settings.difficultyBrown]}</b></div>`
+          : `<div class="settings-summary">🎮 ${MODE_LABEL[settings.mode]} · 난이도 <b>${DIFF_LABEL[settings.aiDifficulty]}</b></div>`
 
-    // 관전: ▶시작/⏸멈춤 + 양쪽 성향 + 수 간격. vsAi: 상대(갈색) 성향 선택.
+    // 관전: ▶시작/⏸멈춤 + 색깔별 난이도·성향(+설명) + 수 간격. vsAi: 상대(갈색) 성향(+설명).
     const personaOpts = (sel: Persona): string =>
       PERSONAS.map((p) => `<option value="${p}" ${p === sel ? 'selected' : ''}>${PERSONA_LABEL[p]}</option>`).join('')
+    const diffOpts = (sel: Difficulty): string =>
+      DIFFS.map((dd) => `<option value="${dd}" ${dd === sel ? 'selected' : ''}>${DIFF_LABEL[dd]}</option>`).join('')
+    const sideRow = (icon: string, diffCtl: string, persona: Persona): string => `
+      <div class="persona-row">
+        <span class="pr-label">${icon}</span>
+        <select data-ctl="difficulty${diffCtl}" aria-label="${icon} 난이도">${diffOpts(diffCtl === 'Yellow' ? settings.difficultyYellow : settings.difficultyBrown)}</select>
+        <select data-ctl="persona${diffCtl}" aria-label="${icon} 성향">${personaOpts(persona)}</select>
+      </div>
+      <div class="persona-desc">${PERSONA_LABEL[persona]} — ${PERSONA_DESC[persona]}</div>`
     let aiCtl = ''
     if (settings.mode === 'watch') {
       aiCtl = `
         <div class="ai-ctl">
           <button class="watch-toggle ${watchRunning ? 'active' : ''}" data-act="toggleWatch">${watchRunning ? '⏸ 멈춤' : '▶ 시작'}</button>
-          <div class="persona-row"><span class="pr-label">🟡 노랑</span><select data-ctl="personaYellow" aria-label="노랑 AI 성향">${personaOpts(settings.personaYellow)}</select></div>
-          <div class="persona-row"><span class="pr-label">🟤 갈색</span><select data-ctl="personaBrown" aria-label="갈색 AI 성향">${personaOpts(settings.personaBrown)}</select></div>
+          ${sideRow('🟡 노랑', 'Yellow', settings.personaYellow)}
+          ${sideRow('🟤 갈색', 'Brown', settings.personaBrown)}
           <div class="sc-slider watch-speed">
             <span class="sc-label">관전 간격</span>
             <input type="range" data-ctl="watchDelay" min="100" max="2000" step="100" value="${settings.watchDelay}">
@@ -1491,6 +1519,7 @@ export function mountGame(root: HTMLElement): void {
       aiCtl = `
         <div class="ai-ctl">
           <div class="persona-row"><span class="pr-label">AI 성향</span><select data-ctl="personaBrown" aria-label="AI 성향">${personaOpts(settings.personaBrown)}</select></div>
+          <div class="persona-desc">${PERSONA_LABEL[settings.personaBrown]} — ${PERSONA_DESC[settings.personaBrown]}</div>
         </div>`
     }
 
@@ -1591,7 +1620,7 @@ export function mountGame(root: HTMLElement): void {
       })
       watchDelay.addEventListener('change', persist)
     }
-    // AI 성향 선택 — 바꾸면 해당 AI 인스턴스를 새 성향으로 다시 만든다(진행 중 관전에도 다음 수부터 반영).
+    // AI 성향/난이도 선택 — 바꾸면 해당 AI 인스턴스를 다시 만든다(진행 중 관전에도 다음 수부터 반영).
     const wirePersona = (which: 'personaYellow' | 'personaBrown'): void => {
       const sel = panel.querySelector(`select[data-ctl="${which}"]`) as HTMLSelectElement | null
       if (!sel) return
@@ -1602,8 +1631,20 @@ export function mountGame(root: HTMLElement): void {
         render()
       })
     }
+    const wireDifficulty = (which: 'difficultyYellow' | 'difficultyBrown'): void => {
+      const sel = panel.querySelector(`select[data-ctl="${which}"]`) as HTMLSelectElement | null
+      if (!sel) return
+      sel.addEventListener('change', () => {
+        settings[which] = sel.value as Difficulty
+        rebuildAi()
+        persist()
+        render()
+      })
+    }
     wirePersona('personaYellow')
     wirePersona('personaBrown')
+    wireDifficulty('difficultyYellow')
+    wireDifficulty('difficultyBrown')
   }
 
   function instructionText(): string {
