@@ -5,15 +5,17 @@ import { describe, it } from 'vitest'
 import { writeFileSync } from 'node:fs'
 import { createInitialState } from '../src/engine/state'
 import { applyMove } from '../src/engine/moves'
-import { createAi, type Difficulty, type Persona } from '../src/engine/ai'
+import { createAi, type Difficulty, type Persona, type Weights } from '../src/engine/ai'
 import type { Player } from '../src/engine/types'
 
 const N = Number(process.env.SIM_N ?? 4) // 매치업당 한 진영 기준 판수(SIM_N 으로 조절)
+const ONLY = process.env.SIM_ONLY ?? '' // 'ab' 면 벌집 수비 견제 A/B 섹션만(빠름)
 const PLY_CAP = 130
 
 interface Cfg {
   difficulty: Difficulty
   persona: Persona
+  weights?: Partial<Weights> // 실험용 가중치 오버라이드(hiveDef A/B 등)
 }
 
 function playGame(a: Cfg, b: Cfg, seed: number): Player | 'draw' | 'unfinished' {
@@ -66,27 +68,47 @@ describe('상성 시뮬레이션', () => {
       return { aw: f.xw + r.yw, bw: f.yw + r.xw, d: f.d + r.d }
     }
 
-    lines.push('=== 난이도 상성 (성향 balanced, 무승부 제외 승률) ===')
-    const diffPairs: Array<[Difficulty, Difficulty]> = [
-      ['easy', 'medium'],
-      ['easy', 'hard'],
-      ['medium', 'hard'],
-    ]
-    for (const [da, db] of diffPairs) {
-      const h = headToHead({ difficulty: da, persona: 'balanced' }, { difficulty: db, persona: 'balanced' })
-      lines.push(`${da} vs ${db}: ${da} ${pct(h.aw, h.bw)} (${h.aw}-${h.bw}, 무 ${h.d})`)
+    if (ONLY !== 'ab') {
+      lines.push('=== 난이도 상성 (성향 balanced, 무승부 제외 승률) ===')
+      const diffPairs: Array<[Difficulty, Difficulty]> = [
+        ['easy', 'medium'],
+        ['easy', 'hard'],
+        ['medium', 'hard'],
+      ]
+      for (const [da, db] of diffPairs) {
+        const h = headToHead({ difficulty: da, persona: 'balanced' }, { difficulty: db, persona: 'balanced' })
+        lines.push(`${da} vs ${db}: ${da} ${pct(h.aw, h.bw)} (${h.aw}-${h.bw}, 무 ${h.d})`)
+      }
+
+      lines.push('')
+      lines.push('=== 성향 상성 (난이도 medium, 무승부 제외 승률, 양쪽 진영 평균) ===')
+      const personas: Persona[] = ['balanced', 'aggressive', 'defensive', 'hive']
+      for (let i = 0; i < personas.length; i++) {
+        for (let j = i + 1; j < personas.length; j++) {
+          const pa = personas[i]!
+          const pb = personas[j]!
+          const h = headToHead({ difficulty: 'medium', persona: pa }, { difficulty: 'medium', persona: pb })
+          lines.push(`${pa} vs ${pb}: ${pa} ${pct(h.aw, h.bw)} (${h.aw}-${h.bw}, 무 ${h.d})`)
+        }
+      }
+      lines.push('')
     }
 
+    // 벌집 수비 견제 항(hiveDef) A/B. 1) 자기 복제 대결, 2) 필드(각 성향) 대결로 진짜 강해졌는지.
+    lines.push('=== 벌집 수비 견제 A/B: balanced+hiveDef vs balanced (난이도 medium) ===')
+    for (const X of [1500, 2000, 2500]) {
+      const guard: Cfg = { difficulty: 'medium', persona: 'balanced', weights: { hiveDef: X } }
+      const plain: Cfg = { difficulty: 'medium', persona: 'balanced' }
+      const h = headToHead(guard, plain)
+      lines.push(`hiveDef=${X} vs balanced: 견제 ${pct(h.aw, h.bw)} (${h.aw}-${h.bw}, 무 ${h.d})`)
+    }
     lines.push('')
-    lines.push('=== 성향 상성 (난이도 medium, 무승부 제외 승률, 양쪽 진영 평균) ===')
-    const personas: Persona[] = ['balanced', 'aggressive', 'defensive', 'hive']
-    for (let i = 0; i < personas.length; i++) {
-      for (let j = i + 1; j < personas.length; j++) {
-        const pa = personas[i]!
-        const pb = personas[j]!
-        const h = headToHead({ difficulty: 'medium', persona: pa }, { difficulty: 'medium', persona: pb })
-        lines.push(`${pa} vs ${pb}: ${pa} ${pct(h.aw, h.bw)} (${h.aw}-${h.bw}, 무 ${h.d})`)
-      }
+    lines.push('=== 견제 balanced(hiveDef=2000)가 필드를 이기나 (난이도 medium) ===')
+    lines.push('  (참고: 일반 balanced 의 필드 성적 — vs aggressive 60% / vs defensive 33% / vs hive 88%)')
+    const guard2k: Cfg = { difficulty: 'medium', persona: 'balanced', weights: { hiveDef: 2000 } }
+    for (const opp of ['aggressive', 'defensive', 'hive'] as Persona[]) {
+      const h = headToHead(guard2k, { difficulty: 'medium', persona: opp })
+      lines.push(`견제balanced vs ${opp}: 견제 ${pct(h.aw, h.bw)} (${h.aw}-${h.bw}, 무 ${h.d})`)
     }
 
     lines.push('')

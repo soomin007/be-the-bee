@@ -56,6 +56,7 @@ export interface AiOptions {
   difficulty?: Difficulty
   persona?: Persona
   seed?: number
+  weights?: Partial<Weights> // 실험/튜닝용 가중치 오버라이드(성향 위에 덮어씀)
 }
 
 interface Cfg {
@@ -79,7 +80,8 @@ function cfgFor(difficulty: Difficulty): Omit<Cfg, 'w'> {
 }
 
 export function createAi(opts: AiOptions = {}): Ai {
-  const cfg: Cfg = { ...cfgFor(opts.difficulty ?? 'medium'), w: makeWeights(opts.persona ?? 'balanced') }
+  const w: Weights = { ...makeWeights(opts.persona ?? 'balanced'), ...(opts.weights ?? {}) }
+  const cfg: Cfg = { ...cfgFor(opts.difficulty ?? 'medium'), w }
   const rng = makeRng(opts.seed ?? 0xb17)
   return {
     chooseMove(state: GameState): Move {
@@ -109,6 +111,7 @@ export interface Weights {
   attackMul: number // 내 말 라인/포크 점수 배율(공격성)
   defenseMul: number // 상대 말 라인/포크 점수 배율(수비성)
   tileDev: number // 내 타일선(벌집 진행) 보상(벌집형). 기본 0, 말 우선(known_issues)
+  hiveDef: number // 임박한 벌집(열린 끝 길이-4 타일선) 견제. 반대칭(내 임박 - 상대 임박). 기본 0
 }
 
 const BASE_WEIGHTS: Weights = {
@@ -126,6 +129,7 @@ const BASE_WEIGHTS: Weights = {
   attackMul: 1,
   defenseMul: 1,
   tileDev: 0,
+  hiveDef: 0,
 }
 
 // 성향별 오버라이드. 즉시 승리/차단(pickMove·useBlock)은 모든 성향 공통이라 자멸하진 않고,
@@ -319,6 +323,21 @@ function tileDevScore(board: Board, p: Player): number {
   return s
 }
 
+// 임박한 벌집 수: p 의 "정확히 4타일 + 열린(빈) 끝이 있어 한 수면 5타일 벌집" 타일선 개수.
+// hiveDef 항에서만 호출(기본 0이면 evaluate 가 건너뛴다).
+function imminentHives(board: Board, p: Player): number {
+  let n = 0
+  for (const line of findLines(ownerTileMap(board, p), 4)) {
+    if (line.cells.length !== 4) continue // 5+ 는 이미 벌집(별도 계산)
+    const dir = HEX_AXES[line.axis]!
+    const before = hexSubtract(hexFromKey(line.cells[0]!), dir)
+    const after = hexAdd(hexFromKey(line.cells[line.cells.length - 1]!), dir)
+    const openEnd = (c: Hex): boolean => cellAt(board, c) === undefined && isTilePlaceable(board, c)
+    if (openEnd(before) || openEnd(after)) n++
+  }
+  return n
+}
+
 function evaluate(board: Board, me: Player, w: Weights): number {
   const opp = opponent(me)
   const m = sideStats(board, me, w)
@@ -330,6 +349,8 @@ function evaluate(board: Board, me: Player, w: Weights): number {
   s += hiveContestTerm(board, me, w)
   s += seizeScore(board, me, w)
   if (w.tileDev > 0) s += w.tileDev * (tileDevScore(board, me) - tileDevScore(board, opp))
+  // 임박한 벌집 견제(반대칭): 상대가 곧 벌집을 완성할 상황이면 그만큼 감점 → 견제를 유도.
+  if (w.hiveDef !== 0) s += w.hiveDef * (imminentHives(board, me) - imminentHives(board, opp))
   s -= w.CENTER * centralityPenalty(board, me)
   return s
 }
