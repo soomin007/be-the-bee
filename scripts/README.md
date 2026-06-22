@@ -26,6 +26,7 @@
 | `verify-watch-control.mjs` | 관전 자동시작 안 함 + ▶시작/⏸멈춤 동작 + 양쪽 성향 셀렉트 |
 | `verify-tutorial.mjs` | 첫 접속 튜토리얼 자동표시·페이지 넘김·완료 기억·재열기 (+ `shots/tutorial-1·3.png`) |
 | `verify-watch-persona.mjs` | 관전 색깔별 난이도 + 성향 설명 + 종료 시 자동 멈춤 (+ `shots/panel-watch2.png`) |
+| `verify-infinite.mjs` | 무한 모드 토글 → 자원 타일 ∞ 표시 + 설정 영속 |
 
 ## shot-* (시각 미리보기 — PNG 저장)
 | 파일 | 산출물 |

@@ -81,6 +81,11 @@ export interface GameState {
   readonly moveNumber: number
   readonly phase: Phase
   readonly result?: GameResult
+  /**
+   * 무한 모드(디지털 전용 변형): 타일 보유 제한 없음. 타일이 줄지 않아 "타일 소진" 종료가
+   * 없고, 게임은 말 5목 승리 또는 양쪽 말 소진(점수)으로만 끝난다. undefined/false = 표준 모드.
+   */
+  readonly infiniteTiles?: boolean
 }
 
 /** 상대 진영. */

@@ -159,30 +159,41 @@ export function applyMove(state: GameState, move: Move): GameState {
       break
   }
 
+  const infinite = state.infiniteTiles === true
   const newSupply: PlayerSupply = {
-    tiles: supply.tiles - tilesUsed,
+    tiles: infinite ? supply.tiles : supply.tiles - tilesUsed, // 무한 모드: 타일 미차감
     pieces: supply.pieces - (pieceUsed ? 1 : 0),
     queenUsed,
   }
   const supplies: Record<Player, PlayerSupply> = { ...state.supplies, [player]: newSupply }
   const moveNumber = state.moveNumber + 1
+  const base = { board, supplies, moveNumber, infiniteTiles: state.infiniteTiles }
 
   // 1) 승리(말 5목) 우선 판정 (§8.3)
   const winner = detectWin(board)
   if (winner !== null) {
-    return { board, turn: player, supplies, moveNumber, phase: 'finished', result: { kind: 'win', winner } }
+    return { ...base, turn: player, phase: 'finished', result: { kind: 'win', winner } }
   }
 
-  // 2) 다음에 둘 사람 결정. 둘 다 못 두면 벌집 점수로 종료(§7).
   const other = opponent(player)
+  if (infinite) {
+    // 무한 모드(디지털 변형): 타일 소진 종료가 없다. 양쪽 말이 모두 소진되면 더 둘 의미가 없어
+    // 벌집 점수로 종료, 아니면 항상 상대 차례(말이 없어도 타일은 둘 수 있어 패스가 없다).
+    if (newSupply.pieces <= 0 && supplies[other].pieces <= 0) {
+      return { ...base, turn: player, phase: 'finished', result: scoreResult(board) }
+    }
+    return { ...base, turn: other, phase: 'playing' }
+  }
+
+  // 2) 표준 모드: 둘 다 못 두면(타일 소진 등) 벌집 점수로 종료(§9).
   const otherCanMove = canMove(board, other, supplies[other])
   const selfCanMove = canMove(board, player, supplies[player])
   if (!otherCanMove && !selfCanMove) {
-    return { board, turn: player, supplies, moveNumber, phase: 'finished', result: scoreResult(board) }
+    return { ...base, turn: player, phase: 'finished', result: scoreResult(board) }
   }
   // 상대가 못 두면 패스되어 같은 사람이 계속 둔다.
   const turn = otherCanMove ? other : player
-  return { board, turn, supplies, moveNumber, phase: 'playing' }
+  return { ...base, turn, phase: 'playing' }
 }
 
 /**

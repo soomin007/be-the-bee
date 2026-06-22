@@ -19,7 +19,7 @@ function freshSupply(): PlayerSupply {
  * 노랑을 원점에, 갈색을 동쪽 이웃 hex(1,0) 에 둔다. 말은 아직 없다.
  * 시작 타일은 시드이며 각자 보유 30개에서 차감하지 않는다.
  */
-export function createInitialState(): GameState {
+export function createInitialState(opts: { infiniteTiles?: boolean } = {}): GameState {
   const board: Board = {}
   board[hexKey(hex(0, 0))] = { tile: { owner: 'yellow' } }
   board[hexKey(hex(1, 0))] = { tile: { owner: 'brown' } }
@@ -29,6 +29,7 @@ export function createInitialState(): GameState {
     supplies: { yellow: freshSupply(), brown: freshSupply() },
     moveNumber: 0,
     phase: 'playing',
+    infiniteTiles: opts.infiniteTiles === true,
   }
 }
 

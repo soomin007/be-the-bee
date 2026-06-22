@@ -122,3 +122,40 @@ describe('§7 타일 소진 → 벌집 점수로 종료', () => {
     if (res.result?.kind === 'score') expect(res.result.winner).toBe('draw')
   })
 })
+
+describe('무한 모드(타일 무제한) — 디지털 변형', () => {
+  it('타일을 둬도 보유 타일이 줄지 않는다(무한 모드)', () => {
+    const board = build([
+      [hex(0, 0), 'yellow'],
+      [hex(1, 0), 'brown'],
+    ])
+    const state = makeState(board, 'yellow', {
+      infiniteTiles: true,
+      supplies: { yellow: { tiles: 30, pieces: 5, queenUsed: false }, brown: { tiles: 30, pieces: 5, queenUsed: false } },
+    })
+    const res = applyMove(state, { type: 'twoTiles', first: hex(2, 0), second: hex(0, 1) })
+    expect(res.infiniteTiles).toBe(true)
+    expect(res.supplies.yellow.tiles).toBe(30) // 2개 놓아도 차감 안 됨
+    expect(res.phase).toBe('playing')
+    expect(res.turn).toBe('brown')
+  })
+
+  it('양쪽 말이 모두 소진되면 점수로 종료(말 5목이 없을 때)', () => {
+    // 갈색이 마지막 말을 놓아 양쪽 pieces 0 → 점수 종료(5목 아님).
+    const board = build(
+      [
+        [hex(0, 0), 'yellow'],
+        [hex(1, 0), 'brown'],
+        [hex(2, 0), 'yellow'],
+      ],
+      [[hex(0, 0), 'yellow']], // 노랑 말 1개(고립)
+    )
+    const state = makeState(board, 'brown', {
+      infiniteTiles: true,
+      supplies: { yellow: { tiles: 30, pieces: 0, queenUsed: false }, brown: { tiles: 30, pieces: 1, queenUsed: false } },
+    })
+    const res = applyMove(state, { type: 'tileAndPiece', tile: hex(3, 0), piece: { at: hex(1, 0), kind: 'normal' } })
+    expect(res.phase).toBe('finished')
+    expect(res.result?.kind).toBe('score')
+  })
+})

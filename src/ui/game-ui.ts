@@ -116,6 +116,7 @@ interface RoomSettings {
   aiDifficulty: Difficulty
   hints: boolean // 훈수 모드: 위험/승리 칸 힌트 표시
   queen: boolean // 여왕벌 모드(확장, 숙련자용). 기본 꺼짐. AI 는 사용 안 함
+  infiniteTiles: boolean // 무한 모드(디지털 변형): 타일 제한 없음. 기본 꺼짐
   bgmTrack: number // BGM_TRACKS 인덱스
   bgmVolume: number // 0~1
   sfxVolume: number // 0~1 (0 = 효과음 끔)
@@ -148,6 +149,7 @@ function defaultSettings(): RoomSettings {
     aiDifficulty: 'medium',
     hints: false,
     queen: false,
+    infiniteTiles: false,
     bgmTrack: 0,
     bgmVolume: 0.4,
     sfxVolume: 0.6,
@@ -197,6 +199,7 @@ function loadSettings(): RoomSettings {
       aiDifficulty: DIFFS.includes(s.aiDifficulty as Difficulty) ? (s.aiDifficulty as Difficulty) : d.aiDifficulty,
       hints: typeof s.hints === 'boolean' ? s.hints : d.hints,
       queen: typeof s.queen === 'boolean' ? s.queen : d.queen,
+      infiniteTiles: typeof s.infiniteTiles === 'boolean' ? s.infiniteTiles : d.infiniteTiles,
       bgmTrack:
         Number.isInteger(s.bgmTrack) && (s.bgmTrack as number) >= 0 && (s.bgmTrack as number) < BGM_TRACKS.length
           ? (s.bgmTrack as number)
@@ -290,7 +293,7 @@ function lastPieceCell(move: Move): Hex | null {
 }
 
 export function mountGame(root: HTMLElement): void {
-  let state: GameState = createInitialState()
+  let state: GameState = createInitialState() // 임시(마운트 끝에서 freshState/복원으로 교체)
   let history: GameState[] = []
   let moveLog: Move[] = [] // 둔 수의 순서(history 와 보조를 맞춤), 복기용
   let replayIndex: number | null = null // null = 실시간, 그 외 = timeline 의 그 국면을 본다
@@ -325,6 +328,8 @@ export function mountGame(root: HTMLElement): void {
   let openMenu: 'mode' | 'difficulty' | null = null // 모드/난이도 펼침 메뉴
   let lastBgmVolume = settings.bgmVolume || 0.35 // 뮤트 복원용
   let lastSfxVolume = settings.sfxVolume || 0.6
+  // 새 게임의 초기 상태(현재 설정의 무한 모드 반영).
+  const freshState = (): GameState => createInitialState({ infiniteTiles: settings.infiniteTiles })
   // 진영별 AI 인스턴스(관전은 양쪽 다른 성향·시드 → 같은 모양으로만 끝나지 않게). vsAi 는 갈색만.
   let aiYellow: Ai | null = null
   let aiBrown: Ai | null = null
@@ -1435,7 +1440,8 @@ export function mountGame(root: HTMLElement): void {
     const scores = totalHiveScores(state.board)
     const supplyLine = (p: Player): string => {
       const s = state.supplies[p]
-      return `${PLAYER_LABEL[p]}: 타일 ${s.tiles} · 말 ${s.pieces}${s.queenUsed ? ' · 여왕벌✓' : ''}`
+      const tiles = state.infiniteTiles ? '∞' : String(s.tiles)
+      return `${PLAYER_LABEL[p]}: 타일 ${tiles} · 말 ${s.pieces}${s.queenUsed ? ' · 여왕벌✓' : ''}`
     }
 
     let header: string
@@ -1486,6 +1492,7 @@ export function mountGame(root: HTMLElement): void {
           <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
         </div>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
+        <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">무한 모드${settings.infiniteTiles ? ' ✓' : ''}</button>
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="new">새 게임</button>
@@ -1813,6 +1820,12 @@ export function mountGame(root: HTMLElement): void {
       case 'queenCancel':
         infoModal = null
         break
+      case 'toggleInfinite':
+        // 무한 모드는 현재 판에도 즉시 반영(타일이 줄지/소진되지 않게). 새 게임도 설정 반영.
+        settings.infiniteTiles = !settings.infiniteTiles
+        state = { ...state, infiniteTiles: settings.infiniteTiles }
+        notice = settings.infiniteTiles ? '무한 모드 ON — 타일 무제한' : '무한 모드 OFF — 타일 30개'
+        break
       case 'toggleActionPos':
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
         applyActionBarPos()
@@ -1876,7 +1889,7 @@ export function mountGame(root: HTMLElement): void {
         stopReplayTimer()
         clearFx()
         replayIndex = null
-        state = createInitialState()
+        state = freshState()
         history = []
         moveLog = []
         message = ''
@@ -1894,10 +1907,13 @@ export function mountGame(root: HTMLElement): void {
     maybeScheduleAi()
   }
 
-  // 진행 중이던 판이 있으면 자동 복원(이어하기). 없으면 새 게임으로 시작.
+  // 진행 중이던 판이 있으면 자동 복원(이어하기). 없으면 현재 설정으로 새 게임 시작.
   const resumed = loadAutoSave()
   if (resumed) applySnapshot(resumed)
-  else startTurn()
+  else {
+    state = freshState()
+    startTurn()
+  }
   setInitialCamera()
   render()
   maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
