@@ -15,6 +15,7 @@ import {
   isTilePlaceable,
   opponent,
   totalHiveScores,
+  validateMove,
   validatePiecePlacement,
   winningCells,
   winningLine,
@@ -815,8 +816,13 @@ export function mountGame(root: HTMLElement): void {
       aiTimer = null
       aiThinking = false
       try {
-        applyAndAdvance(ai!.chooseMove(state))
+        const mv = ai!.chooseMove(state)
+        // 적용 전 합법성 확인 — 불법수면 applyAndAdvance 가 history 를 오염시키며 throw 해
+        // "생각 중"에서 영구 정지하던 버그를 막는다(이론상 엔진이 합법수를 보장하지만 방어).
+        if (!validateMove(state, mv).ok) throw new Error('AI returned an illegal move')
+        applyAndAdvance(mv)
       } catch {
+        message = 'AI가 둘 곳을 찾지 못했어요. 무르기나 새 게임을 눌러 주세요.'
         render()
       }
     }, delay)
@@ -1030,8 +1036,12 @@ export function mountGame(root: HTMLElement): void {
     winNowCells = []
     if (settings.hints && state.phase === 'playing' && !replaying) {
       const opp = opponent(state.turn)
-      dangerCells = winningCells(state.board, opp, state.supplies[opp])
-      winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn])
+      // 여왕벌 모드가 꺼져 있으면 queen 으로만 둘 수 있는 칸(잠긴 벌집)은 리치가 아니다.
+      // queenUsed 를 true 로 친 사본으로 호출해 "실제로 둘 수 있는 승리 칸"만 표시한다.
+      const effSupply = (p: Player): typeof state.supplies[Player] =>
+        settings.queen ? state.supplies[p] : { ...state.supplies[p], queenUsed: true }
+      dangerCells = winningCells(state.board, opp, effSupply(opp))
+      winNowCells = winningCells(state.board, state.turn, effSupply(state.turn))
       // 리치 칸은 "붕붕" 모션(buzz = 펄스 + 미세 진동)으로 더 눈에 띄게.
       for (const c of dangerCells) {
         content.appendChild(

@@ -111,6 +111,45 @@ describe('AI: 붐비는 보드에서도 승리/차단 (후보 캡 무관)', () =
   })
 })
 
+describe('AI: 잠긴 벌집 승리 칸에서 멈추지 않는다 (리치 오판 회귀)', () => {
+  it('유일한 승리 칸이 상대 벌집(잠김)이면 일반 말로 못 두므로 합법수를 반환한다', () => {
+    // 갈색 4목 (0,0)..(3,0). 5번째 칸 (4,0) 은 노랑 벌집(세로 5타일)의 일부라 잠김.
+    // 왼쪽 끝 (-1,0) 은 노랑 말로 막음 → 갈색의 유일한 "기하학적 승리 칸"은 잠긴 (4,0).
+    // winningCells 는 queen 가능성으로 (4,0) 을 포함하지만 AI 는 여왕벌을 안 쓴다 →
+    // 예전엔 normal 로 두려다 applyMove throw → "생각 중" 영구 정지. 이제 합법수를 둬야 한다.
+    const board = build(
+      [
+        [hex(0, 0), 'brown'],
+        [hex(1, 0), 'brown'],
+        [hex(2, 0), 'brown'],
+        [hex(3, 0), 'brown'],
+        [hex(-1, 0), 'yellow'],
+        // 노랑 벌집(세로 5타일) — (4,0) 포함 → (4,0) 잠김
+        [hex(4, 0), 'yellow'],
+        [hex(4, 1), 'yellow'],
+        [hex(4, 2), 'yellow'],
+        [hex(4, 3), 'yellow'],
+        [hex(4, 4), 'yellow'],
+      ],
+      [
+        [hex(0, 0), 'brown'],
+        [hex(1, 0), 'brown'],
+        [hex(2, 0), 'brown'],
+        [hex(3, 0), 'brown'],
+        [hex(-1, 0), 'yellow'],
+      ],
+    )
+    const state = makeState(board, 'brown')
+    for (const diff of ['easy', 'medium', 'hard'] as const) {
+      const ai = createAi({ difficulty: diff, seed: 7 })
+      const move = ai.chooseMove(state)
+      // 합법수여야 하고(throw 안 함), (4,0) 에 일반 말을 두는 불법수가 아니어야 한다.
+      expect(validateMove(state, move).ok).toBe(true)
+      expect(() => applyMove(state, move)).not.toThrow()
+    }
+  })
+})
+
 describe('AI: 상대 즉시 승리 차단', () => {
   it('기존 타일 끝을 막는다', () => {
     // 노랑 말 0..3, 왼쪽 끝(-1,0)은 갈색 말로 이미 막힘 → 위협은 (4,0) 하나

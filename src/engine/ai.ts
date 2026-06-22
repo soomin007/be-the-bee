@@ -432,21 +432,25 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
 
 // ---- 승리/차단 (후보 캡과 무관하게 직접 셀 점유) ----------------------------
 
-// 셀에 내 일반 말을 놓는 합법수. 없으면 null. (승리·차단용 — 후보 생성/캡과 독립)
+// 셀에 내 일반 말을 놓는 **합법수**(validateMove 통과)를 반환. 없으면 null.
+// (승리·차단용 — 후보 생성/캡과 독립.) AI 는 여왕벌을 안 쓰므로, 잠긴 상대 벌집 칸처럼
+// 일반 말로 못 두는 칸은 null 을 돌려 호출 측이 그 승리/차단 칸을 건너뛰게 한다.
+// — 이 검증이 없으면 winningCells 가 (queen 가능성으로) 반환한 잠긴 벌집 칸을 normal 로
+//    두려다 applyMove 가 throw → vs AI 가 "생각 중"에서 멈추는 버그가 났다.
 function placementMove(state: GameState, cell: Hex, me: Player): Move | null {
   const allowed = allowedMoveTypes(state)
   const piece = { at: cell, kind: 'normal' as const }
+  const candidates: Move[] = []
   if (cellAt(state.board, cell) !== undefined) {
     if (allowed.includes('tileAndPiece')) {
       const dev = rankedTileSpots(state.board, me, 8).find((t) => !hexEquals(t, cell))
-      if (dev) return { type: 'tileAndPiece', tile: dev, piece }
+      if (dev) candidates.push({ type: 'tileAndPiece', tile: dev, piece })
     }
-    if (allowed.includes('pieceOnly')) return { type: 'pieceOnly', piece }
-    return null
+    if (allowed.includes('pieceOnly')) candidates.push({ type: 'pieceOnly', piece })
+  } else if (allowed.includes('tileAndPiece') && isTilePlaceable(state.board, cell)) {
+    candidates.push({ type: 'tileAndPiece', tile: cell, piece })
   }
-  if (allowed.includes('tileAndPiece') && isTilePlaceable(state.board, cell)) {
-    return { type: 'tileAndPiece', tile: cell, piece }
-  }
+  for (const m of candidates) if (validateMove(state, m).ok) return m
   return null
 }
 
@@ -458,8 +462,8 @@ function findBlock(state: GameState, me: Player): Move | null {
   let best: Move | null = null
   let bestScore = -Infinity
   for (const cell of threats) {
-    const m = placementMove(state, cell, me)
-    if (!m || !validateMove(state, m).ok) continue
+    const m = placementMove(state, cell, me) // 이미 합법수만 반환(null 이면 못 막는 칸)
+    if (!m) continue
     const s = evaluate(resultBoard(state.board, m, me), me)
     if (s > bestScore) {
       bestScore = s
