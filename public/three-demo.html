@@ -106,43 +106,57 @@
           disc.position.y = 0.15
           g.add(disc)
 
-          // 벌 몸통(타원체 = 구를 눌러서)
+          // 벌 몸통(둥근 돔) — 디스크에 반쯤 박히게 살짝 낮춘다(떠 있지 않게)
           const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 24), mat(0xf4c12a, 0.4))
-          body.scale.set(0.82, 0.62, 1.05)
-          body.position.y = 0.55
+          body.scale.set(0.94, 0.74, 1.0)
+          body.position.set(0, 0.42, -0.03)
           body.castShadow = true
           g.add(body)
 
-          // 검정 줄무늬(몸통 뒤쪽을 감싸는 납작한 링 2줄)
-          for (const z of [-0.05, -0.26]) {
+          // 검정 줄무늬(배를 감싸는 납작한 링 2줄)
+          for (const z of [-0.04, -0.24]) {
             const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.04, 12, 32), mat(0x241603, 0.5))
             ring.rotation.x = Math.PI / 2
-            ring.scale.set(1.12, 1.4, 1)
-            ring.position.set(0, 0.55, z)
+            ring.scale.set(1.18, 1.36, 1)
+            ring.position.set(0, 0.42, z)
             g.add(ring)
           }
 
-          // 머리(앞쪽 검정 구, 작게) + 더듬이
-          const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 24, 16), mat(0x1c1206, 0.4))
-          head.position.set(0, 0.56, 0.46)
+          // 머리(앞쪽 검정 둥근 머리, 크게 = 귀엽게)
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 18), mat(0x231507, 0.4))
+          head.scale.set(1.15, 0.95, 0.9)
+          head.position.set(0, 0.5, 0.42)
           head.castShadow = true
           g.add(head)
+          // 큰 흰 눈 2개 + 검은 눈동자(귀여움의 핵심)
           for (const sx of [-1, 1]) {
-            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.14, 6), mat(0x1c1206))
-            ant.position.set(sx * 0.06, 0.69, 0.52)
+            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.092, 18, 14), mat(0xffffff, 0.2))
+            eye.position.set(sx * 0.11, 0.55, 0.55)
+            g.add(eye)
+            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.046, 14, 10), mat(0x140d04, 0.2))
+            pupil.position.set(sx * 0.115, 0.54, 0.62)
+            g.add(pupil)
+          }
+          // 더듬이 2개
+          for (const sx of [-1, 1]) {
+            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.18, 6), mat(0x231507))
+            ant.position.set(sx * 0.08, 0.68, 0.4)
             ant.rotation.z = sx * 0.5
             g.add(ant)
+            const knob = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), mat(0x231507))
+            knob.position.set(sx * 0.13, 0.76, 0.4)
+            g.add(knob)
           }
 
           // 날개 2장(반투명 흰색)
           for (const sx of [-1, 1]) {
             const wing = new THREE.Mesh(
               new THREE.SphereGeometry(0.3, 20, 12),
-              new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, transparent: true, opacity: 0.85 }),
+              new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, transparent: true, opacity: 0.82 }),
             )
-            wing.scale.set(0.5, 0.1, 0.34)
-            wing.position.set(sx * 0.34, 0.74, -0.05)
-            wing.rotation.z = sx * 0.35
+            wing.scale.set(0.52, 0.1, 0.34)
+            wing.position.set(sx * 0.34, 0.6, -0.08)
+            wing.rotation.z = sx * 0.32
             g.add(wing)
           }
           return g
