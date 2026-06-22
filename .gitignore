@@ -28,3 +28,4 @@ coverage/
 # 재생성 가능한 미리보기(shot-*.mjs)·시뮬레이션 결과 — git 추적 제외
 docs/design/shots/
 scripts/sim-result.txt
+scripts/code.txt

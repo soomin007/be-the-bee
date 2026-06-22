@@ -50,6 +50,7 @@
 | 파일 | 무엇 |
 |---|---|
 | `sim.test.ts` | AI 난이도/성향 상성 self-play 시뮬레이션. `npm run sim`(느림, `SIM_N` 으로 판수 조절). 결과 → `docs/design/ai_strategy.md` |
+| `decode-game.mjs` | 공유 코드(BTB1:) 디코딩. `scripts/code.txt` 에 코드 붙여넣고 `node scripts/decode-game.mjs` → 수 기록 출력(compact/전체 둘 다). `code.txt` 는 .gitignore. |
 
 > 주의: 앱의 `renderModal` 은 게임이 끝나지 않으면 modal-layer 를 비운다 — 모달 미리보기는
 > dev 페이지에 주입하지 말고 `shot-mascot.mjs` 처럼 단독 페이지로 렌더할 것.

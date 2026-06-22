@@ -2,10 +2,13 @@
 //
 //  - autosave: 매 수마다 갱신 → 새로고침/재방문 시 "이어하기"로 자동 복원.
 //  - slots: 사용자가 "저장"으로 남긴 여러 판(보관함). 이름·시간과 함께 목록/삭제.
-//  - 공유: 스냅샷을 base64 코드(BTB1:...)로 내보내기/가져오기 → 다른 사람·AI 와 기보 공유·분석.
-// GameState/Move 는 모두 JSON 직렬화 가능(types.ts 보장)하므로 그대로 직렬화한다.
+//  - 공유: 스냅샷을 짧은 코드(BTB1:...)로 내보내기/가져오기 → 다른 사람·AI 와 기보 공유·분석.
+// 공유 코드는 "수 목록(moveLog)만" 담는다 — 전체 history 를 빼므로 수백 자로 작아져
+// 채팅/메신저에 붙여넣기 쉽다. 가져올 때 처음부터 재생(applyMove)해 상태를 복원한다.
+// GameState/Move 는 모두 JSON 직렬화 가능(types.ts 보장).
 
-import type { GameState, Move } from '../engine/index'
+import { applyMove, createInitialState, hex } from '../engine/index'
+import type { GameState, Move, PieceKind } from '../engine/index'
 
 export interface GameSnapshot {
   v: 1
@@ -144,24 +147,85 @@ function fromB64(b64: string): string {
   return new TextDecoder().decode(bytes)
 }
 
-/** 스냅샷을 공유용 코드 문자열로(BTB1:base64). 클립보드 복사·전달용. */
-export function encodeSnapshot(snap: GameSnapshot): string {
-  return SHARE_PREFIX + toB64(JSON.stringify(snap))
+// 수 하나를 짧은 토큰으로. 좌표는 q,r 만 적는다(s = -q-r 는 hex() 가 계산).
+//   ② 타일1+말:  t tq tr aq ar [Q]      (Q = 여왕벌)
+//   ① 타일2:     2 q1 r1 q2 r2
+//   말만:        p aq ar [Q]
+function encMove(m: Move): string {
+  if (m.type === 'twoTiles') return `2 ${m.first.q} ${m.first.r} ${m.second.q} ${m.second.r}`
+  const q = m.piece.kind === 'queen' ? ' Q' : ''
+  if (m.type === 'tileAndPiece') return `t ${m.tile.q} ${m.tile.r} ${m.piece.at.q} ${m.piece.at.r}${q}`
+  return `p ${m.piece.at.q} ${m.piece.at.r}${q}`
+}
+function decMove(tok: string): Move | null {
+  const p = tok.trim().split(/\s+/)
+  const n = (i: number): number => Number(p[i])
+  const k = (i: number): PieceKind => (p[i] === 'Q' ? 'queen' : 'normal')
+  if (p[0] === '2' && p.length >= 5) return { type: 'twoTiles', first: hex(n(1), n(2)), second: hex(n(3), n(4)) }
+  if (p[0] === 't' && p.length >= 5) return { type: 'tileAndPiece', tile: hex(n(1), n(2)), piece: { at: hex(n(3), n(4)), kind: k(5) } }
+  if (p[0] === 'p' && p.length >= 3) return { type: 'pieceOnly', piece: { at: hex(n(1), n(2)), kind: k(3) } }
+  return null
 }
 
-/** 공유 코드(또는 원시 JSON)를 스냅샷으로. 형식이 어긋나면 null. */
+interface CompactCode {
+  v: 1
+  mv: string // 세미콜론으로 이은 수 토큰들
+  inf?: 0 | 1 // 무한 모드 여부
+  mode?: string
+  at?: number // savedAt
+}
+
+/** 스냅샷을 공유용 코드 문자열로(BTB1:base64). 수 목록만 담아 짧다. 클립보드 복사·전달용. */
+export function encodeSnapshot(snap: GameSnapshot): string {
+  const payload: CompactCode = {
+    v: 1,
+    mv: snap.moveLog.map(encMove).join(';'),
+    inf: snap.state.infiniteTiles === true ? 1 : 0,
+    mode: snap.mode,
+    at: snap.savedAt,
+  }
+  return SHARE_PREFIX + toB64(JSON.stringify(payload))
+}
+
+// 수 목록을 처음부터 재생해 전체 스냅샷(state/history/moveLog)을 복원.
+function replay(moves: Move[], infinite: boolean, mode: string, savedAt: number): GameSnapshot | null {
+  try {
+    let state = createInitialState({ infiniteTiles: infinite })
+    const history: GameState[] = []
+    const moveLog: Move[] = []
+    for (const m of moves) {
+      history.push(state)
+      state = applyMove(state, m)
+      moveLog.push(m)
+    }
+    return { v: 1, state, history, moveLog, mode, savedAt }
+  } catch {
+    return null // 코드가 손상돼 불법 수가 섞이면 재생 중단
+  }
+}
+
+/** 공유 코드를 스냅샷으로. compact(신) / 전체 스냅샷(구) / 원시 JSON 모두 허용. 어긋나면 null. */
 export function decodeSnapshot(text: string): GameSnapshot | null {
   const t = text.trim()
   if (!t) return null
+  const body = t.startsWith(SHARE_PREFIX) ? t.slice(SHARE_PREFIX.length) : t
+  let obj: unknown
   try {
-    const body = t.startsWith(SHARE_PREFIX) ? t.slice(SHARE_PREFIX.length) : t
-    // base64 우선, 실패하면 원시 JSON 으로 시도.
-    try {
-      return validSnap(JSON.parse(fromB64(body)))
-    } catch {
-      return validSnap(JSON.parse(body))
-    }
+    obj = JSON.parse(fromB64(body)) // base64 우선
   } catch {
-    return null
+    try {
+      obj = JSON.parse(body) // 실패하면 원시 JSON
+    } catch {
+      return null
+    }
   }
+  // 신버전: 수 목록만 담긴 compact 코드 → 재생으로 복원
+  const c = obj as Partial<CompactCode>
+  if (c && typeof c.mv === 'string') {
+    const moves = c.mv.length ? c.mv.split(';').map(decMove) : []
+    if (moves.some((m) => m === null)) return null
+    return replay(moves as Move[], c.inf === 1, typeof c.mode === 'string' ? c.mode : 'vsAi', Number(c.at) || 0)
+  }
+  // 구버전: 전체 스냅샷이 통째로 들어온 코드
+  return validSnap(obj)
 }
