@@ -98,37 +98,35 @@
           return g
         }
 
-        // 벌 무늬(줄무늬 + 얼굴/눈)를 캔버스에 "색칠"해 텍스처로 만든다 → 매끈한 몸통 위에 그림만 입힘.
-        // (실물 보드게임 말처럼: 돌출된 부속 없이 평평하게 그려진 무늬·눈)
+        // 줄무늬(배)·머리색을 캔버스에 "색칠"해 텍스처로. LatheGeometry 의 v(축 방향: 0=꼬리 → 1=머리)에
+        // 맞춰 가로 밴드로 그린다 → 회전체 둘레를 띠가 두른다. 눈은 별도 납작 원판(아래 token).
         function beeTexture(base) {
           const c = document.createElement('canvas')
-          c.width = 256
+          c.width = 128
           c.height = 256
           const x = c.getContext('2d')
           x.fillStyle = base
-          x.fillRect(0, 0, 256, 256)
-          // 가로 줄무늬(검정) = 위도 밴드 → 몸통을 빙 두른다. 얼굴 바로 아래(앞면에서 보이는 띠)에 배치.
-          x.fillStyle = '#241603'
-          for (const [y, h] of [[98, 20], [128, 20], [158, 18]]) x.fillRect(0, y, 256, h)
-          // 얼굴(머리) — 위쪽 중앙 검은 영역
+          x.fillRect(0, 0, 128, 256)
+          // 머리(검정) = 텍스처 위쪽(v 큰 쪽 = 머리). 둘레 전체를 두름.
           x.fillStyle = '#231507'
-          x.beginPath()
-          x.ellipse(128, 60, 72, 52, 0, 0, Math.PI * 2)
-          x.fill()
-          // 큰 흰 눈 2개 + 검은 눈동자 + 반짝임(납작하게 색칠)
-          for (const ex of [98, 158]) {
-            const dir = ex < 128 ? 1 : -1
+          x.fillRect(0, 0, 128, 70)
+          // 배 줄무늬(검정 띠) — 배 영역에 촘촘히
+          x.fillStyle = '#241603'
+          for (const y of [108, 134, 160, 186]) x.fillRect(0, y, 128, 14)
+          // 눈: 눕힌 회전체의 "위쪽"은 u≈0.75(=캔버스 x≈96). 머리(위쪽 v)의 그 지점에 눈을 색칠.
+          for (const ex of [84, 108] ) {
+            const dir = ex < 96 ? 1 : -1
             x.fillStyle = '#ffffff'
             x.beginPath()
-            x.ellipse(ex, 60, 19, 24, 0, 0, 7)
+            x.ellipse(ex, 36, 9, 12, 0, 0, 7)
             x.fill()
             x.fillStyle = '#15100a'
             x.beginPath()
-            x.ellipse(ex + dir * 3, 68, 9, 10, 0, 0, 7)
+            x.ellipse(ex + dir * 2, 41, 4.6, 5, 0, 0, 7)
             x.fill()
             x.fillStyle = '#ffffff'
             x.beginPath()
-            x.ellipse(ex + dir * 3 - 3, 63, 3.2, 3.2, 0, 0, 7)
+            x.ellipse(ex + dir * 2 - 1.5, 38, 1.6, 1.6, 0, 0, 7)
             x.fill()
           }
           const tex = new THREE.CanvasTexture(c)
@@ -136,16 +134,39 @@
           return tex
         }
 
-        // 매끈한 돔형 벌(무늬·눈은 텍스처로 색칠). 타일에 반쯤 박힌다. 디스크/더듬이/돌출 눈 없음.
+        // 옆에서 본 벌 실루엣(x=반지름, y=축 0=꼬리→1=머리): 배(통통)→허리(잘록)→머리(둥글)→끝.
+        function beeProfile() {
+          const p = [
+            [0.03, 0.0],
+            [0.26, 0.06],
+            [0.4, 0.16],
+            [0.46, 0.3],
+            [0.46, 0.44],
+            [0.41, 0.54],
+            [0.3, 0.62],
+            [0.25, 0.66], // 허리(잘록)
+            [0.32, 0.71],
+            [0.4, 0.79], // 머리 불룩
+            [0.4, 0.86],
+            [0.31, 0.93],
+            [0.16, 0.98],
+            [0.03, 1.0],
+          ]
+          return p.map(([x, y]) => new THREE.Vector2(x, y))
+        }
+
+        // 길쭉한 회전체 벌(LatheGeometry). 눕혀서 위아래로 납작하게, 타일에 반쯤 박는다.
+        // 눈만 머리 위에 납작한 원판으로(색칠한 것처럼, 돌출 X).
         function token(base) {
           const g = new THREE.Group()
           const body = new THREE.Mesh(
-            new THREE.SphereGeometry(0.5, 44, 30),
-            new THREE.MeshStandardMaterial({ map: beeTexture(base), roughness: 0.42, metalness: 0.04 }),
+            new THREE.LatheGeometry(beeProfile(), 48),
+            new THREE.MeshStandardMaterial({ map: beeTexture(base), roughness: 0.45, metalness: 0.03 }),
           )
-          body.scale.set(1.0, 0.8, 1.05)
-          body.position.set(0, 0.4, 0)
           body.castShadow = true
+          body.rotation.x = Math.PI / 2 // 축(길이)을 +z 로 눕힘(머리 +z, 카메라 쪽)
+          body.scale.set(0.9, 1.0, 0.5) // x 폭 · y 길이(유지=길쭉) · z 높이(납작)
+          body.position.set(0, 0.25, -0.5) // 길이축 가운데로 + 타일에 반쯤 박힘
           g.add(body)
           return g
         }
