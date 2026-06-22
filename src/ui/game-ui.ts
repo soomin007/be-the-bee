@@ -99,6 +99,12 @@ const MODE_LABEL: Record<Mode, string> = {
   vsAi: 'vs AI (갈색)',
   watch: 'AI 관전',
 }
+// 설정 버튼에 현재 선택값을 짧게 보여줄 라벨(드롭다운 버튼용 — 그리드 폭 고려).
+const MODE_SHORT: Record<Mode, string> = {
+  hotseat: '사람끼리',
+  vsAi: 'vs AI',
+  watch: 'AI 관전',
+}
 const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움' }
 const AI_DELAY_MS = 350
 
@@ -1093,11 +1099,12 @@ export function mountGame(root: HTMLElement): void {
       const stripe = theme.piece[piece.owner].stripe
 
       // 바닥 그림자 — 타일에 닿은 듯한 입체감(2.5D). 몸통보다 먼저(아래에) 그린다.
+      // 광원이 왼쪽 위(하이라이트 위치)이므로 그림자는 오른쪽 아래로 치우친다.
       const shadow = document.createElementNS(SVGNS, 'ellipse')
-      shadow.setAttribute('cx', String(p.x))
-      shadow.setAttribute('cy', String(p.y + r * 0.92))
-      shadow.setAttribute('rx', String(r * 0.92))
-      shadow.setAttribute('ry', String(r * 0.26))
+      shadow.setAttribute('cx', String(p.x + r * 0.28))
+      shadow.setAttribute('cy', String(p.y + r * 0.86))
+      shadow.setAttribute('rx', String(r * 0.9))
+      shadow.setAttribute('ry', String(r * 0.24))
       shadow.setAttribute('fill', '#000000')
       shadow.setAttribute('opacity', '0.18')
       shadow.style.pointerEvents = 'none'
@@ -1407,10 +1414,10 @@ export function mountGame(root: HTMLElement): void {
     const settingsHtml = `
       <div class="settings-grid">
         <div class="menu-wrap">
-          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}">모드 ▾</button>${modeMenu}
+          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" title="플레이 모드 바꾸기">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
         </div>
         <div class="menu-wrap">
-          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'hotseat' ? 'disabled' : ''}>난이도 ▾</button>${diffMenu}
+          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'hotseat' ? 'disabled' : ''} title="AI 난이도 바꾸기">${settings.mode === 'hotseat' ? '난이도' : DIFF_LABEL[settings.aiDifficulty]} ▾</button>${diffMenu}
         </div>
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
@@ -1487,8 +1494,11 @@ export function mountGame(root: HTMLElement): void {
       ${watchCtl}
       ${soundCtl}
       <div class="help">
-        <p class="hint">같은 진영 말 <b>5개를 일렬로</b> 연결하면 승리. 타일은 기존 타일에 붙여서 놓습니다.</p>
-        <p class="hint nav">🖱️ 휠 = 확대 · 드래그 = 이동<br>⌨️ 화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치로</p>
+        <div class="help-title">🐝 도움말</div>
+        <div class="help-row"><span class="help-ico">🏆</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
+        <div class="help-row"><span class="help-ico">🍯</span><span>타일은 기존 타일에 <b>붙여서</b> 놓기</span></div>
+        <div class="help-row"><span class="help-ico">🖱️</span><span>휠 = 확대 · 드래그 = 이동</span></div>
+        <div class="help-row"><span class="help-ico">⌨️</span><span>화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치</span></div>
       </div>
     `
 

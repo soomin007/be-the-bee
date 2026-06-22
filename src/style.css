@@ -12,6 +12,8 @@ body {
   background: linear-gradient(160deg, #fdf8ec 0%, #f4ead0 100%);
   background-attachment: fixed;
   color: #2b2b2b;
+  /* 한국어는 단어(어절) 단위로 줄바꿈 — 단어 중간에서 잘리지 않게 */
+  word-break: keep-all;
 }
 
 #app {
@@ -395,34 +397,53 @@ svg.board.panning {
   background: #f5efdf;
 }
 
-/* 설명 박스 — 패널 맨 밑 도움말을 묶어 가시성을 높인다 */
+/* 설명 박스 — 패널 맨 밑 도움말. 제목 + 아이콘 행으로 정리해 가독성을 높인다 */
 .help {
-  margin-top: 0.8rem;
-  padding: 0.6rem 0.75rem;
-  background: #fbf6e9;
-  border: 1px solid #e6dcc3;
-  border-radius: 10px;
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  background: linear-gradient(165deg, #fffaf0 0%, #fbf3df 100%);
+  border: 1px solid #ecdfbe;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 #fffdf8;
 }
 
-.hint {
+.help-title {
   font-size: 0.82rem;
+  font-weight: 800;
+  color: #9a6a16;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.02em;
+}
+
+.help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
   color: #5c4f33;
-  line-height: 1.6;
-  margin: 0;
 }
 
-.help .hint + .hint {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed #e0d5b8;
+.help-row + .help-row {
+  margin-top: 0.4rem;
 }
 
-.hint b {
+.help-ico {
+  flex: none;
+  width: 1.2rem;
+  text-align: center;
+}
+
+.help-row b {
   color: #b8860b;
 }
 
-.hint.nav {
-  color: #8a6a2a;
+/* 복기 패널 등에서 쓰는 단순 힌트(박스 밖) */
+.hint {
+  font-size: 0.8rem;
+  color: #6b5e3f;
+  line-height: 1.6;
+  margin: 0.3rem 0 0;
 }
 
 .reach {

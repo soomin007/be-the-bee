@@ -33,6 +33,7 @@
 | `shot-themes.mjs` | 컬러 테마 3종(꿀/고대비/벽돌) → `shots/theme-honey.png`·`theme-contrast.png`·`theme-terracotta.png` |
 | `shot-queen-card.mjs` | 여왕벌 설명 팝업 카드 확대 → `shots/queen-card.png` |
 | `shot-bee.mjs` | 말=벌 2.5D(그림자·구형 음영·하이라이트) 확대 → `shots/bee-2_5d.png` |
+| `shot-settings.mjs` | 설정 패널(모드/난이도 현재값 버튼·도움말 박스) → `shots/panel-hotseat.png`·`panel-vsai.png` |
 
 > 주의: 앱의 `renderModal` 은 게임이 끝나지 않으면 modal-layer 를 비운다 — 모달 미리보기는
 > dev 페이지에 주입하지 말고 `shot-mascot.mjs` 처럼 단독 페이지로 렌더할 것.
