@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Be the Bee — three.js 3D 토큰 시연</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: radial-gradient(circle at 50% 30%, #fbf3de, #efe0bd);
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+      }
+      #hint {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        color: #6e5114;
+        background: #fff8e6cc;
+        border: 1px solid #e3cf9c;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-size: 14px;
+      }
+      #err {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: #8a3b1d;
+        padding: 24px;
+      }
+    </style>
+    <!-- 번들 없이 브라우저가 직접 three.js 를 CDN 에서 불러온다(이 데모는 public/ 정적 파일이라 Vite 가 손대지 않음). -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://esm.sh/three@0.160.0",
+          "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="hint">드래그로 돌려보세요 · 휠로 확대 · 자동 회전 중</div>
+    <div id="err">three.js 를 CDN 에서 불러오지 못했어요. 인터넷 연결을 확인하세요.</div>
+    <script type="module">
+      try {
+        const THREE = await import('three')
+        const { OrbitControls } = await import('three/addons/controls/OrbitControls.js')
+
+        const scene = new THREE.Scene()
+        const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100)
+        camera.position.set(2.6, 3.4, 6.2)
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+        renderer.setSize(innerWidth, innerHeight)
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+        renderer.shadowMap.enabled = true
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap
+        document.body.appendChild(renderer.domElement)
+
+        // 조명 — 게임의 SVG 와 같은 "왼쪽 위" 광원 + 부드러운 채움광
+        scene.add(new THREE.AmbientLight(0xfff4d8, 0.85))
+        const key = new THREE.DirectionalLight(0xfff1c0, 1.25)
+        key.position.set(-4, 7, 4)
+        key.castShadow = true
+        key.shadow.mapSize.set(1024, 1024)
+        scene.add(key)
+        const fill = new THREE.DirectionalLight(0xffffff, 0.35)
+        fill.position.set(5, 3, 2)
+        scene.add(fill)
+
+        // 바닥(은은한 꿀색 그림자 받이)
+        const ground = new THREE.Mesh(
+          new THREE.CircleGeometry(9, 48),
+          new THREE.ShadowMaterial({ opacity: 0.18 }),
+        )
+        ground.rotation.x = -Math.PI / 2
+        ground.position.y = -0.001
+        ground.receiveShadow = true
+        scene.add(ground)
+
+        const mat = (c, rough = 0.55) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.05 })
+
+        // 두께 있는 육각 타일
+        function hexTile(color) {
+          const g = new THREE.Group()
+          const tile = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.92, 0.22, 6), mat(color, 0.7))
+          tile.castShadow = tile.receiveShadow = true
+          tile.position.y = 0.11
+          g.add(tile)
+          return g
+        }
+
+        // 디스크(원기둥) + 그 위 돔형 벌
+        function token(discColor) {
+          const g = new THREE.Group()
+          const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.3, 40), mat(discColor, 0.45))
+          disc.castShadow = disc.receiveShadow = true
+          disc.position.y = 0.15
+          g.add(disc)
+
+          // 벌 몸통(타원체 = 구를 눌러서)
+          const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 24), mat(0xf4c12a, 0.4))
+          body.scale.set(0.82, 0.62, 1.05)
+          body.position.y = 0.55
+          body.castShadow = true
+          g.add(body)
+
+          // 검정 줄무늬(몸통 뒤쪽을 감싸는 납작한 링 2줄)
+          for (const z of [-0.05, -0.26]) {
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.04, 12, 32), mat(0x241603, 0.5))
+            ring.rotation.x = Math.PI / 2
+            ring.scale.set(1.12, 1.4, 1)
+            ring.position.set(0, 0.55, z)
+            g.add(ring)
+          }
+
+          // 머리(앞쪽 검정 구, 작게) + 더듬이
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 24, 16), mat(0x1c1206, 0.4))
+          head.position.set(0, 0.56, 0.46)
+          head.castShadow = true
+          g.add(head)
+          for (const sx of [-1, 1]) {
+            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.14, 6), mat(0x1c1206))
+            ant.position.set(sx * 0.06, 0.69, 0.52)
+            ant.rotation.z = sx * 0.5
+            g.add(ant)
+          }
+
+          // 날개 2장(반투명 흰색)
+          for (const sx of [-1, 1]) {
+            const wing = new THREE.Mesh(
+              new THREE.SphereGeometry(0.3, 20, 12),
+              new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, transparent: true, opacity: 0.85 }),
+            )
+            wing.scale.set(0.5, 0.1, 0.34)
+            wing.position.set(sx * 0.34, 0.74, -0.05)
+            wing.rotation.z = sx * 0.35
+            g.add(wing)
+          }
+          return g
+        }
+
+        // 작은 클러스터 배치(가운데 노랑, 둘레 노랑/갈색 교대) — 게임 화면과 닮게
+        const TILE = { yellow: 0xf0c531, brown: 0x97581d }
+        const DISC = { yellow: 0xe0a106, brown: 0x8a5418 }
+        const layout = [
+          [0, 0, 'yellow'],
+          [1.6, 0, 'brown'],
+          [-1.6, 0, 'brown'],
+          [0.8, 1.4, 'yellow'],
+          [-0.8, 1.4, 'yellow'],
+          [0.8, -1.4, 'yellow'],
+          [-0.8, -1.4, 'brown'],
+        ]
+        for (const [x, z, side] of layout) {
+          const t = hexTile(TILE[side])
+          t.position.set(x, 0, z)
+          scene.add(t)
+          const tk = token(DISC[side])
+          tk.position.set(x, 0.22, z)
+          scene.add(tk)
+        }
+
+        const controls = new OrbitControls(camera, renderer.domElement)
+        controls.target.set(0, 0.4, 0)
+        controls.enableDamping = true
+        controls.autoRotate = true
+        controls.autoRotateSpeed = 1.4
+        controls.minDistance = 3
+        controls.maxDistance = 14
+
+        addEventListener('resize', () => {
+          camera.aspect = innerWidth / innerHeight
+          camera.updateProjectionMatrix()
+          renderer.setSize(innerWidth, innerHeight)
+        })
+
+        function loop() {
+          controls.update()
+          renderer.render(scene, camera)
+          window.__rendered = true
+          requestAnimationFrame(loop)
+        }
+        loop()
+      } catch (e) {
+        console.error(e)
+        document.getElementById('err').style.display = 'flex'
+        document.getElementById('hint').style.display = 'none'
+      }
+    </script>
+  </body>
+</html>
