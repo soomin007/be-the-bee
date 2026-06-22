@@ -426,11 +426,13 @@ export function mountGame(root: HTMLElement): void {
             <radialGradient id="bee-shade" cx="32%" cy="27%" r="88%">
               <stop offset="0%" stop-color="#2a1c00" stop-opacity="0" />
               <stop offset="48%" stop-color="#2a1c00" stop-opacity="0" />
-              <stop offset="100%" stop-color="#2a1c00" stop-opacity="0.38" />
+              <stop offset="100%" stop-color="#2a1c00" stop-opacity="0.3" />
             </radialGradient>
-            <radialGradient id="bee-gloss" cx="33%" cy="26%" r="45%">
-              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
-              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            <!-- 벌 몸통 돔(솟은 모형 느낌): 왼쪽 위 밝고 오른쪽 아래 어둡게 -->
+            <radialGradient id="beeDome" cx="38%" cy="28%" r="78%">
+              <stop offset="0%" stop-color="#ffdc52" />
+              <stop offset="58%" stop-color="#f4c12a" />
+              <stop offset="100%" stop-color="#c5900e" />
             </radialGradient>
           </defs>
           <g class="content"></g>
@@ -1083,7 +1085,26 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 2) 타일
+    // 1.5) 타일 옆면(두께) — 실물 육각 타일처럼 살짝 도톰하게. 윗면보다 먼저(아래에) 한 번에
+    //      그려, 어떤 타일의 윗면이든 그 위(스크린상 아래)의 옆면을 덮도록 한다.
+    const TILE_T = HEX_SIZE * 0.16
+    for (const key of Object.keys(viewState.board)) {
+      const cell = viewState.board[key]!
+      const c = hexToPixel(hexFromKey(key))
+      content.appendChild(
+        makeHexPolygon(
+          { x: c.x, y: c.y + TILE_T },
+          {
+            fill: theme.tile[cell.tile.owner].dark,
+            stroke: theme.tile[cell.tile.owner].stroke,
+            strokeWidth: 1,
+            interactive: false,
+          },
+        ),
+      )
+    }
+
+    // 2) 타일(윗면)
     for (const key of Object.keys(viewState.board)) {
       const cell = viewState.board[key]!
       const h = hexFromKey(key)
@@ -1199,132 +1220,80 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 6) 말 = 벌 (날개 + 몸통 + 줄무늬) + 여왕벌 왕관
+    // 6) 말 = 낮은 원기둥(디스크) 위에 돔형 벌. 실물 토큰 느낌:
+    //    디스크 = 진영색(노랑/갈색, 두께 있는 원기둥), 그 위의 벌 = 공통 노랑·검정·흰색.
+    const mk = (tag: string, attrs: Record<string, string | number>): SVGElement => {
+      const e = document.createElementNS(SVGNS, tag)
+      for (const k in attrs) e.setAttribute(k, String(attrs[k]))
+      e.style.pointerEvents = 'none'
+      return e
+    }
     for (const key of Object.keys(viewState.board)) {
       const piece = viewState.board[key]!.piece
       if (!piece) continue
       const p = hexToPixel(hexFromKey(key))
-      const r = HEX_SIZE * 0.52
-      const stripe = theme.piece[piece.owner].stripe
+      const r = HEX_SIZE * 0.52 // 디스크 반지름
+      const dT = r * 0.34 // 디스크 두께(옆면 높이)
+      const owner = piece.owner
+      const discBase = theme.piece[owner].body
+      const cx = p.x
+      const cy = p.y
 
-      // 바닥 그림자, 타일에 닿은 듯한 입체감(2.5D). 몸통보다 먼저(아래에) 그린다.
-      // 광원이 왼쪽 위(하이라이트 위치)이므로 그림자는 오른쪽 아래로 치우친다.
-      const shadow = document.createElementNS(SVGNS, 'ellipse')
-      shadow.setAttribute('cx', String(p.x + r * 0.3))
-      shadow.setAttribute('cy', String(p.y + r * 0.9))
-      shadow.setAttribute('rx', String(r * 0.98))
-      shadow.setAttribute('ry', String(r * 0.26))
-      shadow.setAttribute('fill', '#000000')
-      shadow.setAttribute('opacity', '0.24')
-      shadow.setAttribute('filter', 'url(#pieceShadow)') // 부드러운 그림자 → 떠 있는 듯한 입체감
-      shadow.style.pointerEvents = 'none'
-      content.appendChild(shadow)
+      // (a) 바닥 그림자(부드럽게) — 디스크 밑면 아래
+      content.appendChild(
+        mk('ellipse', { cx: cx + r * 0.16, cy: cy + dT + r * 0.62, rx: r * 1.02, ry: r * 0.3, fill: '#000', opacity: 0.26, filter: 'url(#pieceShadow)' }),
+      )
+      // (b) 디스크 옆면(원기둥 벽): 진영색을 어둡게, 아래로 dT 만큼
+      content.appendChild(mk('circle', { cx, cy: cy + dT, r, fill: shade(discBase, -0.42) }))
+      // (c) 디스크 윗면(.piece — 테스트/검증이 세는 요소)
+      const disc = mk('circle', { cx, cy, r, fill: `url(#bee-${owner})`, stroke: shade(discBase, -0.5), 'stroke-width': 1.4 })
+      disc.classList.add('piece')
+      if (lastKeys.has(key)) disc.classList.add('pop')
+      content.appendChild(disc)
+      // 윗면 음영(오른쪽 아래 어둑) — 평평한 원판 느낌의 미세 음영
+      content.appendChild(mk('circle', { cx, cy, r, fill: 'url(#bee-shade)' }))
 
-      // 날개(몸통 뒤, 살짝 위로), 투명한 흰 타원 2개
+      // (d) 디스크 위의 벌(공통 노랑/검정/흰색), 디스크보다 작게. 머리는 위.
+      const bcy = cy - r * 0.06
+      const brx = r * 0.5
+      const bry = r * 0.62
+      // 벌이 디스크에 드리우는 작은 그림자
+      content.appendChild(mk('ellipse', { cx: cx + r * 0.06, cy: bcy + bry * 0.82, rx: brx * 0.95, ry: r * 0.13, fill: '#000', opacity: 0.16 }))
+      // 날개 2개(몸통 뒤, 위쪽 옆) — 또렷한 흰색
       for (const dir of [-1, 1]) {
-        const wx = p.x + dir * r * 0.34
-        const wy = p.y - r * 0.5
-        const wing = document.createElementNS(SVGNS, 'ellipse')
-        wing.setAttribute('cx', String(wx))
-        wing.setAttribute('cy', String(wy))
-        wing.setAttribute('rx', String(r * 0.3))
-        wing.setAttribute('ry', String(r * 0.17))
-        wing.setAttribute('fill', '#ffffff')
-        wing.setAttribute('opacity', '0.8')
-        wing.setAttribute('stroke', stripe)
-        wing.setAttribute('stroke-width', '1')
-        wing.setAttribute('transform', `rotate(${dir * 22} ${wx} ${wy})`)
-        wing.style.pointerEvents = 'none'
+        const wx = cx + dir * r * 0.36
+        const wy = bcy - r * 0.24
+        const wing = mk('ellipse', { cx: wx, cy: wy, rx: r * 0.31, ry: r * 0.17, fill: '#ffffff', opacity: 0.96, stroke: '#b9a871', 'stroke-width': 1 })
+        wing.setAttribute('transform', `rotate(${dir * 32} ${wx} ${wy})`)
         content.appendChild(wing)
       }
-
-      // 몸통(.piece, 테스트/검증이 세는 요소)
-      const body = document.createElementNS(SVGNS, 'circle')
-      body.classList.add('piece')
-      if (lastKeys.has(key)) body.classList.add('pop')
-      body.setAttribute('cx', String(p.x))
-      body.setAttribute('cy', String(p.y))
-      body.setAttribute('r', String(r))
-      body.setAttribute('fill', `url(#bee-${piece.owner})`) // 구형 음영 그라데이션
-      body.setAttribute('stroke', '#fff')
-      body.setAttribute('stroke-width', '2.5')
-      body.style.pointerEvents = 'none'
-      content.appendChild(body)
-
-      // 줄무늬 2줄
+      // 몸통(노랑 돔 — 솟은 모형 느낌)
+      content.appendChild(mk('ellipse', { cx, cy: bcy, rx: brx, ry: bry, fill: 'url(#beeDome)', stroke: '#7a5410', 'stroke-width': 1 }))
+      // 줄무늬(검정 띠 3줄), 몸통 폭에 맞춰
       for (const [yy, half] of [
-        [-0.2, 0.6],
-        [0.16, 0.72],
+        [-0.28, 0.6],
+        [0.0, 0.94],
+        [0.28, 0.64],
       ] as const) {
-        const s = document.createElementNS(SVGNS, 'line')
-        s.setAttribute('x1', String(p.x - r * half))
-        s.setAttribute('y1', String(p.y + r * yy))
-        s.setAttribute('x2', String(p.x + r * half))
-        s.setAttribute('y2', String(p.y + r * yy))
-        s.setAttribute('stroke', stripe)
-        s.setAttribute('stroke-width', String(r * 0.26))
-        s.setAttribute('stroke-linecap', 'round')
-        s.style.pointerEvents = 'none'
-        content.appendChild(s)
+        const wseg = brx * half
+        content.appendChild(
+          mk('line', { x1: cx - wseg, y1: bcy + bry * yy, x2: cx + wseg, y2: bcy + bry * yy, stroke: '#241603', 'stroke-width': r * 0.15, 'stroke-linecap': 'round' }),
+        )
       }
+      // 머리(위, 검정 타원) + 더듬이 2점
+      content.appendChild(mk('ellipse', { cx, cy: bcy - bry * 0.92, rx: r * 0.2, ry: r * 0.17, fill: '#1c1206' }))
+      content.appendChild(mk('circle', { cx: cx - r * 0.1, cy: bcy - bry * 1.2, r: r * 0.045, fill: '#1c1206' }))
+      content.appendChild(mk('circle', { cx: cx + r * 0.1, cy: bcy - bry * 1.2, r: r * 0.045, fill: '#1c1206' }))
+      // 벌 돔 광택(왼쪽 위)
+      content.appendChild(mk('ellipse', { cx: cx - r * 0.16, cy: bcy - r * 0.2, rx: r * 0.17, ry: r * 0.11, fill: '#fff', opacity: 0.5 }))
 
-      // 음영 터미네이터, 오른쪽 아래로 갈수록 어두워지는 구형감(줄무늬 위에 얹어 통째로 둥글게).
-      const shade = document.createElementNS(SVGNS, 'circle')
-      shade.setAttribute('cx', String(p.x))
-      shade.setAttribute('cy', String(p.y))
-      shade.setAttribute('r', String(r))
-      shade.setAttribute('fill', 'url(#bee-shade)')
-      shade.style.pointerEvents = 'none'
-      content.appendChild(shade)
-
-      // 윤기 하이라이트, 왼쪽 위 부드러운 광택(gloss) + 작은 선명한 코어(= 2.5D 마무리).
-      const gloss = document.createElementNS(SVGNS, 'ellipse')
-      const sx = p.x - r * 0.32
-      const sy = p.y - r * 0.38
-      gloss.setAttribute('cx', String(sx))
-      gloss.setAttribute('cy', String(sy))
-      gloss.setAttribute('rx', String(r * 0.42))
-      gloss.setAttribute('ry', String(r * 0.3))
-      gloss.setAttribute('fill', 'url(#bee-gloss)')
-      gloss.setAttribute('transform', `rotate(-32 ${sx} ${sy})`)
-      gloss.style.pointerEvents = 'none'
-      content.appendChild(gloss)
-
-      const core = document.createElementNS(SVGNS, 'ellipse')
-      core.setAttribute('cx', String(p.x - r * 0.36))
-      core.setAttribute('cy', String(p.y - r * 0.42))
-      core.setAttribute('rx', String(r * 0.13))
-      core.setAttribute('ry', String(r * 0.09))
-      core.setAttribute('fill', '#ffffff')
-      core.setAttribute('opacity', '0.92')
-      core.style.pointerEvents = 'none'
-      content.appendChild(core)
-
-      // 직전 수의 말은 말 둘레 파란 링으로(타일의 칸 테두리와 구분)
+      // (e) 직전 수: 디스크 둘레 파란 링
       if (key === lastPieceKey) {
-        const ring = document.createElementNS(SVGNS, 'circle')
-        ring.setAttribute('cx', String(p.x))
-        ring.setAttribute('cy', String(p.y))
-        ring.setAttribute('r', String(r * 1.28))
-        ring.setAttribute('fill', 'none')
-        ring.setAttribute('stroke', '#2563eb')
-        ring.setAttribute('stroke-width', '3')
-        ring.style.pointerEvents = 'none'
-        content.appendChild(ring)
+        content.appendChild(mk('circle', { cx, cy, r: r * 1.2, fill: 'none', stroke: '#2563eb', 'stroke-width': 3 }))
       }
-
-      // 여왕벌 왕관(줄무늬 위에)
+      // (f) 여왕벌 왕관(벌 머리 위)
       if (piece.kind === 'queen') {
-        const crown = document.createElementNS(SVGNS, 'text')
-        crown.setAttribute('x', String(p.x))
-        crown.setAttribute('y', String(p.y))
-        crown.setAttribute('text-anchor', 'middle')
-        crown.setAttribute('dominant-baseline', 'central')
-        crown.setAttribute('font-size', String(r * 1.0))
-        crown.setAttribute('fill', '#fff')
-        crown.setAttribute('stroke', stripe)
-        crown.setAttribute('stroke-width', '0.5')
-        crown.style.pointerEvents = 'none'
+        const crown = mk('text', { x: cx, y: bcy - bry * 0.18, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': r * 0.78, fill: '#fff8d0', stroke: '#7a5410', 'stroke-width': 0.6 })
         crown.textContent = '♛'
         content.appendChild(crown)
       }
