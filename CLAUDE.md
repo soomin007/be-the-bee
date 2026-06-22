@@ -103,6 +103,12 @@ commit + push origin main** (사용자 지시 없어도 자동). 작은 단위�
 매 세션 종료 시 `session_logs/YYYY-MM-DD.md`(날짜별 새 문서)에 요약·주요 변경·결정·
 미해결을 기록한다. 같은 날짜면 이어서 추가.
 
+### 구현 계획 문서는 "앞으로 할 일"만 남긴다 (중요)
+`docs/design/backlog.md`·`docs/ROADMAP.md` 같은 **구현 계획 문서에는 앞으로 할 일·필요한
+일만** 남긴다. 이미 구현 완료됐거나 계획이 바뀐 항목은 **지운다**(✅ 달성 목록을 쌓지 않는다).
+무엇을 왜 했는지의 기록은 `session_logs/`(+ 필요 시 `known_issues.md`)에만 남기면 된다.
+작업을 끝낼 때마다 해당 항목을 계획 문서에서 삭제한다.
+
 ## Out of scope (for now)
 
 Online matchmaking, accounts, store packaging, real-time multiplayer. Build
