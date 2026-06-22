@@ -21,7 +21,7 @@ import {
   winningLine,
   withTile,
 } from '../engine/index'
-import type { Ai, Difficulty, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
+import type { Ai, Difficulty, GameState, Hex, Move, Persona, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
@@ -121,6 +121,8 @@ interface RoomSettings {
   watchDelay: number // 관전 모드 수 간격(ms)
   actionBarPos: ActionBarPos // 인게임 행동 바(턴 안내+①②) 위치
   themeId: string // 컬러 테마(themes.ts COLOR_THEMES 의 id)
+  personaYellow: Persona // 관전 시 노랑 AI 성향
+  personaBrown: Persona // 갈색 AI 성향(vsAi 상대 + 관전 갈색)
 }
 function defaultSettings(): RoomSettings {
   return {
@@ -134,12 +136,21 @@ function defaultSettings(): RoomSettings {
     watchDelay: 700,
     actionBarPos: 'top',
     themeId: DEFAULT_THEME_ID,
+    personaYellow: 'aggressive', // 관전 기본 대진을 대비되게(공격 vs 균형)
+    personaBrown: 'balanced',
   }
 }
 
 const SETTINGS_KEY = 'be-the-bee/settings'
 const MODES: Mode[] = ['hotseat', 'vsAi', 'watch']
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard']
+const PERSONAS: Persona[] = ['balanced', 'aggressive', 'defensive', 'hive']
+const PERSONA_LABEL: Record<Persona, string> = {
+  balanced: '균형',
+  aggressive: '공격형',
+  defensive: '수비형',
+  hive: '벌집형',
+}
 type ActionBarPos = 'top' | 'bottom'
 const ACTION_BAR_POSITIONS: ActionBarPos[] = ['top', 'bottom']
 
@@ -173,6 +184,8 @@ function loadSettings(): RoomSettings {
         ? (s.actionBarPos as ActionBarPos)
         : d.actionBarPos,
       themeId: COLOR_THEMES.some((t) => t.id === s.themeId) ? (s.themeId as string) : d.themeId,
+      personaYellow: PERSONAS.includes(s.personaYellow as Persona) ? (s.personaYellow as Persona) : d.personaYellow,
+      personaBrown: PERSONAS.includes(s.personaBrown as Persona) ? (s.personaBrown as Persona) : d.personaBrown,
     }
   } catch {
     return d
@@ -282,13 +295,25 @@ export function mountGame(root: HTMLElement): void {
   let openMenu: 'mode' | 'difficulty' | null = null // 모드/난이도 펼침 메뉴
   let lastBgmVolume = settings.bgmVolume || 0.35 // 뮤트 복원용
   let lastSfxVolume = settings.sfxVolume || 0.6
-  let ai: Ai | null = null
+  // 진영별 AI 인스턴스(관전은 양쪽 다른 성향·시드 → 같은 모양으로만 끝나지 않게). vsAi 는 갈색만.
+  let aiYellow: Ai | null = null
+  let aiBrown: Ai | null = null
   let aiThinking = false // 재진입 가드 + 입력 잠금
   let aiTimer: number | null = null
+  let watchRunning = false // 관전 재생 중인지(런타임 — 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === 'brown')
+  const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
   const rebuildAi = (): void => {
-    ai = settings.mode === 'hotseat' ? null : createAi({ difficulty: settings.aiDifficulty })
+    // 같은 시드면 두 AI 가 결정론적으로 같은 대국을 반복 → 시드를 진영별로 다르게.
+    aiYellow =
+      settings.mode === 'watch'
+        ? createAi({ difficulty: settings.aiDifficulty, persona: settings.personaYellow, seed: 0x1111 })
+        : null
+    aiBrown =
+      settings.mode === 'hotseat'
+        ? null
+        : createAi({ difficulty: settings.aiDifficulty, persona: settings.personaBrown, seed: 0x2222 })
   }
   rebuildAi() // 불러온 모드가 vs AI/관전이면 AI 준비
 
@@ -812,8 +837,12 @@ export function mountGame(root: HTMLElement): void {
   // AI 차례면 잠시 뒤 한 수를 둔다. 단일 타이머 + aiThinking 가드로 중복 예약 방지.
   // 패스 규칙으로 같은 AI가 연속으로 둘 수 있어, applyAndAdvance 끝에서 재호출된다.
   function maybeScheduleAi(): void {
-    if (ai === null || state.phase !== 'playing') return
+    if (state.phase !== 'playing') return
     if (!aiControls(state.turn) || aiThinking) return
+    // 관전 모드는 ▶(시작)을 눌러야 진행 — 모드 선택만으로 바로 시작하지 않는다.
+    if (settings.mode === 'watch' && !watchRunning) return
+    const ai = aiForTurn(state.turn)
+    if (ai === null) return
     aiThinking = true
     render() // "생각 중" 표시 + 입력 잠금
     // 관전 모드는 사용자가 정한 간격으로 천천히 — vs AI 는 짧게.
@@ -822,7 +851,7 @@ export function mountGame(root: HTMLElement): void {
       aiTimer = null
       aiThinking = false
       try {
-        const mv = ai!.chooseMove(state)
+        const mv = ai.chooseMove(state)
         // 적용 전 합법성 확인 — 불법수면 applyAndAdvance 가 history 를 오염시키며 throw 해
         // "생각 중"에서 영구 정지하던 버그를 막는다(이론상 엔진이 합법수를 보장하지만 방어).
         if (!validateMove(state, mv).ok) throw new Error('AI returned an illegal move')
@@ -1390,7 +1419,12 @@ export function mountGame(root: HTMLElement): void {
       }
     } else if (aiThinking || aiControls(state.turn)) {
       header = `${PLAYER_LABEL[state.turn]} 차례`
-      instruction = settings.mode === 'watch' ? '🤖 AI끼리 관전 중…' : '🤖 AI가 생각 중…'
+      instruction =
+        settings.mode === 'watch'
+          ? watchRunning
+            ? '🤖 AI끼리 관전 중…'
+            : '⏸ 멈춤 — ▶ 시작을 누르세요'
+          : '🤖 AI가 생각 중…'
     } else {
       header = `${PLAYER_LABEL[state.turn]} 차례`
       instruction = instructionText()
@@ -1435,15 +1469,28 @@ export function mountGame(root: HTMLElement): void {
         ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat}</div>`
         : `<div class="settings-summary">🎮 ${MODE_LABEL[settings.mode]} · 난이도 <b>${DIFF_LABEL[settings.aiDifficulty]}</b></div>`
 
-    // 관전 모드: 두는 속도(수 간격) 조절. 간격이 클수록 천천히.
-    const watchCtl =
-      settings.mode === 'watch'
-        ? `<div class="sc-slider watch-speed">
-             <span class="sc-label">관전 간격</span>
-             <input type="range" data-ctl="watchDelay" min="100" max="2000" step="100" value="${settings.watchDelay}">
-             <span class="sc-val">${(settings.watchDelay / 1000).toFixed(1)}초</span>
-           </div>`
-        : ''
+    // 관전: ▶시작/⏸멈춤 + 양쪽 성향 + 수 간격. vsAi: 상대(갈색) 성향 선택.
+    const personaOpts = (sel: Persona): string =>
+      PERSONAS.map((p) => `<option value="${p}" ${p === sel ? 'selected' : ''}>${PERSONA_LABEL[p]}</option>`).join('')
+    let aiCtl = ''
+    if (settings.mode === 'watch') {
+      aiCtl = `
+        <div class="ai-ctl">
+          <button class="watch-toggle ${watchRunning ? 'active' : ''}" data-act="toggleWatch">${watchRunning ? '⏸ 멈춤' : '▶ 시작'}</button>
+          <div class="persona-row"><span class="pr-label">🟡 노랑</span><select data-ctl="personaYellow" aria-label="노랑 AI 성향">${personaOpts(settings.personaYellow)}</select></div>
+          <div class="persona-row"><span class="pr-label">🟤 갈색</span><select data-ctl="personaBrown" aria-label="갈색 AI 성향">${personaOpts(settings.personaBrown)}</select></div>
+          <div class="sc-slider watch-speed">
+            <span class="sc-label">관전 간격</span>
+            <input type="range" data-ctl="watchDelay" min="100" max="2000" step="100" value="${settings.watchDelay}">
+            <span class="sc-val">${(settings.watchDelay / 1000).toFixed(1)}초</span>
+          </div>
+        </div>`
+    } else if (settings.mode === 'vsAi') {
+      aiCtl = `
+        <div class="ai-ctl">
+          <div class="persona-row"><span class="pr-label">AI 성향</span><select data-ctl="personaBrown" aria-label="AI 성향">${personaOpts(settings.personaBrown)}</select></div>
+        </div>`
+    }
 
     let reach = ''
     if (state.phase === 'playing') {
@@ -1491,7 +1538,7 @@ export function mountGame(root: HTMLElement): void {
       <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       ${settingsHtml}
       ${settingsSummary}
-      ${watchCtl}
+      ${aiCtl}
       ${soundCtl}
       <div class="help">
         <div class="help-title">🐝 도움말</div>
@@ -1542,6 +1589,19 @@ export function mountGame(root: HTMLElement): void {
       })
       watchDelay.addEventListener('change', persist)
     }
+    // AI 성향 선택 — 바꾸면 해당 AI 인스턴스를 새 성향으로 다시 만든다(진행 중 관전에도 다음 수부터 반영).
+    const wirePersona = (which: 'personaYellow' | 'personaBrown'): void => {
+      const sel = panel.querySelector(`select[data-ctl="${which}"]`) as HTMLSelectElement | null
+      if (!sel) return
+      sel.addEventListener('change', () => {
+        settings[which] = sel.value as Persona
+        rebuildAi()
+        persist()
+        render()
+      })
+    }
+    wirePersona('personaYellow')
+    wirePersona('personaBrown')
   }
 
   function instructionText(): string {
@@ -1584,6 +1644,7 @@ export function mountGame(root: HTMLElement): void {
       replayIndex = null
       clearAiTimer()
       settings.mode = act.slice('setMode:'.length) as Mode
+      watchRunning = false // 관전으로 바꿔도 ▶ 를 눌러야 시작 — 모드 바꿀 여유를 준다
       rebuildAi()
       openMenu = null
       message = ''
@@ -1685,6 +1746,11 @@ export function mountGame(root: HTMLElement): void {
         applyThemeColors()
         break
       }
+      case 'toggleWatch':
+        // 관전 시작/멈춤. 끌 때는 예약된 다음 수 취소(끝의 maybeScheduleAi 가드가 재시작 막음).
+        watchRunning = !watchRunning
+        if (!watchRunning) clearAiTimer()
+        break
       case 'saveGame':
         saveSlot(snapshot())
         notice = '현재 판을 저장했어요.'

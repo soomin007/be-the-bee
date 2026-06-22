@@ -20,6 +20,7 @@
 | `verify-queen-popup.mjs` | 여왕벌 토글 → 설명 팝업 → 취소(안 켜짐)/확인(켜짐)/끄기 즉시 |
 | `verify-fx-smoke.mjs` | 벌 테마 2단계 연출(꿀 차오름·붕붕) — 여러 수 둬도 에러 없음 + 모션 키프레임 존재 |
 | `verify-save-load.mjs` | 자동 이어하기(새로고침 복원) + 저장/불러오기 + 새 게임 |
+| `verify-watch-control.mjs` | 관전 자동시작 안 함 + ▶시작/⏸멈춤 동작 + 양쪽 성향 셀렉트 |
 
 ## shot-* (시각 미리보기 — PNG 저장)
 | 파일 | 산출물 |
@@ -34,6 +35,7 @@
 | `shot-queen-card.mjs` | 여왕벌 설명 팝업 카드 확대 → `shots/queen-card.png` |
 | `shot-bee.mjs` | 말=벌 2.5D(그림자·구형 음영·하이라이트) 확대 → `shots/bee-2_5d.png` |
 | `shot-settings.mjs` | 설정 패널(모드/난이도 현재값 버튼·도움말 박스) → `shots/panel-hotseat.png`·`panel-vsai.png` |
+| `shot-watch.mjs` | 관전 패널(▶시작/⏸멈춤·양쪽 성향·속도) → `shots/panel-watch.png` |
 
 > 주의: 앱의 `renderModal` 은 게임이 끝나지 않으면 modal-layer 를 비운다 — 모달 미리보기는
 > dev 페이지에 주입하지 말고 `shot-mascot.mjs` 처럼 단독 페이지로 렌더할 것.

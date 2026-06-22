@@ -359,6 +359,62 @@ svg.board.panning {
   margin: 0.3rem 0 0.1rem;
 }
 
+/* 관전/AI 성향 컨트롤 */
+.ai-ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid #e6dcc3;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+
+.watch-toggle {
+  padding: 0.55rem 0.7rem;
+  border: 2px solid #16a34a;
+  border-radius: 10px;
+  background: #eafaef;
+  color: #15803d;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.watch-toggle:hover {
+  background: #d8f3e0;
+}
+
+.watch-toggle.active {
+  background: #fde68a;
+  border-color: #eab308;
+  color: #92660a;
+}
+
+.persona-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #6b5524;
+}
+
+.persona-row .pr-label {
+  flex: none;
+  width: 4rem;
+}
+
+.persona-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid #c9b88f;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.85rem;
+}
+
 /* 복기 패널 */
 .status.replay {
   background: #eef2ff;
