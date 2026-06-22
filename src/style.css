@@ -185,6 +185,55 @@ svg.board.panning {
   margin-bottom: 0.5rem;
 }
 
+/* 설정 아코디언 — 기능별 섹션 펼치기/접기 */
+.acc {
+  margin-bottom: 0.55rem;
+}
+.acc-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #e6dcc3;
+  border-radius: 10px;
+  background: #fbf3df;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #6b5524;
+}
+.acc-head:hover {
+  background: #f5ead0;
+}
+.acc.open .acc-head {
+  border-radius: 10px 10px 0 0;
+}
+.acc-caret {
+  color: #b8860b;
+  font-size: 0.8rem;
+}
+.acc-body {
+  padding: 0.7rem;
+  border: 1px solid #e6dcc3;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: #fffdf7;
+}
+.acc:not(.open) .acc-body {
+  display: none;
+}
+.acc-body > .settings-grid {
+  margin-bottom: 0;
+}
+.acc-body > .ai-ctl,
+.acc-body > .sound-ctl {
+  margin-bottom: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
 .settings-summary {
   font-size: 0.82rem;
   color: #6b5524;

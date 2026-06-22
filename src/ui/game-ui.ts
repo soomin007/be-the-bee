@@ -126,6 +126,21 @@ interface RoomSettings {
   personaBrown: Persona // 갈색 AI 성향(vsAi 상대 + 관전 갈색)
   difficultyYellow: Difficulty // 관전 시 노랑 AI 난이도(색깔별)
   difficultyBrown: Difficulty // 관전 시 갈색 AI 난이도(색깔별)
+  sectionsOpen: Record<string, boolean> // 설정 패널 섹션(아코디언) 펼침 상태
+}
+type SectionKey = 'game' | 'view' | 'ai' | 'sound' | 'help'
+const SECTION_KEYS: SectionKey[] = ['game', 'view', 'ai', 'sound', 'help']
+function defaultSectionsOpen(): Record<string, boolean> {
+  return { game: true, view: false, ai: true, sound: false, help: false }
+}
+// 저장된 섹션 펼침 상태를 기본값과 병합(알려진 키의 boolean 만 채택).
+function mergeSectionsOpen(raw: unknown, d: Record<string, boolean>): Record<string, boolean> {
+  const out: Record<string, boolean> = { ...d }
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, unknown>
+    for (const k of SECTION_KEYS) if (typeof r[k] === 'boolean') out[k] = r[k] as boolean
+  }
+  return out
 }
 function defaultSettings(): RoomSettings {
   return {
@@ -143,6 +158,7 @@ function defaultSettings(): RoomSettings {
     personaBrown: 'balanced',
     difficultyYellow: 'medium',
     difficultyBrown: 'medium',
+    sectionsOpen: defaultSectionsOpen(),
   }
 }
 
@@ -199,6 +215,7 @@ function loadSettings(): RoomSettings {
       personaBrown: PERSONAS.includes(s.personaBrown as Persona) ? (s.personaBrown as Persona) : d.personaBrown,
       difficultyYellow: DIFFS.includes(s.difficultyYellow as Difficulty) ? (s.difficultyYellow as Difficulty) : d.difficultyYellow,
       difficultyBrown: DIFFS.includes(s.difficultyBrown as Difficulty) ? (s.difficultyBrown as Difficulty) : d.difficultyBrown,
+      sectionsOpen: mergeSectionsOpen(s.sectionsOpen, d.sectionsOpen),
     }
   } catch {
     return d
@@ -1463,7 +1480,7 @@ export function mountGame(root: HTMLElement): void {
         (d) => `<button data-act="setDiff:${d}" class="${settings.aiDifficulty === d ? 'active' : ''}">${DIFF_LABEL[d]}</button>`,
       ),
     )
-    const settingsHtml = `
+    const gameGrid = `
       <div class="settings-grid">
         <div class="menu-wrap">
           <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" title="플레이 모드 바꾸기">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
@@ -1471,17 +1488,20 @@ export function mountGame(root: HTMLElement): void {
         <div class="menu-wrap">
           <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
         </div>
-        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
-        <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
-        <button data-act="cycleTheme" title="${theme.desc}">🎨 테마: ${theme.label}</button>
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
+        <button data-act="new">새 게임</button>
         <button data-act="saveGame" title="지금 판을 저장해 둬요">💾 저장</button>
         <button data-act="loadGame" ${hasSlot() ? '' : 'disabled'} title="저장한 판을 불러와요">📂 불러오기</button>
+      </div>`
+    const viewGrid = `
+      <div class="settings-grid">
+        <button data-act="cycleTheme" title="${theme.desc}">🎨 테마: ${theme.label}</button>
+        <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
+        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
         <button data-act="tutorial" title="게임 방법 다시 보기">📖 튜토리얼</button>
-        <button data-act="new">새 게임</button>
       </div>`
     const settingsSummary =
       settings.mode === 'hotseat'
@@ -1553,6 +1573,20 @@ export function mountGame(root: HTMLElement): void {
         </div>
       </div>`
 
+    // 설정 패널 아코디언: 헤더 클릭으로 섹션 펼치기/접기(상태는 settings.sectionsOpen 에 저장).
+    const section = (key: SectionKey, label: string, content: string): string => {
+      const isOpen = !!settings.sectionsOpen[key]
+      return `<div class="acc ${isOpen ? 'open' : ''}">
+        <button class="acc-head" data-act="sec:${key}">${label}<span class="acc-caret">${isOpen ? '▾' : '▸'}</span></button>
+        <div class="acc-body">${content}</div>
+      </div>`
+    }
+    const helpRows = `
+      <div class="help-row"><span class="help-ico">🏆</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
+      <div class="help-row"><span class="help-ico">🍯</span><span>타일은 기존 타일에 <b>붙여서</b> 놓기</span></div>
+      <div class="help-row"><span class="help-ico">🖱️</span><span>휠 = 확대 · 드래그 = 이동</span></div>
+      <div class="help-row"><span class="help-ico">⌨️</span><span>화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치</span></div>`
+
     panel.innerHTML = `
       <h2>🐝 Be the Bee</h2>
       <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
@@ -1567,17 +1601,12 @@ export function mountGame(root: HTMLElement): void {
         <div>${supplyLine('brown')}</div>
       </div>
       <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
-      ${settingsHtml}
       ${settingsSummary}
-      ${aiCtl}
-      ${soundCtl}
-      <div class="help">
-        <div class="help-title">🐝 도움말</div>
-        <div class="help-row"><span class="help-ico">🏆</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
-        <div class="help-row"><span class="help-ico">🍯</span><span>타일은 기존 타일에 <b>붙여서</b> 놓기</span></div>
-        <div class="help-row"><span class="help-ico">🖱️</span><span>휠 = 확대 · 드래그 = 이동</span></div>
-        <div class="help-row"><span class="help-ico">⌨️</span><span>화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치</span></div>
-      </div>
+      ${section('game', '🎮 게임', gameGrid)}
+      ${section('view', '👁 화면 · 설정', viewGrid)}
+      ${settings.mode !== 'hotseat' ? section('ai', settings.mode === 'watch' ? '🤖 관전 설정' : '🤖 AI 설정', aiCtl) : ''}
+      ${section('sound', '🔊 사운드', soundCtl)}
+      ${section('help', '❓ 도움말', helpRows)}
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
@@ -1678,6 +1707,15 @@ export function mountGame(root: HTMLElement): void {
     // 복기 컨트롤(보기 전용), 별도 처리 후 종료
     if (act.startsWith('replay')) {
       handleReplay(act)
+      return
+    }
+
+    // 설정 패널 섹션(아코디언) 펼치기/접기
+    if (act.startsWith('sec:')) {
+      const k = act.slice('sec:'.length)
+      settings.sectionsOpen[k] = !settings.sectionsOpen[k]
+      persist()
+      render()
       return
     }
 
