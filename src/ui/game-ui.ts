@@ -184,6 +184,20 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
 
+// 색을 흰색(amt>0)/검정(amt<0) 쪽으로 amt 비율만큼 섞는다. 벌 몸통의 입체 음영용.
+function shade(hexColor: string, amt: number): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hexColor.trim())
+  if (!m) return hexColor
+  const n = parseInt(m[1]!, 16)
+  const target = amt < 0 ? 0 : 255
+  const p = Math.min(1, Math.abs(amt))
+  const mix = (c: number): number => Math.round((target - c) * p + c)
+  const r = mix((n >> 16) & 255)
+  const g = mix((n >> 8) & 255)
+  const b = mix(n & 255)
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+}
+
 // 큐브 반경 R 안의 모든 헥스(배경 그리드용). 한 번만 계산.
 function backgroundHexes(radius: number): Hex[] {
   const out: Hex[] = []
@@ -304,6 +318,8 @@ export function mountGame(root: HTMLElement): void {
             </filter>
             <radialGradient id="wax-yellow" cx="38%" cy="32%" r="75%"></radialGradient>
             <radialGradient id="wax-brown" cx="38%" cy="32%" r="75%"></radialGradient>
+            <radialGradient id="bee-yellow" cx="35%" cy="28%" r="72%"></radialGradient>
+            <radialGradient id="bee-brown" cx="35%" cy="28%" r="72%"></radialGradient>
           </defs>
           <g class="content"></g>
           <g class="fx" pointer-events="none"></g>
@@ -329,22 +345,32 @@ export function mountGame(root: HTMLElement): void {
 
   // 컬러 테마 적용: 밀랍 그라데이션 stop 과 벌집 글로우 색을 현재 테마로 채운다.
   // (테마 변경 시 다시 호출 → render() 가 나머지 인라인 색을 다시 그린다.)
+  function fillGradient(id: string, stops: readonly (readonly [string, string])[]): void {
+    const grad = svg.querySelector(id)
+    if (!grad) return
+    while (grad.firstChild) grad.removeChild(grad.firstChild)
+    for (const [off, col] of stops) {
+      const s = document.createElementNS(SVGNS, 'stop')
+      s.setAttribute('offset', off)
+      s.setAttribute('stop-color', col)
+      grad.appendChild(s)
+    }
+  }
   function applyThemeColors(): void {
     for (const owner of ['yellow', 'brown'] as Player[]) {
-      const grad = svg.querySelector(`#wax-${owner}`)
-      if (!grad) continue
-      while (grad.firstChild) grad.removeChild(grad.firstChild)
       const tc = theme.tile[owner]
-      for (const [off, col] of [
+      fillGradient(`#wax-${owner}`, [
         ['0%', tc.light],
         ['55%', tc.mid],
         ['100%', tc.dark],
-      ] as const) {
-        const s = document.createElementNS(SVGNS, 'stop')
-        s.setAttribute('offset', off)
-        s.setAttribute('stop-color', col)
-        grad.appendChild(s)
-      }
+      ])
+      // 벌 몸통 — 위쪽 밝게, 아래쪽 어둡게(구형 음영 = 2.5D)
+      const body = theme.piece[owner].body
+      fillGradient(`#bee-${owner}`, [
+        ['0%', shade(body, 0.5)],
+        ['55%', body],
+        ['100%', shade(body, -0.32)],
+      ])
     }
     const glow = svg.querySelector('#hiveGlow feDropShadow')
     if (glow) glow.setAttribute('flood-color', theme.hiveGlow)
@@ -1056,6 +1082,17 @@ export function mountGame(root: HTMLElement): void {
       const r = HEX_SIZE * 0.52
       const stripe = theme.piece[piece.owner].stripe
 
+      // 바닥 그림자 — 타일에 닿은 듯한 입체감(2.5D). 몸통보다 먼저(아래에) 그린다.
+      const shadow = document.createElementNS(SVGNS, 'ellipse')
+      shadow.setAttribute('cx', String(p.x))
+      shadow.setAttribute('cy', String(p.y + r * 0.92))
+      shadow.setAttribute('rx', String(r * 0.92))
+      shadow.setAttribute('ry', String(r * 0.26))
+      shadow.setAttribute('fill', '#000000')
+      shadow.setAttribute('opacity', '0.18')
+      shadow.style.pointerEvents = 'none'
+      content.appendChild(shadow)
+
       // 날개(몸통 뒤, 살짝 위로) — 투명한 흰 타원 2개
       for (const dir of [-1, 1]) {
         const wx = p.x + dir * r * 0.34
@@ -1081,7 +1118,7 @@ export function mountGame(root: HTMLElement): void {
       body.setAttribute('cx', String(p.x))
       body.setAttribute('cy', String(p.y))
       body.setAttribute('r', String(r))
-      body.setAttribute('fill', theme.piece[piece.owner].body)
+      body.setAttribute('fill', `url(#bee-${piece.owner})`) // 구형 음영 그라데이션
       body.setAttribute('stroke', '#fff')
       body.setAttribute('stroke-width', '2.5')
       body.style.pointerEvents = 'none'
@@ -1103,6 +1140,20 @@ export function mountGame(root: HTMLElement): void {
         s.style.pointerEvents = 'none'
         content.appendChild(s)
       }
+
+      // 윤기 하이라이트 — 왼쪽 위 작은 흰 점(광택 = 2.5D 마무리). 줄무늬 위에 얹는다.
+      const spec = document.createElementNS(SVGNS, 'ellipse')
+      const sx = p.x - r * 0.34
+      const sy = p.y - r * 0.4
+      spec.setAttribute('cx', String(sx))
+      spec.setAttribute('cy', String(sy))
+      spec.setAttribute('rx', String(r * 0.26))
+      spec.setAttribute('ry', String(r * 0.16))
+      spec.setAttribute('fill', '#ffffff')
+      spec.setAttribute('opacity', '0.5')
+      spec.setAttribute('transform', `rotate(-32 ${sx} ${sy})`)
+      spec.style.pointerEvents = 'none'
+      content.appendChild(spec)
 
       // 직전 수의 말은 말 둘레 파란 링으로(타일의 칸 테두리와 구분)
       if (key === lastPieceKey) {
