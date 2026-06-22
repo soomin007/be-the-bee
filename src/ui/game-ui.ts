@@ -23,15 +23,13 @@ import {
 import type { Ai, Difficulty, GameState, Hex, Move, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
+import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
-const TILE_FILL: Record<Player, string> = { yellow: '#f4d35e', brown: '#c1812f' }
-// 말 = 벌. 몸통 색 + 줄무늬 색(진영 구분 + 벌 느낌). 흰 테두리로 타일과 대비.
-const PIECE_FILL: Record<Player, string> = { yellow: '#e0a106', brown: '#8a5418' }
-const PIECE_STRIPE: Record<Player, string> = { yellow: '#3a2600', brown: '#241200' }
+// 진영 색(타일·말·벌집)은 컬러 테마에서 가져온다 — themes.ts.
+// 말 = 벌: 몸통 + 줄무늬(진영 구분 + 벌 느낌), 흰 테두리로 타일과 대비.
 const PLAYER_LABEL: Record<Player, string> = { yellow: '노랑', brown: '갈색' }
-const TILE_STROKE = '#6b5524'
 
 // 결과 모달 벌 마스코트(인라인 SVG — 외부 에셋 없음). .wing 은 CSS 로 펄럭.
 const BEE_SVG = `
@@ -90,6 +88,7 @@ interface RoomSettings {
   sfxVolume: number // 0~1 (0 = 효과음 끔)
   watchDelay: number // 관전 모드 수 간격(ms)
   actionBarPos: ActionBarPos // 인게임 행동 바(턴 안내+①②) 위치
+  themeId: string // 컬러 테마(themes.ts COLOR_THEMES 의 id)
 }
 function defaultSettings(): RoomSettings {
   return {
@@ -102,6 +101,7 @@ function defaultSettings(): RoomSettings {
     sfxVolume: 0.6,
     watchDelay: 700,
     actionBarPos: 'top',
+    themeId: DEFAULT_THEME_ID,
   }
 }
 
@@ -140,6 +140,7 @@ function loadSettings(): RoomSettings {
       actionBarPos: ACTION_BAR_POSITIONS.includes(s.actionBarPos as ActionBarPos)
         ? (s.actionBarPos as ActionBarPos)
         : d.actionBarPos,
+      themeId: COLOR_THEMES.some((t) => t.id === s.themeId) ? (s.themeId as string) : d.themeId,
     }
   } catch {
     return d
@@ -224,6 +225,7 @@ export function mountGame(root: HTMLElement): void {
 
   // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜 — 새 게임에도 방 설정은 유지)
   const settings = loadSettings()
+  let theme: ColorTheme = themeById(settings.themeId)
   const persist = (): void => saveSettings(settings)
   const sound = createSound()
   sound.setSfxVolume(settings.sfxVolume)
@@ -251,16 +253,8 @@ export function mountGame(root: HTMLElement): void {
             <filter id="hiveGlow" x="-50%" y="-50%" width="200%" height="200%">
               <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f59e0b" flood-opacity="0.95" />
             </filter>
-            <radialGradient id="wax-yellow" cx="38%" cy="32%" r="75%">
-              <stop offset="0%" stop-color="#f9e48c" />
-              <stop offset="55%" stop-color="#f4d35e" />
-              <stop offset="100%" stop-color="#e3bd43" />
-            </radialGradient>
-            <radialGradient id="wax-brown" cx="38%" cy="32%" r="75%">
-              <stop offset="0%" stop-color="#d6974a" />
-              <stop offset="55%" stop-color="#c1812f" />
-              <stop offset="100%" stop-color="#a76d22" />
-            </radialGradient>
+            <radialGradient id="wax-yellow" cx="38%" cy="32%" r="75%"></radialGradient>
+            <radialGradient id="wax-brown" cx="38%" cy="32%" r="75%"></radialGradient>
           </defs>
           <g class="content"></g>
           <g class="fx" pointer-events="none"></g>
@@ -283,6 +277,30 @@ export function mountGame(root: HTMLElement): void {
     boardWrap.classList.toggle('ab-top', settings.actionBarPos === 'top')
   }
   applyActionBarPos()
+
+  // 컬러 테마 적용: 밀랍 그라데이션 stop 과 벌집 글로우 색을 현재 테마로 채운다.
+  // (테마 변경 시 다시 호출 → render() 가 나머지 인라인 색을 다시 그린다.)
+  function applyThemeColors(): void {
+    for (const owner of ['yellow', 'brown'] as Player[]) {
+      const grad = svg.querySelector(`#wax-${owner}`)
+      if (!grad) continue
+      while (grad.firstChild) grad.removeChild(grad.firstChild)
+      const tc = theme.tile[owner]
+      for (const [off, col] of [
+        ['0%', tc.light],
+        ['55%', tc.mid],
+        ['100%', tc.dark],
+      ] as const) {
+        const s = document.createElementNS(SVGNS, 'stop')
+        s.setAttribute('offset', off)
+        s.setAttribute('stop-color', col)
+        grad.appendChild(s)
+      }
+    }
+    const glow = svg.querySelector('#hiveGlow feDropShadow')
+    if (glow) glow.setAttribute('flood-color', theme.hiveGlow)
+  }
+  applyThemeColors()
 
   // ---- 카메라 ---------------------------------------------------------------
 
@@ -630,7 +648,7 @@ export function mountGame(root: HTMLElement): void {
   function sparkleLastPiece(move: Move, owner: Player): void {
     const pc = lastPieceCell(move)
     if (!pc) return
-    spawnSparkle(hexToPixel(pc), PIECE_FILL[owner])
+    spawnSparkle(hexToPixel(pc), theme.piece[owner].body)
   }
 
   // 승리 — 5목 라인을 따라 꿀이 터지는 연출(칸마다 시차).
@@ -826,8 +844,8 @@ export function mountGame(root: HTMLElement): void {
     for (const f of frontier) {
       content.appendChild(
         makeHexPolygon(hexToPixel(f), {
-          fill: TILE_FILL[player],
-          stroke: TILE_STROKE,
+          fill: theme.tile[player].mid,
+          stroke: theme.tile[player].stroke,
           strokeWidth: 1.2,
           opacity: 0.22,
           dash: true,
@@ -843,7 +861,7 @@ export function mountGame(root: HTMLElement): void {
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
           fill: `url(#wax-${cell.tile.owner})`, // 밀랍 셀 질감(돔형 음영)
-          stroke: TILE_STROKE,
+          stroke: theme.tile[cell.tile.owner].stroke,
           strokeWidth: 1.5,
           cls: lastKeys.has(key) ? 'pop' : undefined,
           onClick: () => onHexClick(h),
@@ -858,8 +876,8 @@ export function mountGame(root: HTMLElement): void {
       const h = hexFromKey(key)
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
-          fill: '#fde68a',
-          stroke: '#f59e0b',
+          fill: theme.hiveFill,
+          stroke: theme.hiveGlow,
           strokeWidth: 4.5,
           opacity: 0.55,
           filter: 'url(#hiveGlow)',
@@ -874,7 +892,7 @@ export function mountGame(root: HTMLElement): void {
       if (!prov) continue
       content.appendChild(
         makeHexPolygon(hexToPixel(prov), {
-          fill: TILE_FILL[player],
+          fill: theme.tile[player].mid,
           stroke: '#111',
           strokeWidth: 2,
           opacity: 0.6,
@@ -954,7 +972,7 @@ export function mountGame(root: HTMLElement): void {
       if (!piece) continue
       const p = hexToPixel(hexFromKey(key))
       const r = HEX_SIZE * 0.52
-      const stripe = PIECE_STRIPE[piece.owner]
+      const stripe = theme.piece[piece.owner].stripe
 
       // 날개(몸통 뒤, 살짝 위로) — 투명한 흰 타원 2개
       for (const dir of [-1, 1]) {
@@ -981,7 +999,7 @@ export function mountGame(root: HTMLElement): void {
       body.setAttribute('cx', String(p.x))
       body.setAttribute('cy', String(p.y))
       body.setAttribute('r', String(r))
-      body.setAttribute('fill', PIECE_FILL[piece.owner])
+      body.setAttribute('fill', theme.piece[piece.owner].body)
       body.setAttribute('stroke', '#fff')
       body.setAttribute('stroke-width', '2.5')
       body.style.pointerEvents = 'none'
@@ -1222,6 +1240,7 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
+        <button data-act="cycleTheme" title="${theme.desc}">🎨 테마: ${theme.label}</button>
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
@@ -1456,6 +1475,13 @@ export function mountGame(root: HTMLElement): void {
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
         applyActionBarPos()
         break
+      case 'cycleTheme': {
+        const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
+        theme = COLOR_THEMES[(i + 1) % COLOR_THEMES.length]!
+        settings.themeId = theme.id
+        applyThemeColors()
+        break
+      }
       case 'toggleMusic':
         sound.toggleMusic()
         break

@@ -27,6 +27,7 @@
 | `shot-theme.mjs` | 밀랍 타일 보드 → `shots/theme-board.png` |
 | `shot-mascot.mjs` | 결과 모달 벌 마스코트(단독, dev 불필요) → `shots/theme-modal.png` |
 | `shot-action-pos.mjs` | 행동 바 상단/하단 전환 → `shots/action-top.png`·`action-bottom.png` (위치 전환·도움말 박스 PASS/FAIL 겸) |
+| `shot-themes.mjs` | 컬러 테마 3종(꿀/고대비/벽돌) → `shots/theme-honey.png`·`theme-contrast.png`·`theme-terracotta.png` |
 
 > 주의: 앱의 `renderModal` 은 게임이 끝나지 않으면 modal-layer 를 비운다 — 모달 미리보기는
 > dev 페이지에 주입하지 말고 `shot-mascot.mjs` 처럼 단독 페이지로 렌더할 것.
