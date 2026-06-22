@@ -98,73 +98,61 @@
           return g
         }
 
-        // 디스크(원기둥) + 그 위 돔형 벌
-        function token(discColor) {
-          const g = new THREE.Group()
-          const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.3, 40), mat(discColor, 0.45))
-          disc.castShadow = disc.receiveShadow = true
-          disc.position.y = 0.15
-          g.add(disc)
+        // 벌 무늬(줄무늬 + 얼굴/눈)를 캔버스에 "색칠"해 텍스처로 만든다 → 매끈한 몸통 위에 그림만 입힘.
+        // (실물 보드게임 말처럼: 돌출된 부속 없이 평평하게 그려진 무늬·눈)
+        function beeTexture(base) {
+          const c = document.createElement('canvas')
+          c.width = 256
+          c.height = 256
+          const x = c.getContext('2d')
+          x.fillStyle = base
+          x.fillRect(0, 0, 256, 256)
+          // 가로 줄무늬(검정) = 위도 밴드 → 몸통을 빙 두른다. 얼굴 바로 아래(앞면에서 보이는 띠)에 배치.
+          x.fillStyle = '#241603'
+          for (const [y, h] of [[98, 20], [128, 20], [158, 18]]) x.fillRect(0, y, 256, h)
+          // 얼굴(머리) — 위쪽 중앙 검은 영역
+          x.fillStyle = '#231507'
+          x.beginPath()
+          x.ellipse(128, 60, 72, 52, 0, 0, Math.PI * 2)
+          x.fill()
+          // 큰 흰 눈 2개 + 검은 눈동자 + 반짝임(납작하게 색칠)
+          for (const ex of [98, 158]) {
+            const dir = ex < 128 ? 1 : -1
+            x.fillStyle = '#ffffff'
+            x.beginPath()
+            x.ellipse(ex, 60, 19, 24, 0, 0, 7)
+            x.fill()
+            x.fillStyle = '#15100a'
+            x.beginPath()
+            x.ellipse(ex + dir * 3, 68, 9, 10, 0, 0, 7)
+            x.fill()
+            x.fillStyle = '#ffffff'
+            x.beginPath()
+            x.ellipse(ex + dir * 3 - 3, 63, 3.2, 3.2, 0, 0, 7)
+            x.fill()
+          }
+          const tex = new THREE.CanvasTexture(c)
+          tex.anisotropy = 4
+          return tex
+        }
 
-          // 벌 몸통(둥근 돔) — 디스크에 반쯤 박히게 살짝 낮춘다(떠 있지 않게)
-          const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 24), mat(0xf4c12a, 0.4))
-          body.scale.set(0.94, 0.74, 1.0)
-          body.position.set(0, 0.42, -0.03)
+        // 매끈한 돔형 벌(무늬·눈은 텍스처로 색칠). 타일에 반쯤 박힌다. 디스크/더듬이/돌출 눈 없음.
+        function token(base) {
+          const g = new THREE.Group()
+          const body = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5, 44, 30),
+            new THREE.MeshStandardMaterial({ map: beeTexture(base), roughness: 0.42, metalness: 0.04 }),
+          )
+          body.scale.set(1.0, 0.8, 1.05)
+          body.position.set(0, 0.4, 0)
           body.castShadow = true
           g.add(body)
-
-          // 검정 줄무늬(배를 감싸는 납작한 링 2줄)
-          for (const z of [-0.04, -0.24]) {
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.04, 12, 32), mat(0x241603, 0.5))
-            ring.rotation.x = Math.PI / 2
-            ring.scale.set(1.18, 1.36, 1)
-            ring.position.set(0, 0.42, z)
-            g.add(ring)
-          }
-
-          // 머리(앞쪽 검정 둥근 머리, 크게 = 귀엽게)
-          const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 18), mat(0x231507, 0.4))
-          head.scale.set(1.15, 0.95, 0.9)
-          head.position.set(0, 0.5, 0.42)
-          head.castShadow = true
-          g.add(head)
-          // 큰 흰 눈 2개 + 검은 눈동자(귀여움의 핵심)
-          for (const sx of [-1, 1]) {
-            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.092, 18, 14), mat(0xffffff, 0.2))
-            eye.position.set(sx * 0.11, 0.55, 0.55)
-            g.add(eye)
-            const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.046, 14, 10), mat(0x140d04, 0.2))
-            pupil.position.set(sx * 0.115, 0.54, 0.62)
-            g.add(pupil)
-          }
-          // 더듬이 2개
-          for (const sx of [-1, 1]) {
-            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.18, 6), mat(0x231507))
-            ant.position.set(sx * 0.08, 0.68, 0.4)
-            ant.rotation.z = sx * 0.5
-            g.add(ant)
-            const knob = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), mat(0x231507))
-            knob.position.set(sx * 0.13, 0.76, 0.4)
-            g.add(knob)
-          }
-
-          // 날개 2장(반투명 흰색)
-          for (const sx of [-1, 1]) {
-            const wing = new THREE.Mesh(
-              new THREE.SphereGeometry(0.3, 20, 12),
-              new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, transparent: true, opacity: 0.82 }),
-            )
-            wing.scale.set(0.52, 0.1, 0.34)
-            wing.position.set(sx * 0.34, 0.6, -0.08)
-            wing.rotation.z = sx * 0.32
-            g.add(wing)
-          }
           return g
         }
 
         // 작은 클러스터 배치(가운데 노랑, 둘레 노랑/갈색 교대) — 게임 화면과 닮게
         const TILE = { yellow: 0xf0c531, brown: 0x97581d }
-        const DISC = { yellow: 0xe0a106, brown: 0x8a5418 }
+        const BODY = { yellow: '#f4c12a', brown: '#a8702c' } // 진영색 벌 몸통(SVG 게임 말과 동일 방향)
         const layout = [
           [0, 0, 'yellow'],
           [1.6, 0, 'brown'],
@@ -178,8 +166,8 @@
           const t = hexTile(TILE[side])
           t.position.set(x, 0, z)
           scene.add(t)
-          const tk = token(DISC[side])
-          tk.position.set(x, 0.22, z)
+          const tk = token(BODY[side])
+          tk.position.set(x, 0, z) // 벌이 타일에 반쯤 박히게(token 내부에서 y 위치 잡음)
           scene.add(tk)
         }
 
