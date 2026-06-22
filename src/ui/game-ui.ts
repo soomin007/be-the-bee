@@ -51,6 +51,30 @@ const BEE_SVG = `
     <path d="M43 62 Q50 68 57 62" stroke="#3a2600" stroke-width="2.2" fill="none" stroke-linecap="round"/>
   </svg>`
 
+// 여왕벌 설명 팝업용 마스코트 — 왕관 쓴 벌(인라인 SVG). .wing 펄럭은 BEE_SVG 와 공유.
+const QUEEN_SVG = `
+  <svg class="modal-bee queen" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs><clipPath id="qBody"><ellipse cx="50" cy="64" rx="30" ry="26"/></clipPath></defs>
+    <path d="M44 38 Q39 22 32 17" stroke="#5a3a14" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    <path d="M56 38 Q61 22 68 17" stroke="#5a3a14" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    <circle cx="32" cy="16" r="3.2" fill="#5a3a14"/>
+    <circle cx="68" cy="16" r="3.2" fill="#5a3a14"/>
+    <ellipse class="wing" cx="27" cy="46" rx="19" ry="13" fill="#ffffff" opacity="0.85" stroke="#d9c89a" stroke-width="1.5"/>
+    <ellipse class="wing" cx="73" cy="46" rx="19" ry="13" fill="#ffffff" opacity="0.85" stroke="#d9c89a" stroke-width="1.5"/>
+    <ellipse cx="50" cy="64" rx="30" ry="26" fill="#f4c430" stroke="#5a3a14" stroke-width="2.6"/>
+    <g clip-path="url(#qBody)">
+      <rect x="18" y="66" width="64" height="8" fill="#3a2600"/>
+      <rect x="18" y="80" width="64" height="8" fill="#3a2600"/>
+    </g>
+    <circle cx="42" cy="57" r="3.4" fill="#3a2600"/>
+    <circle cx="58" cy="57" r="3.4" fill="#3a2600"/>
+    <path d="M43 64 Q50 70 57 64" stroke="#3a2600" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M35 30 L40 38 L50 31 L60 38 L65 30 L62 41 L38 41 Z" fill="#ffd54a" stroke="#b8860b" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="35" cy="29" r="2.4" fill="#ef4444"/>
+    <circle cx="50" cy="30" r="2.4" fill="#ef4444"/>
+    <circle cx="65" cy="29" r="2.4" fill="#ef4444"/>
+  </svg>`
+
 const BG_RADIUS = 12 // 옅은 배경 그리드 반경(헥스)
 const MIN_W = HEX_SIZE * 5 // 줌 인 한계(viewBox 폭)
 const MAX_W = HEX_SIZE * 130 // 줌 아웃 한계
@@ -211,6 +235,7 @@ export function mountGame(root: HTMLElement): void {
   let message = ''
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
+  let infoModal: 'queen' | null = null // 설명 팝업(여왕벌 등) — 떠 있으면 결과 모달보다 우선
   // 리치(한 수로 5목) 칸 — render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
@@ -1102,6 +1127,11 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function renderModal(): void {
+    // 설명 팝업(여왕벌 등)이 떠 있으면 결과 모달보다 우선 표시.
+    if (infoModal === 'queen') {
+      renderQueenInfo()
+      return
+    }
     const r = state.result
     if (state.phase !== 'finished' || r === undefined || modalDismissed) {
       modalLayer.innerHTML = ''
@@ -1129,6 +1159,33 @@ export function mountGame(root: HTMLElement): void {
             <button data-act="new">다시 하기</button>
             <button data-act="replayEnter">복기 보기</button>
             <button data-act="closeModal">닫기</button>
+          </div>
+        </div>
+      </div>
+    `
+    for (const btn of Array.from(modalLayer.querySelectorAll('button'))) {
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+  }
+
+  // 여왕벌 모드 켜기 전 설명 팝업 — 확인해야 켜진다(확장 규칙 안내). 외부 에셋 0.
+  function renderQueenInfo(): void {
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card queen-info">
+          ${QUEEN_SVG}
+          <div class="modal-title">👑 여왕벌 모드 (확장 규칙)</div>
+          <div class="modal-sub">숙련자용 규칙이에요. 켜면 평소보다 한 수가 더 강력해집니다.</div>
+          <ul class="info-list">
+            <li>게임 중 <b>딱 한 번</b>, 일반 말 대신 여왕벌을 놓을 수 있어요.</li>
+            <li>여왕벌은 <b>어떤 타일 위에도</b> 놓을 수 있어요 — 상대 벌집 위에도! (벌집 잠금 무시)</li>
+            <li>여왕벌도 내 말이라 <b>5목(승리) 판정에 포함</b>돼요.</li>
+            <li>놓을 때 행동 바의 <b>“여왕벌로 놓기”</b>(단축키 <kbd>Q</kbd>)를 눌러요.</li>
+            <li>AI는 여왕벌을 쓰지 않아요(사람 전용).</li>
+          </ul>
+          <div class="modal-actions">
+            <button data-act="queenConfirm">확인 — 켜기</button>
+            <button data-act="queenCancel">취소</button>
           </div>
         </div>
       </div>
@@ -1468,8 +1525,21 @@ export function mountGame(root: HTMLElement): void {
         settings.hints = !settings.hints
         break
       case 'toggleQueen':
-        settings.queen = !settings.queen
-        if (!settings.queen && pieceKind === 'queen') pieceKind = 'normal'
+        if (settings.queen) {
+          // 끄기는 즉시(설명 불필요)
+          settings.queen = false
+          if (pieceKind === 'queen') pieceKind = 'normal'
+        } else {
+          // 켜기 전 설명 팝업 — 확인해야 켜진다
+          infoModal = 'queen'
+        }
+        break
+      case 'queenConfirm':
+        settings.queen = true
+        infoModal = null
+        break
+      case 'queenCancel':
+        infoModal = null
         break
       case 'toggleActionPos':
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'

@@ -17,6 +17,7 @@
 | `verify-persist.mjs` | 설정(모드·난이도·볼륨)이 새로고침 후 유지 |
 | `verify-undo.mjs` | 무르기가 사람 차례로 돌아오는지(vs AI) |
 | `verify-replay.mjs` | 복기 진입/되감기/종료 후 실시간 복귀 |
+| `verify-queen-popup.mjs` | 여왕벌 토글 → 설명 팝업 → 취소(안 켜짐)/확인(켜짐)/끄기 즉시 |
 
 ## shot-* (시각 미리보기 — PNG 저장)
 | 파일 | 산출물 |
@@ -28,6 +29,7 @@
 | `shot-mascot.mjs` | 결과 모달 벌 마스코트(단독, dev 불필요) → `shots/theme-modal.png` |
 | `shot-action-pos.mjs` | 행동 바 상단/하단 전환 → `shots/action-top.png`·`action-bottom.png` (위치 전환·도움말 박스 PASS/FAIL 겸) |
 | `shot-themes.mjs` | 컬러 테마 3종(꿀/고대비/벽돌) → `shots/theme-honey.png`·`theme-contrast.png`·`theme-terracotta.png` |
+| `shot-queen-card.mjs` | 여왕벌 설명 팝업 카드 확대 → `shots/queen-card.png` |
 
 > 주의: 앱의 `renderModal` 은 게임이 끝나지 않으면 modal-layer 를 비운다 — 모달 미리보기는
 > dev 페이지에 주입하지 말고 `shot-mascot.mjs` 처럼 단독 페이지로 렌더할 것.
