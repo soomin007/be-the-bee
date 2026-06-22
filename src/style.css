@@ -784,6 +784,104 @@ svg.board.panning {
   animation-duration: 0.16s;
 }
 
+/* 저장 보관함 모달 */
+.saves-card {
+  position: relative;
+  width: min(92vw, 30rem);
+  text-align: left;
+}
+.saves-card .modal-title {
+  text-align: center;
+}
+.saves-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+  margin: 0.6rem 0 0.8rem;
+}
+.saves-top button {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #c9b88f;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.saves-top button:first-child {
+  background: #fde68a;
+  border-color: #eab308;
+}
+.saves-top button:hover {
+  background: #f5efdf;
+}
+.saves-list {
+  max-height: 46vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #e6dcc3;
+  border-radius: 9px;
+  background: #fffdf7;
+}
+.save-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: #5c4f33;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.save-row button {
+  flex: none;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid #c9b88f;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.save-row button:hover {
+  background: #f5efdf;
+}
+.save-row .save-icon {
+  padding: 0.35rem 0.45rem;
+}
+.saves-empty {
+  padding: 1.2rem 0.5rem;
+  text-align: center;
+  color: #8a7c5a;
+  font-size: 0.88rem;
+}
+.saves-hint {
+  margin: 0.8rem 0 0;
+  font-size: 0.76rem;
+  color: #8a7c5a;
+  line-height: 1.5;
+}
+
+/* 제작자 표기(구석, 은은하게). 자세한 디자인은 설정 꾸미기 때. */
+.credit {
+  position: fixed;
+  right: 0.6rem;
+  bottom: 0.4rem;
+  font-size: 0.68rem;
+  color: #b09a64;
+  opacity: 0.7;
+  pointer-events: none;
+  user-select: none;
+  z-index: 5;
+}
+
 .modal-actions {
   display: flex;
   gap: 0.6rem;

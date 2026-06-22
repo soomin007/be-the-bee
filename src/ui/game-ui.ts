@@ -25,7 +25,17 @@ import type { Ai, Difficulty, GameState, Hex, Move, Persona, PieceKind, Player }
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
-import { autoSave, hasSlot, loadAutoSave, loadSlot, saveSlot, type GameSnapshot } from './game-save'
+import {
+  addSlot,
+  autoSave,
+  decodeSnapshot,
+  deleteSlot,
+  encodeSnapshot,
+  getSlot,
+  listSlots,
+  loadAutoSave,
+  type GameSnapshot,
+} from './game-save'
 import { maybeShowTutorial, openTutorial } from './tutorial'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
@@ -304,7 +314,7 @@ export function mountGame(root: HTMLElement): void {
   let notice = '' // 긍정 피드백(저장/불러오기 등), ✓ 초록, 다음 수에 사라짐
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
-  let infoModal: 'queen' | null = null // 설명 팝업(여왕벌 등), 떠 있으면 결과 모달보다 우선
+  let infoModal: 'queen' | 'saves' | null = null // 팝업(여왕벌 설명/저장 보관함), 결과 모달보다 우선
   // 리치(한 수로 5목) 칸, render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
@@ -362,6 +372,25 @@ export function mountGame(root: HTMLElement): void {
   function autoSaveNow(): void {
     autoSave(snapshot())
   }
+  // 보관함 슬롯 기본 이름: "12수 · 06/22 15:30" (모드 표시 포함).
+  function slotName(): string {
+    const d = new Date()
+    const p = (n: number): string => String(n).padStart(2, '0')
+    const when = `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+    return `${state.moveNumber}수 · ${MODE_SHORT[settings.mode]} · ${when}`
+  }
+  // 공유 코드를 클립보드에 복사(실패 시 프롬프트로 보여줘 직접 복사). 기보 공유·분석용.
+  function shareCode(code: string): void {
+    const done = (): void => {
+      notice = '공유 코드를 복사했어요. 붙여넣어 전달/분석하세요.'
+      render()
+    }
+    try {
+      void navigator.clipboard.writeText(code).then(done, () => window.prompt('아래 코드를 복사하세요', code))
+    } catch {
+      window.prompt('아래 코드를 복사하세요', code)
+    }
+  }
   // 스냅샷으로 현재 판을 통째로 교체(복기/연출 정리 포함). 모드는 settings 가 단일 소스.
   function applySnapshot(s: GameSnapshot): void {
     state = s.state
@@ -398,6 +427,7 @@ export function mountGame(root: HTMLElement): void {
       </div>
     </div>
     <div class="modal-layer"></div>
+    <div class="credit">제작 · 김수민 · 김재현 · 조주현</div>
   `
   const svg = root.querySelector('svg.board') as SVGSVGElement
   const content = svg.querySelector('g.content') as SVGGElement
@@ -1323,6 +1353,10 @@ export function mountGame(root: HTMLElement): void {
       renderQueenInfo()
       return
     }
+    if (infoModal === 'saves') {
+      renderSavesModal()
+      return
+    }
     const r = state.result
     if (state.phase !== 'finished' || r === undefined || modalDismissed) {
       modalLayer.innerHTML = ''
@@ -1378,6 +1412,42 @@ export function mountGame(root: HTMLElement): void {
             <button data-act="queenConfirm">확인하고 켜기</button>
             <button data-act="queenCancel">취소</button>
           </div>
+        </div>
+      </div>
+    `
+    for (const btn of Array.from(modalLayer.querySelectorAll('button'))) {
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+  }
+
+  // 저장 보관함: 여러 슬롯 목록(불러오기·공유코드 복사·삭제) + 현재 판 저장/복사 + 코드 가져오기.
+  function renderSavesModal(): void {
+    const slots = listSlots()
+    const rows =
+      slots.length === 0
+        ? '<div class="saves-empty">저장된 기보가 없어요. “현재 판 저장”을 눌러 보세요.</div>'
+        : slots
+            .map(
+              (s) => `<div class="save-row">
+                <span class="save-name">${s.name}</span>
+                <button data-act="loadSlot:${s.id}" title="이 기보 불러오기">불러오기</button>
+                <button class="save-icon" data-act="exportSlot:${s.id}" title="공유 코드 복사">📋</button>
+                <button class="save-icon" data-act="delSlot:${s.id}" title="삭제">🗑</button>
+              </div>`,
+            )
+            .join('')
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card saves-card">
+          <button class="tut-skip" data-act="closeSaves" title="닫기">닫기 ✕</button>
+          <div class="modal-title">💾 저장 보관함</div>
+          <div class="saves-top">
+            <button data-act="saveGame">＋ 현재 판 저장</button>
+            <button data-act="exportCurrent" title="현재 판 공유 코드 복사">📤 현재 판 복사</button>
+            <button data-act="importGame" title="코드를 붙여넣어 불러오기">📥 코드로 가져오기</button>
+          </div>
+          <div class="saves-list">${rows}</div>
+          <p class="saves-hint">📋 = 공유 코드 복사. 그 코드를 붙여넣어 다른 사람과 기보를 주고받거나 분석을 맡길 수 있어요.</p>
         </div>
       </div>
     `
@@ -1496,8 +1566,8 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="new">새 게임</button>
-        <button data-act="saveGame" title="지금 판을 저장해 둬요">💾 저장</button>
-        <button data-act="loadGame" ${hasSlot() ? '' : 'disabled'} title="저장한 판을 불러와요">📂 불러오기</button>
+        <button data-act="saveGame" title="지금 판을 보관함에 저장">💾 저장</button>
+        <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">📂 보관함</button>
       </div>`
     const viewGrid = `
       <div class="settings-grid">
@@ -1723,6 +1793,31 @@ export function mountGame(root: HTMLElement): void {
       return
     }
 
+    // 보관함: 슬롯 불러오기/삭제/공유코드 복사
+    if (act.startsWith('loadSlot:')) {
+      const s = getSlot(act.slice('loadSlot:'.length))
+      if (s) {
+        clearAiTimer()
+        stopReplayTimer()
+        applySnapshot(s.snap)
+        autoSaveNow()
+        infoModal = null
+        notice = '기보를 불러왔어요.'
+      }
+      render()
+      return
+    }
+    if (act.startsWith('delSlot:')) {
+      deleteSlot(act.slice('delSlot:'.length))
+      render() // 보관함 모달 갱신
+      return
+    }
+    if (act.startsWith('exportSlot:')) {
+      const s = getSlot(act.slice('exportSlot:'.length))
+      if (s) shareCode(encodeSnapshot(s.snap))
+      return
+    }
+
     // 모드/난이도 메뉴 선택
     if (act.startsWith('setMode:')) {
       stopReplayTimer()
@@ -1843,17 +1938,31 @@ export function mountGame(root: HTMLElement): void {
         if (!watchRunning) clearAiTimer()
         break
       case 'saveGame':
-        saveSlot(snapshot())
-        notice = '현재 판을 저장했어요.'
+        addSlot(slotName(), snapshot())
+        notice = '보관함에 저장했어요.'
         break
-      case 'loadGame': {
-        const s = loadSlot()
-        if (s) {
+      case 'openSaves':
+        infoModal = 'saves'
+        break
+      case 'closeSaves':
+        infoModal = null
+        break
+      case 'exportCurrent':
+        shareCode(encodeSnapshot(snapshot()))
+        break
+      case 'importGame': {
+        const code = window.prompt('기보 코드를 붙여넣으세요 (BTB1:... )')
+        const s = code ? decodeSnapshot(code) : null
+        if (code && !s) {
+          notice = ''
+          message = '코드를 알아볼 수 없어요. 전체를 정확히 붙여넣었는지 확인하세요.'
+        } else if (s) {
           clearAiTimer()
           stopReplayTimer()
           applySnapshot(s)
           autoSaveNow()
-          notice = '저장한 판을 불러왔어요.'
+          infoModal = null
+          notice = '기보를 불러왔어요.'
         }
         break
       }

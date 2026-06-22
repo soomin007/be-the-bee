@@ -1,17 +1,20 @@
-// 저장/불러오기 + 자동 이어하기 점검:
-//  1) 몇 수 두고 → 새로고침하면 자동 복원(이어하기)
-//  2) "저장" 후 더 두고 → "불러오기" 하면 저장 시점으로 되돌아감
-//  3) "새 게임" 후 새로고침해도 새 게임(말 0)
+// 자동 이어하기 + 저장 보관함(여러 슬롯) + 기보 공유(코드 내보내기/가져오기) 점검.
 import { chromium } from 'playwright'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1100, height: 820 } })
+const ctx = await browser.newContext({
+  viewport: { width: 1100, height: 860 },
+  permissions: ['clipboard-read', 'clipboard-write'],
+})
+const page = await ctx.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
-// 깨끗한 출발점
-await page.evaluate(() => localStorage.clear())
+await page.evaluate(() => {
+  localStorage.clear()
+  localStorage.setItem('be-the-bee/tutorial-seen', '1') // 첫 접속 튜토리얼이 보드를 가리지 않게
+})
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board')
 
@@ -22,35 +25,50 @@ async function play() {
   await page.locator('svg.board polygon[opacity="0.22"]').first().click({ force: true })
   await page.locator('svg.board polygon[stroke="#16a34a"]').first().click({ force: true })
 }
+const openSaves = async () => {
+  await page.locator('button[data-act="openSaves"]').click()
+  await page.waitForSelector('.saves-card')
+}
 
 // 1) 두 수 → 새로고침 → 자동 복원
 await play()
 await play()
-const before = await pieces()
+const afterPlay = await pieces()
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board')
-const afterReload = await pieces()
-const resumeOk = before === 2 && afterReload === 2
+const resumeOk = afterPlay === 2 && (await pieces()) === 2
 
-// 2) 저장 → 두 수 더 → 불러오기 → 저장 시점(2말)으로 복귀
-await page.locator('button[data-act="saveGame"]').click()
-const noticeShown = (await page.locator('.notice').count()) === 1
-await play()
-await play()
-const grew = await pieces() // 4
-await page.locator('button[data-act="loadGame"]').click()
-const afterLoad = await pieces()
-const loadOk = grew === 4 && afterLoad === 2
+// 2) 보관함에 저장 → 슬롯 1개. 공유 코드 복사(현재=2말) → 클립보드 BTB1
+await openSaves()
+await page.locator('.saves-top button[data-act="saveGame"]').click()
+await page.waitForTimeout(80)
+const slotCount = await page.locator('.save-row').count()
+await page.locator('button[data-act="exportCurrent"]').click()
+await page.waitForTimeout(120)
+const code = await page.evaluate(() => navigator.clipboard.readText())
+const codeOk = typeof code === 'string' && code.startsWith('BTB1:')
+await page.locator('button[data-act="closeSaves"]').click()
 
-// 3) 새 게임 → 새로고침 → 새 게임 유지(0말)
+// 3) 한 수 더(3) → 보관함에서 슬롯 불러오기 → 2로 복귀
+await play()
+const grew = await pieces() // 3
+await openSaves()
+await page.locator('.save-row button[data-act^="loadSlot:"]').first().click()
+await page.waitForTimeout(80)
+const loadOk = grew === 3 && (await pieces()) === 2
+
+// 4) 공유 가져오기: 새 게임(0) → 코드 붙여넣기(다이얼로그) → 2로 복원
 await page.locator('button[data-act="new"]').click()
-await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('svg.board')
-const afterNewReload = await pieces()
-const newOk = afterNewReload === 0
+await page.waitForTimeout(60)
+const fresh = await pieces() // 0
+page.once('dialog', (d) => d.accept(code))
+await openSaves()
+await page.locator('button[data-act="importGame"]').click()
+await page.waitForTimeout(120)
+const importOk = fresh === 0 && (await pieces()) === 2
 
 await browser.close()
-console.log({ resumeOk, noticeShown, loadOk, newOk, errors: errors.length })
-const ok = resumeOk && noticeShown && loadOk && newOk && errors.length === 0
-console.log(ok ? 'PASS: 자동 이어하기 + 저장/불러오기 + 새 게임' : 'FAIL')
+console.log({ resumeOk, slotCount, codeOk, loadOk, importOk, errors: errors.length })
+const ok = resumeOk && slotCount === 1 && codeOk && loadOk && importOk && errors.length === 0
+console.log(ok ? 'PASS: 이어하기 + 보관함 슬롯 + 공유 코드 내보내기/가져오기' : 'FAIL')
 process.exit(ok ? 0 : 1)
