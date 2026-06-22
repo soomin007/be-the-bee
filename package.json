@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "check:engine": "tsc --noEmit --project tsconfig.engine.json",
-    "verify:click": "node scripts/verify-click.mjs"
+    "verify:click": "node scripts/verify-click.mjs",
+    "sim": "vitest run --config vite.sim.config.ts"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

@@ -18,7 +18,8 @@
 | 단계별 큰 그림(로드맵) | [`ROADMAP.md`](ROADMAP.md) |
 | **다음 작업·미착수 (진행 단일 소스)** | [`design/backlog.md`](design/backlog.md) |
 | 반복 금지 함정·오류 이력 | [`design/known_issues.md`](design/known_issues.md) |
-| 벌 컨셉 비주얼 테마(제안) | [`design/bee_theme.md`](design/bee_theme.md) |
+| 벌 컨셉 비주얼 테마 | [`design/bee_theme.md`](design/bee_theme.md) |
+| AI 전략·난이도/성향 상성 분석 | [`design/ai_strategy.md`](design/ai_strategy.md) (재실행: `npm run sim`) |
 | BGM 생성 프롬프트(Suno) | [`design/bgm_prompt.md`](design/bgm_prompt.md) |
 | 세션별 변경 흐름 | [`../session_logs/`](../session_logs/) |
 | 개발용 점검·미리보기 도구 | [`../scripts/README.md`](../scripts/README.md) (verify-* 회귀 / shot-* → `design/shots/`) |

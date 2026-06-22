@@ -66,9 +66,13 @@ Write the line-scanning function once and reuse it for both. Do not duplicate it
 
 ## Commands
 
-- `npm run dev`   — local dev server
-- `npm test`      — run engine tests
-- `npm run build` — production build
+- `npm run dev`        — local dev server
+- `npm test`          — run engine + UI tests (vitest, tests/ + src/)
+- `npm run typecheck` — full TS typecheck (tsc --noEmit)
+- `npm run check:engine` — engine-only typecheck (run FIRST after AI/engine edits — see known_issues)
+- `npm run build`     — production build (tsc + vite build)
+- `npm run sim`       — AI 난이도/성향 상성 self-play 시뮬레이션(분석, 느림). 결과: docs/design/ai_strategy.md
+- `npm run verify:click` — Playwright 보드 클릭 회귀(그 외 verify-*/shot-* 는 scripts/README.md)
 
 ## 운영 규칙 (세션 루틴·커밋·문서)
 
