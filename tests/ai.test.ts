@@ -111,6 +111,35 @@ describe('AI: 붐비는 보드에서도 승리/차단 (후보 캡 무관)', () =
   })
 })
 
+describe('AI: 막다른 위치에서 여왕벌 최후 수단', () => {
+  it('일반 말로 둘 곳이 전혀 없으면(빈 칸이 전부 상대 잠긴 벌집·타일 소진) 여왕벌로 합법수를 둔다', () => {
+    // 노랑 5타일 일렬 = 노랑 벌집(잠김). 빈 칸은 이 5칸뿐, 갈색은 타일 소진 → 일반 말로 둘 곳 없음.
+    // canMove 는 여왕벌 가능성으로 "둘 수 있다"고 보므로, AI 는 막히지 않게 여왕벌을 최후 수단으로 쓴다.
+    const board = build([
+      [hex(0, 0), 'yellow'],
+      [hex(1, 0), 'yellow'],
+      [hex(2, 0), 'yellow'],
+      [hex(3, 0), 'yellow'],
+      [hex(4, 0), 'yellow'],
+    ])
+    const state: GameState = {
+      board,
+      turn: 'brown',
+      supplies: {
+        yellow: { tiles: 0, pieces: 30, queenUsed: false },
+        brown: { tiles: 0, pieces: 30, queenUsed: false },
+      },
+      moveNumber: 10,
+      phase: 'playing',
+    }
+    const move = createAi({ difficulty: 'medium', seed: 1 }).chooseMove(state)
+    expect(validateMove(state, move).ok).toBe(true)
+    expect(() => applyMove(state, move)).not.toThrow()
+    const kind = move.type === 'twoTiles' ? 'normal' : move.piece.kind
+    expect(kind).toBe('queen')
+  })
+})
+
 describe('AI: 잠긴 벌집 승리 칸에서 멈추지 않는다 (리치 오판 회귀)', () => {
   it('유일한 승리 칸이 상대 벌집(잠김)이면 일반 말로 못 두므로 합법수를 반환한다', () => {
     // 갈색 4목 (0,0)..(3,0). 5번째 칸 (4,0) 은 노랑 벌집(세로 5타일)의 일부라 잠김.

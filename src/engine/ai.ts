@@ -695,7 +695,24 @@ function fallbackMove(state: GameState): Move {
       if (validateMove(state, m).ok) return m
     }
   }
-  // 도달 불가(이론상): 형식상 합법수 형태 하나 반환
+  // 최후 수단: 일반 말로 둘 곳이 전혀 없는 막다른 위치(빈 칸이 전부 상대 잠긴 벌집인데
+  // 타일도 소진) 에서는 canMove 가 여왕벌로 "둘 수 있다"고 보므로, 합법수 계약을 지키려면
+  // 여기서만 예외적으로 여왕벌을 쓴다. AI 의 정규 전략은 아니지만 불법수 반환/정지를 막는다.
+  if (!state.supplies[state.turn].queenUsed) {
+    for (const key of Object.keys(board)) {
+      if (board[key]!.piece) continue
+      const at = hexFromKey(key)
+      if (allowed.includes('pieceOnly')) {
+        const m: Move = { type: 'pieceOnly', piece: { at, kind: 'queen' } }
+        if (validateMove(state, m).ok) return m
+      }
+      if (allowed.includes('tileAndPiece')) {
+        const m: Move = { type: 'tileAndPiece', tile: at, piece: { at, kind: 'queen' } }
+        if (validateMove(state, m).ok) return m
+      }
+    }
+  }
+  // 정말 둘 곳이 없으면(이론상 canMove 가 false 인 상황), 형식상 한 수를 반환한다.
   const f = frontier[0] ?? hex(0, 0)
   return { type: 'tileAndPiece', tile: f, piece: { at: f, kind: 'normal' } }
 }
