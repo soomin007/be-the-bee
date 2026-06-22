@@ -752,6 +752,151 @@ svg.board.panning {
   }
 }
 
+/* 튜토리얼 캐러셀 */
+.tut-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 28, 8, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 30;
+  animation: bee-fade 0.2s ease-out;
+}
+
+.tut-card {
+  position: relative;
+  width: min(92vw, 30rem);
+  max-height: 92vh;
+  overflow: auto;
+  background: linear-gradient(170deg, #fffdf7 0%, #fdf4df 100%);
+  border: 2px solid #eab308;
+  border-radius: 18px;
+  padding: 1.4rem 1.5rem 1.2rem;
+  text-align: center;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
+  animation: modal-pop 0.25s ease-out;
+}
+
+.tut-skip {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.8rem;
+  border: none;
+  background: transparent;
+  color: #9a7a3a;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.tut-skip:hover {
+  color: #6b5524;
+  text-decoration: underline;
+}
+
+.tut-illus {
+  display: grid;
+  place-items: center;
+  height: 190px;
+  margin: 0.4rem 0 0.6rem;
+  background: radial-gradient(ellipse at 50% 40%, #fffaf0 0%, #fbf3df 70%, #f6ead0 100%);
+  border: 1px solid #ecdfbe;
+  border-radius: 14px;
+}
+
+.tut-svg {
+  width: 100%;
+  height: 100%;
+  max-height: 178px;
+  padding: 0.4rem;
+}
+
+.tut-step {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #b8860b;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.2rem;
+}
+
+.tut-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.22rem;
+  color: #5a3a14;
+}
+
+.tut-body {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #4a4030;
+  min-height: 4.2em;
+}
+.tut-body b {
+  color: #b8860b;
+}
+.tut-dim {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-size: 0.84rem;
+  color: #8a7c5a;
+}
+
+.tut-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 1rem 0 0.9rem;
+}
+.tut-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e2d3ab;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+}
+.tut-dot:hover {
+  background: #d0b878;
+}
+.tut-dot.on {
+  background: #eab308;
+  transform: scale(1.25);
+}
+
+.tut-nav {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+.tut-nav button {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border: 1px solid #c9b88f;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.tut-nav button:hover:not(:disabled) {
+  background: #f5efdf;
+}
+.tut-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tut-nav .tut-next {
+  background: #fde68a;
+  border-color: #eab308;
+  color: #92660a;
+  flex: 1.4;
+}
+
+/* 일러스트 등장(타일/말 팝인) — staggered delay 는 인라인 style 로 */
+.tut-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: piece-pop 0.45s ease-out both;
+}
+
 @media (max-width: 720px) {
   .game {
     flex-direction: column;

@@ -26,6 +26,7 @@ import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
 import { autoSave, hasSlot, loadAutoSave, loadSlot, saveSlot, type GameSnapshot } from './game-save'
+import { maybeShowTutorial, openTutorial } from './tutorial'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -1462,6 +1463,7 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="saveGame" title="지금 판을 저장해 둬요">💾 저장</button>
         <button data-act="loadGame" ${hasSlot() ? '' : 'disabled'} title="저장한 판을 불러와요">📂 불러오기</button>
         <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
+        <button data-act="tutorial" title="게임 방법 다시 보기">📖 튜토리얼</button>
         <button data-act="new">새 게임</button>
       </div>`
     const settingsSummary =
@@ -1790,6 +1792,9 @@ export function mountGame(root: HTMLElement): void {
       case 'resetView':
         setInitialCamera()
         return
+      case 'tutorial':
+        openTutorial(root)
+        return
       case 'new':
         clearAiTimer()
         stopReplayTimer()
@@ -1820,4 +1825,5 @@ export function mountGame(root: HTMLElement): void {
   setInitialCamera()
   render()
   maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
+  maybeShowTutorial(root) // 첫 접속이면 튜토리얼을 띄운다(한 번만 — localStorage)
 }

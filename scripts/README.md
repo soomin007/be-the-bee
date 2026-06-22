@@ -21,6 +21,7 @@
 | `verify-fx-smoke.mjs` | 벌 테마 2단계 연출(꿀 차오름·붕붕) — 여러 수 둬도 에러 없음 + 모션 키프레임 존재 |
 | `verify-save-load.mjs` | 자동 이어하기(새로고침 복원) + 저장/불러오기 + 새 게임 |
 | `verify-watch-control.mjs` | 관전 자동시작 안 함 + ▶시작/⏸멈춤 동작 + 양쪽 성향 셀렉트 |
+| `verify-tutorial.mjs` | 첫 접속 튜토리얼 자동표시·페이지 넘김·완료 기억·재열기 (+ `shots/tutorial-1·3.png`) |
 
 ## shot-* (시각 미리보기 — PNG 저장)
 | 파일 | 산출물 |
