@@ -89,6 +89,7 @@ interface RoomSettings {
   bgmVolume: number // 0~1
   sfxVolume: number // 0~1 (0 = 효과음 끔)
   watchDelay: number // 관전 모드 수 간격(ms)
+  actionBarPos: ActionBarPos // 인게임 행동 바(턴 안내+①②) 위치
 }
 function defaultSettings(): RoomSettings {
   return {
@@ -100,12 +101,15 @@ function defaultSettings(): RoomSettings {
     bgmVolume: 0.4,
     sfxVolume: 0.6,
     watchDelay: 700,
+    actionBarPos: 'top',
   }
 }
 
 const SETTINGS_KEY = 'be-the-bee/settings'
 const MODES: Mode[] = ['hotseat', 'vsAi', 'watch']
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard']
+type ActionBarPos = 'top' | 'bottom'
+const ACTION_BAR_POSITIONS: ActionBarPos[] = ['top', 'bottom']
 
 function clampVol(v: unknown, fallback: number): number {
   return typeof v === 'number' && v >= 0 && v <= 1 ? v : fallback
@@ -133,6 +137,9 @@ function loadSettings(): RoomSettings {
         typeof s.watchDelay === 'number' && s.watchDelay >= 100 && s.watchDelay <= 3000
           ? Math.round(s.watchDelay)
           : d.watchDelay,
+      actionBarPos: ACTION_BAR_POSITIONS.includes(s.actionBarPos as ActionBarPos)
+        ? (s.actionBarPos as ActionBarPos)
+        : d.actionBarPos,
     }
   } catch {
     return d
@@ -267,8 +274,15 @@ export function mountGame(root: HTMLElement): void {
   const content = svg.querySelector('g.content') as SVGGElement
   const fx = svg.querySelector('g.fx') as SVGGElement
   const panel = root.querySelector('.panel') as HTMLElement
+  const boardWrap = root.querySelector('.board-wrap') as HTMLElement
   const actionBar = root.querySelector('.action-bar') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
+
+  // 행동 바(턴 안내+①②)를 보드 위/아래로 — CSS order 로만 전환(DOM 순서는 유지).
+  function applyActionBarPos(): void {
+    boardWrap.classList.toggle('ab-top', settings.actionBarPos === 'top')
+  }
+  applyActionBarPos()
 
   // ---- 카메라 ---------------------------------------------------------------
 
@@ -1207,9 +1221,10 @@ export function mountGame(root: HTMLElement): void {
         </div>
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
+        <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
-        <button data-act="resetView">뷰 리셋</button>
+        <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
         <button data-act="new">새 게임</button>
       </div>`
     const settingsSummary =
@@ -1274,8 +1289,10 @@ export function mountGame(root: HTMLElement): void {
       ${settingsSummary}
       ${watchCtl}
       ${soundCtl}
-      <p class="hint">같은 진영 말 5개를 일렬로 연결하면 승리. 타일은 기존 타일에 붙여야 합니다.</p>
-      <p class="hint nav">🖱️ 휠: 줌 · 드래그: 이동 · ⌨️ 화살표/＋－/0(리셋)</p>
+      <div class="help">
+        <p class="hint">같은 진영 말 <b>5개를 일렬로</b> 연결하면 승리. 타일은 기존 타일에 붙여서 놓습니다.</p>
+        <p class="hint nav">🖱️ 휠 = 확대 · 드래그 = 이동<br>⌨️ 화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치로</p>
+      </div>
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
@@ -1434,6 +1451,10 @@ export function mountGame(root: HTMLElement): void {
       case 'toggleQueen':
         settings.queen = !settings.queen
         if (!settings.queen && pieceKind === 'queen') pieceKind = 'normal'
+        break
+      case 'toggleActionPos':
+        settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
+        applyActionBarPos()
         break
       case 'toggleMusic':
         sound.toggleMusic()
