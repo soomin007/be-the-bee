@@ -22,7 +22,7 @@ async function clickCenter(locator) {
 // 1) 첫 수: 타일 놓을 프론티어(점선, opacity 0.22) 클릭
 await clickCenter(page.locator('svg.board polygon[opacity="0.22"]').first())
 
-// 2) 말 놓을 칸(초록 테두리) 클릭 — 같은 칸의 타일/링 중 최상단이 처리
+// 2) 말 놓을 칸(초록 테두리) 클릭, 같은 칸의 타일/링 중 최상단이 처리
 await page.waitForSelector('svg.board polygon[stroke="#16a34a"]')
 await clickCenter(page.locator('svg.board polygon[stroke="#16a34a"]').first())
 await page.waitForTimeout(200)

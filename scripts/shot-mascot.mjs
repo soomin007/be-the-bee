@@ -1,4 +1,4 @@
-// 벌 마스코트 단독 미리보기(앱 무관 — 인라인 CSS). dev 서버 불필요.
+// 벌 마스코트 단독 미리보기(앱 무관, 인라인 CSS). dev 서버 불필요.
 import { chromium } from 'playwright'
 const BEE = `<svg class="modal-bee" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <defs><clipPath id="bb"><ellipse cx="50" cy="62" rx="30" ry="26"/></clipPath></defs>

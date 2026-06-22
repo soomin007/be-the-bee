@@ -12,7 +12,7 @@ body {
   background: linear-gradient(160deg, #fdf8ec 0%, #f4ead0 100%);
   background-attachment: fixed;
   color: #2b2b2b;
-  /* 한국어는 단어(어절) 단위로 줄바꿈 — 단어 중간에서 잘리지 않게 */
+  /* 한국어는 단어(어절) 단위로 줄바꿈, 단어 중간에서 잘리지 않게 */
   word-break: keep-all;
 }
 
@@ -460,7 +460,7 @@ svg.board.panning {
   background: #f5efdf;
 }
 
-/* 설명 박스 — 패널 맨 밑 도움말. 제목 + 아이콘 행으로 정리해 가독성을 높인다 */
+/* 설명 박스, 패널 맨 밑 도움말. 제목 + 아이콘 행으로 정리해 가독성을 높인다 */
 .help {
   margin-top: 0.9rem;
   padding: 0.7rem 0.85rem;
@@ -537,7 +537,7 @@ svg.board.panning {
   animation: bee-pulse 1.1s ease-in-out infinite;
 }
 
-/* 리치 "붕붕" — 펄스(가시성) + 미세 회전 진동(벌이 떠는 느낌). 회전은 배율 무관. */
+/* 리치 "붕붕", 펄스(가시성) + 미세 회전 진동(벌이 떠는 느낌). 회전은 배율 무관. */
 @keyframes reach-buzz {
   0%,
   100% {
@@ -560,7 +560,7 @@ svg.board.panning {
   animation: bee-pulse 1.1s ease-in-out infinite, reach-buzz 0.18s linear infinite;
 }
 
-/* 벌집 완성 — 칸 바닥부터 꿀이 차오르며 반짝 사라진다 */
+/* 벌집 완성, 칸 바닥부터 꿀이 차오르며 반짝 사라진다 */
 @keyframes honey-rise {
   0% {
     transform: scaleY(0);
@@ -601,7 +601,7 @@ svg.board.panning {
   animation: piece-pop 0.28s ease-out;
 }
 
-/* 착지/승리 꽃가루 반짝 — fx 레이어의 점이 바깥으로 튀며 사라진다 */
+/* 착지/승리 꽃가루 반짝, fx 레이어의 점이 바깥으로 튀며 사라진다 */
 @keyframes pollen {
   0% {
     transform: translate(0, 0) scale(0.4);
@@ -897,7 +897,7 @@ svg.board.panning {
   flex: 1.4;
 }
 
-/* 일러스트 등장(타일/말 팝인) — staggered delay 는 인라인 style 로 */
+/* 일러스트 등장(타일/말 팝인), staggered delay 는 인라인 style 로 */
 .tut-pop {
   transform-box: fill-box;
   transform-origin: center;

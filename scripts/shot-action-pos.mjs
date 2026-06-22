@@ -11,7 +11,7 @@ await page.goto(URL, { waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board polygon')
 
 // 첫 수: 타일 놓을 자리(프론티어, opacity 0.22) → 말 놓을 칸(초록 테두리).
-// fill=none 링은 force 클릭(아래 타일이 핸들러 보유 — known_issues 참고).
+// fill=none 링은 force 클릭(아래 타일이 핸들러 보유, known_issues 참고).
 await page.locator('svg.board polygon[opacity="0.22"]').first().click({ force: true })
 await page.locator('svg.board polygon[stroke="#16a34a"]').first().click({ force: true })
 

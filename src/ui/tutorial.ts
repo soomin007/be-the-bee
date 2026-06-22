@@ -1,4 +1,4 @@
-// 첫 접속 튜토리얼 — 규칙서(PDF) 기준 페이지 넘김 캐러셀. ui 계층(엔진과 무관).
+// 첫 접속 튜토리얼, 규칙서(PDF) 기준 페이지 넘김 캐러셀. ui 계층(엔진과 무관).
 // 일러스트는 외부 에셋 없이 게임과 같은 pointy-top 헥스·벌 말 SVG + CSS 애니메이션으로 재현한다.
 
 import { hex, type Hex } from '../engine/index'
@@ -28,7 +28,7 @@ const TILE: Record<Color, { mid: string; stroke: string }> = {
 }
 const STRIPE: Record<Color, string> = { yellow: '#3a2600', brown: '#241200' }
 
-// 그라데이션·글로우 정의(튜토리얼 전용 id — 한 번에 한 SVG 만 DOM 에 있음).
+// 그라데이션·글로우 정의(튜토리얼 전용 id, 한 번에 한 SVG 만 DOM 에 있음).
 const DEFS = `
   <defs>
     <radialGradient id="tw-yellow" cx="38%" cy="32%" r="75%">
@@ -96,7 +96,7 @@ function queen(h: Hex, color: Color, delay = 0): string {
   return bee(h, color, delay) + crown
 }
 
-// 꽃가루 반짝(승리 연출) — center 둘레로 튀는 점들(무한 반복).
+// 꽃가루 반짝(승리 연출), center 둘레로 튀는 점들(무한 반복).
 function pollen(h: Hex): string {
   const c = px(h)
   const R = S * 0.95
@@ -139,7 +139,7 @@ const row = (n: number, r = 0, q0 = 0): Hex[] => Array.from({ length: n }, (_, i
 const PAGES: Page[] = [
   {
     title: '🐝 Be the Bee 에 오신 걸 환영해요!',
-    body: '<b>목표</b>는 간단해요. 같은 색 <b>말(꿀벌) 5개를 일렬로</b> 먼저 연결하면 그 줄의 주인 — <b>벌집의 주인</b>이 되어 승리!',
+    body: '<b>목표</b>는 간단해요. 같은 색 <b>말(꿀벌) 5개를 일렬로</b> 먼저 연결하면 그 줄의 주인, <b>벌집의 주인</b>이 되어 승리!',
     svg: () => {
       const r = row(5)
       const tiles = r.map((h, i) => tile(h, 'yellow', { delay: i * 90 })).join('')
@@ -188,7 +188,7 @@ const PAGES: Page[] = [
     },
   },
   {
-    title: '승리 — 그리고 작은 전략',
+    title: '승리, 그리고 작은 전략',
     body: '같은 색 <b>말 5개를 먼저 일렬로</b> 만들면 승리! <br>💡 벌집에 끌려가지 말고 <b>말 5개</b>에 집중하세요. 상대 타일 위에도 내 말을 놓아 <b>허리를 끊을</b> 수 있어요.',
     svg: () => {
       const r = row(5)
@@ -198,8 +198,8 @@ const PAGES: Page[] = [
     },
   },
   {
-    title: '여왕벌 (확장) — 이제 시작해요!',
-    body: '확장 규칙: <b>여왕벌</b>은 게임당 <b>한 번</b>, <b>어떤 타일 위에도</b> — 상대 벌집 위에도! — 놓을 수 있어요. 설정에서 켤 수 있어요.<br><b>이제 직접 해볼까요?</b> 🐝',
+    title: '여왕벌 (확장), 이제 시작해요!',
+    body: '확장 규칙: <b>여왕벌</b>은 게임당 <b>한 번</b>, <b>어떤 타일 위에도</b>, 상대 벌집 위에도!, 놓을 수 있어요. 설정에서 켤 수 있어요.<br><b>이제 직접 해볼까요?</b> 🐝',
     svg: () => {
       const hs = [hex(0, 0), hex(1, 0)]
       return scene(hs, tile(hex(0, 0), 'yellow', { delay: 0 }) + tile(hex(1, 0), 'brown', { delay: 80 }) + queen(hex(0, 0), 'yellow', 220))

@@ -36,7 +36,7 @@ await page.locator('.panel').screenshot({ path: 'docs/design/shots/panel-watch2.
 await page.locator('input[data-ctl="watchDelay"]').fill('100')
 await page.locator('input[data-ctl="watchDelay"]').dispatchEvent('change')
 await page.locator('button[data-act="toggleWatch"]').click() // ▶ 시작
-// 게임 종료까지 대기(결과 모달 등장) — 최대 60초
+// 게임 종료까지 대기(결과 모달 등장), 최대 60초
 let finished = false
 for (let i = 0; i < 120; i++) {
   if ((await page.locator('.modal-card').count()) > 0) { finished = true; break }

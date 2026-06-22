@@ -30,11 +30,11 @@ import { maybeShowTutorial, openTutorial } from './tutorial'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
-// 진영 색(타일·말·벌집)은 컬러 테마에서 가져온다 — themes.ts.
+// 진영 색(타일·말·벌집)은 컬러 테마에서 가져온다, themes.ts.
 // 말 = 벌: 몸통 + 줄무늬(진영 구분 + 벌 느낌), 흰 테두리로 타일과 대비.
 const PLAYER_LABEL: Record<Player, string> = { yellow: '노랑', brown: '갈색' }
 
-// 결과 모달 벌 마스코트(인라인 SVG — 외부 에셋 없음). .wing 은 CSS 로 펄럭.
+// 결과 모달 벌 마스코트(인라인 SVG, 외부 에셋 없음). .wing 은 CSS 로 펄럭.
 const BEE_SVG = `
   <svg class="modal-bee" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <defs><clipPath id="beeBody"><ellipse cx="50" cy="62" rx="30" ry="26"/></clipPath></defs>
@@ -54,7 +54,7 @@ const BEE_SVG = `
     <path d="M43 62 Q50 68 57 62" stroke="#3a2600" stroke-width="2.2" fill="none" stroke-linecap="round"/>
   </svg>`
 
-// 여왕벌 설명 팝업용 마스코트 — 왕관 쓴 벌(인라인 SVG). .wing 펄럭은 BEE_SVG 와 공유.
+// 여왕벌 설명 팝업용 마스코트, 왕관 쓴 벌(인라인 SVG). .wing 펄럭은 BEE_SVG 와 공유.
 const QUEEN_SVG = `
   <svg class="modal-bee queen" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <defs><clipPath id="qBody"><ellipse cx="50" cy="64" rx="30" ry="26"/></clipPath></defs>
@@ -100,7 +100,7 @@ const MODE_LABEL: Record<Mode, string> = {
   vsAi: 'vs AI (갈색)',
   watch: 'AI 관전',
 }
-// 설정 버튼에 현재 선택값을 짧게 보여줄 라벨(드롭다운 버튼용 — 그리드 폭 고려).
+// 설정 버튼에 현재 선택값을 짧게 보여줄 라벨(드롭다운 버튼용, 그리드 폭 고려).
 const MODE_SHORT: Record<Mode, string> = {
   hotseat: '사람끼리',
   vsAi: 'vs AI',
@@ -115,7 +115,7 @@ interface RoomSettings {
   mode: Mode
   aiDifficulty: Difficulty
   hints: boolean // 훈수 모드: 위험/승리 칸 힌트 표시
-  queen: boolean // 여왕벌 모드(확장 — 숙련자용). 기본 꺼짐. AI 는 사용 안 함
+  queen: boolean // 여왕벌 모드(확장, 숙련자용). 기본 꺼짐. AI 는 사용 안 함
   bgmTrack: number // BGM_TRACKS 인덱스
   bgmVolume: number // 0~1
   sfxVolume: number // 0~1 (0 = 효과음 끔)
@@ -209,7 +209,7 @@ function saveSettings(s: RoomSettings): void {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
   } catch {
-    /* 사생활 모드 등 — 무시 */
+    /* 사생활 모드 등, 무시 */
   }
 }
 
@@ -275,29 +275,29 @@ function lastPieceCell(move: Move): Hex | null {
 export function mountGame(root: HTMLElement): void {
   let state: GameState = createInitialState()
   let history: GameState[] = []
-  let moveLog: Move[] = [] // 둔 수의 순서(history 와 보조를 맞춤) — 복기용
+  let moveLog: Move[] = [] // 둔 수의 순서(history 와 보조를 맞춤), 복기용
   let replayIndex: number | null = null // null = 실시간, 그 외 = timeline 의 그 국면을 본다
   let replayTimer: number | null = null // 복기 자동 재생 타이머
   let draft: Draft | null = null
   let pieceKind: PieceKind = 'normal'
-  let message = '' // 경고(잘못된 수 등) — ⚠️ 빨강
-  let notice = '' // 긍정 피드백(저장/불러오기 등) — ✓ 초록, 다음 수에 사라짐
+  let message = '' // 경고(잘못된 수 등), ⚠️ 빨강
+  let notice = '' // 긍정 피드백(저장/불러오기 등), ✓ 초록, 다음 수에 사라짐
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
-  let infoModal: 'queen' | null = null // 설명 팝업(여왕벌 등) — 떠 있으면 결과 모달보다 우선
-  // 리치(한 수로 5목) 칸 — render 가 채우고 renderPanel 이 읽는다.
+  let infoModal: 'queen' | null = null // 설명 팝업(여왕벌 등), 떠 있으면 결과 모달보다 우선
+  // 리치(한 수로 5목) 칸, render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
 
   let cam: Camera = { cx: 0, cy: 0, w: HEX_SIZE * 26 }
-  // 포인터(마우스/터치) 추적 — 1개=팬, 2개=핀치 줌
+  // 포인터(마우스/터치) 추적, 1개=팬, 2개=핀치 줌
   const pointers = new Map<number, { x: number; y: number }>()
   let dragMoved = false
   let lastX = 0
   let lastY = 0
   let pinchDist = 0
 
-  // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜 — 새 게임에도 방 설정은 유지)
+  // 방 설정 + AI 상태 (settings 자체는 유지, 필드만 바뀜, 새 게임에도 방 설정은 유지)
   const settings = loadSettings()
   let theme: ColorTheme = themeById(settings.themeId)
   const persist = (): void => saveSettings(settings)
@@ -313,7 +313,7 @@ export function mountGame(root: HTMLElement): void {
   let aiBrown: Ai | null = null
   let aiThinking = false // 재진입 가드 + 입력 잠금
   let aiTimer: number | null = null
-  let watchRunning = false // 관전 재생 중인지(런타임 — 저장 안 함, 새로고침 시 자동 시작 방지)
+  let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === 'brown')
   const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
@@ -385,7 +385,7 @@ export function mountGame(root: HTMLElement): void {
   const actionBar = root.querySelector('.action-bar') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
 
-  // 행동 바(턴 안내+①②)를 보드 위/아래로 — CSS order 로만 전환(DOM 순서는 유지).
+  // 행동 바(턴 안내+①②)를 보드 위/아래로, CSS order 로만 전환(DOM 순서는 유지).
   function applyActionBarPos(): void {
     boardWrap.classList.toggle('ab-top', settings.actionBarPos === 'top')
   }
@@ -412,7 +412,7 @@ export function mountGame(root: HTMLElement): void {
         ['55%', tc.mid],
         ['100%', tc.dark],
       ])
-      // 벌 몸통 — 위쪽 밝게, 아래쪽 어둡게(구형 음영 = 2.5D)
+      // 벌 몸통, 위쪽 밝게, 아래쪽 어둡게(구형 음영 = 2.5D)
       const body = theme.piece[owner].body
       fillGradient(`#bee-${owner}`, [
         ['0%', shade(body, 0.5)],
@@ -657,7 +657,7 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
-  // 복기 자동 재생 — watchDelay 간격으로 한 수씩 앞으로.
+  // 복기 자동 재생, watchDelay 간격으로 한 수씩 앞으로.
   function replayTick(): void {
     if (replayIndex === null) return
     if (replayIndex >= moveLog.length) {
@@ -690,7 +690,7 @@ export function mountGame(root: HTMLElement): void {
     return `${idx}수 · ${PLAYER_LABEL[mover]} ${what} → ${where}`
   }
 
-  // 복기 컨트롤(보기 전용 — state/history/moveLog 를 건드리지 않는다).
+  // 복기 컨트롤(보기 전용, state/history/moveLog 를 건드리지 않는다).
   function handleReplay(act: string): void {
     const n = moveLog.length
     switch (act) {
@@ -742,12 +742,12 @@ export function mountGame(root: HTMLElement): void {
     render()
   }
 
-  // ---- 연출(fx 레이어 — render 가 지우지 않는 일회성 효과) -------------------
+  // ---- 연출(fx 레이어, render 가 지우지 않는 일회성 효과) -------------------
   function clearFx(): void {
     while (fx.firstChild) fx.removeChild(fx.firstChild)
   }
 
-  // 착지 꽃가루 반짝 — 6방향으로 튀었다 사라지는 점.
+  // 착지 꽃가루 반짝, 6방향으로 튀었다 사라지는 점.
   function spawnSparkle(center: { x: number; y: number }, color: string): void {
     const g = document.createElementNS(SVGNS, 'g')
     const R = HEX_SIZE * 0.85
@@ -774,7 +774,7 @@ export function mountGame(root: HTMLElement): void {
     spawnSparkle(hexToPixel(pc), theme.piece[owner].body)
   }
 
-  // 승리 — 5목 라인을 따라 꿀이 터지는 연출(칸마다 시차).
+  // 승리, 5목 라인을 따라 꿀이 터지는 연출(칸마다 시차).
   function spawnWinBurst(board: GameState['board']): void {
     const line = winningLine(board)
     if (!line) return
@@ -783,7 +783,7 @@ export function mountGame(root: HTMLElement): void {
     })
   }
 
-  // 벌집 완성 — 새로 잠긴 칸마다 꿀이 바닥부터 차오르는 연출(칸마다 시차).
+  // 벌집 완성, 새로 잠긴 칸마다 꿀이 바닥부터 차오르는 연출(칸마다 시차).
   function spawnHoneyRise(cells: Hex[]): void {
     cells.forEach((h, i) => {
       const poly = document.createElementNS(SVGNS, 'polygon')
@@ -797,7 +797,7 @@ export function mountGame(root: HTMLElement): void {
     })
   }
 
-  // 직전 수로 새로 벌집(연속 타일선)에 편입된 칸들 — 꿀 차오름 대상.
+  // 직전 수로 새로 벌집(연속 타일선)에 편입된 칸들, 꿀 차오름 대상.
   function newlyHivedCells(before: GameState['board'], after: GameState['board']): Hex[] {
     const had = new Set<string>()
     for (const hv of detectHives(before)) for (const k of hv.cells) had.add(k)
@@ -836,7 +836,7 @@ export function mountGame(root: HTMLElement): void {
       const opp = opponent(state.turn)
       if (winningCells(state.board, opp, state.supplies[opp]).length > 0) sound.alert()
     }
-    // 관전 대결이 끝나면 자동으로 멈춤 — 새 게임이 저절로 또 돌지 않게.
+    // 관전 대결이 끝나면 자동으로 멈춤, 새 게임이 저절로 또 돌지 않게.
     if (state.phase === 'finished' && settings.mode === 'watch') watchRunning = false
     startTurn()
     autoSaveNow() // 매 수 자동 저장 → 새로고침해도 이어하기
@@ -857,20 +857,20 @@ export function mountGame(root: HTMLElement): void {
   function maybeScheduleAi(): void {
     if (state.phase !== 'playing') return
     if (!aiControls(state.turn) || aiThinking) return
-    // 관전 모드는 ▶(시작)을 눌러야 진행 — 모드 선택만으로 바로 시작하지 않는다.
+    // 관전 모드는 ▶(시작)을 눌러야 진행, 모드 선택만으로 바로 시작하지 않는다.
     if (settings.mode === 'watch' && !watchRunning) return
     const ai = aiForTurn(state.turn)
     if (ai === null) return
     aiThinking = true
     render() // "생각 중" 표시 + 입력 잠금
-    // 관전 모드는 사용자가 정한 간격으로 천천히 — vs AI 는 짧게.
+    // 관전 모드는 사용자가 정한 간격으로 천천히, vs AI 는 짧게.
     const delay = settings.mode === 'watch' ? settings.watchDelay : AI_DELAY_MS
     aiTimer = window.setTimeout(() => {
       aiTimer = null
       aiThinking = false
       try {
         const mv = ai.chooseMove(state)
-        // 적용 전 합법성 확인 — 불법수면 applyAndAdvance 가 history 를 오염시키며 throw 해
+        // 적용 전 합법성 확인, 불법수면 applyAndAdvance 가 history 를 오염시키며 throw 해
         // "생각 중"에서 영구 정지하던 버그를 막는다(이론상 엔진이 합법수를 보장하지만 방어).
         if (!validateMove(state, mv).ok) throw new Error('AI returned an illegal move')
         applyAndAdvance(mv)
@@ -964,7 +964,7 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function render(): void {
-    // 복기 중이면 과거 국면을 본다(보기 전용 오버레이 — 실제 상태는 그대로).
+    // 복기 중이면 과거 국면을 본다(보기 전용 오버레이, 실제 상태는 그대로).
     const replaying = replayIndex !== null
     const viewState: GameState = replaying ? timeline()[replayIndex!]! : state
     const viewLast: Move | null = replaying
@@ -1006,7 +1006,7 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 1) 프론티어(타일 놓을 자리) — 더 또렷한 점선
+    // 1) 프론티어(타일 놓을 자리), 더 또렷한 점선
     for (const f of frontier) {
       content.appendChild(
         makeHexPolygon(hexToPixel(f), {
@@ -1035,7 +1035,7 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 3) 벌집 강조 — 금색 글로우 오버레이(가시성 ↑)
+    // 3) 벌집 강조, 금색 글로우 오버레이(가시성 ↑)
     const hiveKeys = new Set<string>()
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveKeys.add(k)
     for (const key of hiveKeys) {
@@ -1053,7 +1053,7 @@ export function mountGame(root: HTMLElement): void {
     }
     void occupied
 
-    // 4) 잠정 타일(미확정) — 점선
+    // 4) 잠정 타일(미확정), 점선
     for (const prov of [provisionalFirst, provisionalTile]) {
       if (!prov) continue
       content.appendChild(
@@ -1068,7 +1068,7 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 4.5) 직전 수 강조 — 타일은 칸 파란 점선(말 둘레 링은 말 그릴 때). + 리치 힌트
+    // 4.5) 직전 수 강조, 타일은 칸 파란 점선(말 둘레 링은 말 그릴 때). + 리치 힌트
     const lpc = viewLast ? lastPieceCell(viewLast) : null
     const lastPieceKey = lpc ? hexKey(lpc) : null
     if (viewLast) {
@@ -1084,7 +1084,7 @@ export function mountGame(root: HTMLElement): void {
         )
       }
     }
-    // 위험/승리 칸 힌트는 훈수 모드에서만(설명서엔 없는 보조 — 방 설정으로 공통 적용)
+    // 위험/승리 칸 힌트는 훈수 모드에서만(설명서엔 없는 보조, 방 설정으로 공통 적용)
     dangerCells = []
     winNowCells = []
     if (settings.hints && state.phase === 'playing' && !replaying) {
@@ -1145,7 +1145,7 @@ export function mountGame(root: HTMLElement): void {
       const r = HEX_SIZE * 0.52
       const stripe = theme.piece[piece.owner].stripe
 
-      // 바닥 그림자 — 타일에 닿은 듯한 입체감(2.5D). 몸통보다 먼저(아래에) 그린다.
+      // 바닥 그림자, 타일에 닿은 듯한 입체감(2.5D). 몸통보다 먼저(아래에) 그린다.
       // 광원이 왼쪽 위(하이라이트 위치)이므로 그림자는 오른쪽 아래로 치우친다.
       const shadow = document.createElementNS(SVGNS, 'ellipse')
       shadow.setAttribute('cx', String(p.x + r * 0.28))
@@ -1157,7 +1157,7 @@ export function mountGame(root: HTMLElement): void {
       shadow.style.pointerEvents = 'none'
       content.appendChild(shadow)
 
-      // 날개(몸통 뒤, 살짝 위로) — 투명한 흰 타원 2개
+      // 날개(몸통 뒤, 살짝 위로), 투명한 흰 타원 2개
       for (const dir of [-1, 1]) {
         const wx = p.x + dir * r * 0.34
         const wy = p.y - r * 0.5
@@ -1175,7 +1175,7 @@ export function mountGame(root: HTMLElement): void {
         content.appendChild(wing)
       }
 
-      // 몸통(.piece — 테스트/검증이 세는 요소)
+      // 몸통(.piece, 테스트/검증이 세는 요소)
       const body = document.createElementNS(SVGNS, 'circle')
       body.classList.add('piece')
       if (lastKeys.has(key)) body.classList.add('pop')
@@ -1205,7 +1205,7 @@ export function mountGame(root: HTMLElement): void {
         content.appendChild(s)
       }
 
-      // 윤기 하이라이트 — 왼쪽 위 작은 흰 점(광택 = 2.5D 마무리). 줄무늬 위에 얹는다.
+      // 윤기 하이라이트, 왼쪽 위 작은 흰 점(광택 = 2.5D 마무리). 줄무늬 위에 얹는다.
       const spec = document.createElementNS(SVGNS, 'ellipse')
       const sx = p.x - r * 0.34
       const sy = p.y - r * 0.4
@@ -1249,7 +1249,7 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 7) 승리 이펙트 — 이긴 5목 라인 강조(초록 굵은 펄스). 복기에선 마지막 국면에서만.
+    // 7) 승리 이펙트, 이긴 5목 라인 강조(초록 굵은 펄스). 복기에선 마지막 국면에서만.
     if (viewState.phase === 'finished' && viewState.result?.kind === 'win') {
       const line = winningLine(viewState.board)
       if (line) {
@@ -1272,7 +1272,7 @@ export function mountGame(root: HTMLElement): void {
     renderModal()
   }
 
-  // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에 — 설정 버튼과 분리.
+  // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
   function renderActionBar(): void {
     if (state.phase !== 'playing' || aiThinking || aiControls(state.turn) || draft === null) {
       actionBar.innerHTML = ''
@@ -1280,7 +1280,7 @@ export function mountGame(root: HTMLElement): void {
     }
     const items: string[] = []
     if (draft.stage === 'chooseAction') {
-      items.push(`<span class="ab-prompt">${PLAYER_LABEL[state.turn]} 차례 — 행동 선택</span>`)
+      items.push(`<span class="ab-prompt">${PLAYER_LABEL[state.turn]} 차례 · 행동 선택</span>`)
       items.push(`<button data-act="twoTiles">① 타일 2개<kbd>1</kbd></button>`)
       items.push(`<button data-act="tileAndPiece">② 타일 + 말<kbd>2</kbd></button>`)
     } else {
@@ -1316,10 +1316,10 @@ export function mountGame(root: HTMLElement): void {
       sub = '같은 색 말 5개를 일렬로 연결했습니다.'
     } else if (r.winner === 'draw') {
       title = '🤝 무승부'
-      sub = `타일 소진 — 벌집 점수 노랑 ${r.scores.yellow} : ${r.scores.brown} 갈색`
+      sub = `타일 소진, 벌집 점수 노랑 ${r.scores.yellow} : ${r.scores.brown} 갈색`
     } else {
       title = `🏆 ${PLAYER_LABEL[r.winner]} 승리 (점수)`
-      sub = `타일 소진 — 벌집 점수 노랑 ${r.scores.yellow} : ${r.scores.brown} 갈색`
+      sub = `타일 소진, 벌집 점수 노랑 ${r.scores.yellow} : ${r.scores.brown} 갈색`
     }
     modalLayer.innerHTML = `
       <div class="modal-backdrop">
@@ -1340,7 +1340,7 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
-  // 여왕벌 모드 켜기 전 설명 팝업 — 확인해야 켜진다(확장 규칙 안내). 외부 에셋 0.
+  // 여왕벌 모드 켜기 전 설명 팝업, 확인해야 켜진다(확장 규칙 안내). 외부 에셋 0.
   function renderQueenInfo(): void {
     modalLayer.innerHTML = `
       <div class="modal-backdrop">
@@ -1350,13 +1350,13 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-sub">숙련자용 규칙이에요. 켜면 평소보다 한 수가 더 강력해집니다.</div>
           <ul class="info-list">
             <li>게임 중 <b>딱 한 번</b>, 일반 말 대신 여왕벌을 놓을 수 있어요.</li>
-            <li>여왕벌은 <b>어떤 타일 위에도</b> 놓을 수 있어요 — 상대 벌집 위에도! (벌집 잠금 무시)</li>
+            <li>여왕벌은 <b>어떤 타일 위에도</b> 놓을 수 있어요. 상대 벌집 위에도! (벌집 잠금 무시)</li>
             <li>여왕벌도 내 말이라 <b>5목(승리) 판정에 포함</b>돼요.</li>
             <li>놓을 때 행동 바의 <b>“여왕벌로 놓기”</b>(단축키 <kbd>Q</kbd>)를 눌러요.</li>
             <li>AI는 여왕벌을 쓰지 않아요(사람 전용).</li>
           </ul>
           <div class="modal-actions">
-            <button data-act="queenConfirm">확인 — 켜기</button>
+            <button data-act="queenConfirm">확인하고 켜기</button>
             <button data-act="queenCancel">취소</button>
           </div>
         </div>
@@ -1377,10 +1377,10 @@ export function mountGame(root: HTMLElement): void {
     panel.innerHTML = `
       <h2>🐝 복기</h2>
       <div class="status replay">
-        <div class="status-header">복기 — ${idx} / ${n} 수</div>
+        <div class="status-header">복기 ${idx} / ${n} 수</div>
         <div class="instruction">${describeMove(idx)}</div>
       </div>
-      <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
+      <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       <div class="replay-nav">
         <button data-act="replayFirst" ${disPrev} title="처음으로">⏮</button>
         <button data-act="replayPrev" ${disPrev} title="이전 수">◀</button>
@@ -1433,7 +1433,7 @@ export function mountGame(root: HTMLElement): void {
       } else {
         const w = state.result.winner
         header = w === 'draw' ? '무승부' : `🏆 ${PLAYER_LABEL[w]} 승리 (점수)`
-        instruction = `타일 소진 — 벌집 점수 노랑 ${state.result.scores.yellow} : ${state.result.scores.brown} 갈색`
+        instruction = `타일 소진, 벌집 점수 노랑 ${state.result.scores.yellow} : ${state.result.scores.brown} 갈색`
       }
     } else if (aiThinking || aiControls(state.turn)) {
       header = `${PLAYER_LABEL[state.turn]} 차례`
@@ -1441,7 +1441,7 @@ export function mountGame(root: HTMLElement): void {
         settings.mode === 'watch'
           ? watchRunning
             ? '🤖 AI끼리 관전 중…'
-            : '⏸ 멈춤 — ▶ 시작을 누르세요'
+            : '⏸ 멈춤. ▶ 시작을 누르세요'
           : '🤖 AI가 생각 중…'
     } else {
       header = `${PLAYER_LABEL[state.turn]} 차례`
@@ -1501,7 +1501,7 @@ export function mountGame(root: HTMLElement): void {
         <select data-ctl="difficulty${diffCtl}" aria-label="${icon} 난이도">${diffOpts(diffCtl === 'Yellow' ? settings.difficultyYellow : settings.difficultyBrown)}</select>
         <select data-ctl="persona${diffCtl}" aria-label="${icon} 성향">${personaOpts(persona)}</select>
       </div>
-      <div class="persona-desc">${PERSONA_LABEL[persona]} — ${PERSONA_DESC[persona]}</div>`
+      <div class="persona-desc">${PERSONA_LABEL[persona]}: ${PERSONA_DESC[persona]}</div>`
     let aiCtl = ''
     if (settings.mode === 'watch') {
       aiCtl = `
@@ -1519,7 +1519,7 @@ export function mountGame(root: HTMLElement): void {
       aiCtl = `
         <div class="ai-ctl">
           <div class="persona-row"><span class="pr-label">AI 성향</span><select data-ctl="personaBrown" aria-label="AI 성향">${personaOpts(settings.personaBrown)}</select></div>
-          <div class="persona-desc">${PERSONA_LABEL[settings.personaBrown]} — ${PERSONA_DESC[settings.personaBrown]}</div>
+          <div class="persona-desc">${PERSONA_LABEL[settings.personaBrown]}: ${PERSONA_DESC[settings.personaBrown]}</div>
         </div>`
     }
 
@@ -1528,7 +1528,7 @@ export function mountGame(root: HTMLElement): void {
       if (winNowCells.length > 0) {
         reach = `<div class="reach win">✨ ${PLAYER_LABEL[state.turn]} 리치! 여기 두면 승리</div>`
       } else if (dangerCells.length > 0) {
-        reach = `<div class="reach danger">⚠️ ${PLAYER_LABEL[opponent(state.turn)]} 리치! 다음 한 수로 5목 — 막으세요</div>`
+        reach = `<div class="reach danger">⚠️ ${PLAYER_LABEL[opponent(state.turn)]} 리치! 다음 한 수로 5목! 막으세요</div>`
       }
     }
 
@@ -1566,7 +1566,7 @@ export function mountGame(root: HTMLElement): void {
         <div>${supplyLine('yellow')}</div>
         <div>${supplyLine('brown')}</div>
       </div>
-      <div class="scores">벌집 점수 — 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
+      <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       ${settingsHtml}
       ${settingsSummary}
       ${aiCtl}
@@ -1620,7 +1620,7 @@ export function mountGame(root: HTMLElement): void {
       })
       watchDelay.addEventListener('change', persist)
     }
-    // AI 성향/난이도 선택 — 바꾸면 해당 AI 인스턴스를 다시 만든다(진행 중 관전에도 다음 수부터 반영).
+    // AI 성향/난이도 선택, 바꾸면 해당 AI 인스턴스를 다시 만든다(진행 중 관전에도 다음 수부터 반영).
     const wirePersona = (which: 'personaYellow' | 'personaBrown'): void => {
       const sel = panel.querySelector(`select[data-ctl="${which}"]`) as HTMLSelectElement | null
       if (!sel) return
@@ -1660,7 +1660,7 @@ export function mountGame(root: HTMLElement): void {
         ? '첫 번째 타일을 놓을 빈 칸을 클릭하세요.'
         : '두 번째 타일을 놓을 빈 칸을 클릭하세요.'
     }
-    if (draft.action === 'pieceOnly') return '더 놓을 타일이 없습니다 — 말을 놓을 타일을 클릭하세요.'
+    if (draft.action === 'pieceOnly') return '더 놓을 타일이 없습니다. 말을 놓을 타일을 클릭하세요.'
     return '말을 놓을 타일을 클릭하세요. (초록 테두리가 가능한 칸)'
   }
 
@@ -1675,7 +1675,7 @@ export function mountGame(root: HTMLElement): void {
   function onPanelAction(act: string | null): void {
     if (act === null) return
 
-    // 복기 컨트롤(보기 전용) — 별도 처리 후 종료
+    // 복기 컨트롤(보기 전용), 별도 처리 후 종료
     if (act.startsWith('replay')) {
       handleReplay(act)
       return
@@ -1687,7 +1687,7 @@ export function mountGame(root: HTMLElement): void {
       replayIndex = null
       clearAiTimer()
       settings.mode = act.slice('setMode:'.length) as Mode
-      watchRunning = false // 관전으로 바꿔도 ▶ 를 눌러야 시작 — 모드 바꿀 여유를 준다
+      watchRunning = false // 관전으로 바꿔도 ▶ 를 눌러야 시작, 모드 바꿀 여유를 준다
       rebuildAi()
       openMenu = null
       message = ''
@@ -1739,7 +1739,7 @@ export function mountGame(root: HTMLElement): void {
           stopReplayTimer()
           clearFx()
           replayIndex = null
-          // 사람 차례가 될 때까지 되돌린다 — vs AI 에선 AI 수와 내 수를 함께 무른다.
+          // 사람 차례가 될 때까지 되돌린다, vs AI 에선 AI 수와 내 수를 함께 무른다.
           // (한 수만 무르면 AI 차례로 돌아가 AI 가 즉시 다시 둬 무효가 됨)
           do {
             state = history[history.length - 1]!
@@ -1767,7 +1767,7 @@ export function mountGame(root: HTMLElement): void {
           settings.queen = false
           if (pieceKind === 'queen') pieceKind = 'normal'
         } else {
-          // 켜기 전 설명 팝업 — 확인해야 켜진다
+          // 켜기 전 설명 팝업, 확인해야 켜진다
           infoModal = 'queen'
         }
         break
@@ -1866,5 +1866,5 @@ export function mountGame(root: HTMLElement): void {
   setInitialCamera()
   render()
   maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
-  maybeShowTutorial(root) // 첫 접속이면 튜토리얼을 띄운다(한 번만 — localStorage)
+  maybeShowTutorial(root) // 첫 접속이면 튜토리얼을 띄운다(한 번만, localStorage)
 }

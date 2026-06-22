@@ -1,5 +1,5 @@
 // 관전 시작/멈춤 + AI 성향 점검:
-//  1) 관전 모드 선택만으로는 진행하지 않는다(자동 시작 X) — 멈출 여유.
+//  1) 관전 모드 선택만으로는 진행하지 않는다(자동 시작 X), 멈출 여유.
 //  2) ▶ 시작 → 수가 진행된다. ⏸ 멈춤 → 더 진행되지 않는다.
 //  3) 노랑/갈색 성향 셀렉트 존재.
 import { chromium } from 'playwright'
@@ -20,7 +20,7 @@ const pieces = () => page.locator('svg.board circle.piece').count()
 await page.locator('button[data-act="menuMode"]').click()
 await page.locator('button[data-act="setMode:watch"]').click()
 
-// 1) 선택만으로는 자동 진행 안 함 — 잠시 기다려도 말 0
+// 1) 선택만으로는 자동 진행 안 함, 잠시 기다려도 말 0
 await page.waitForTimeout(1200)
 const idlePieces = await pieces()
 

@@ -1,4 +1,4 @@
-// 게임 저장/불러오기 — localStorage 기보 보관. ui 계층(엔진과 무관).
+// 게임 저장/불러오기, localStorage 기보 보관. ui 계층(엔진과 무관).
 //
 // 두 슬롯:
 //   - autosave: 매 수마다 갱신 → 새로고침/재방문 시 "이어하기"로 자동 복원.
@@ -45,7 +45,7 @@ function write(key: string, snap: GameSnapshot): void {
   try {
     localStorage.setItem(key, JSON.stringify(snap))
   } catch {
-    /* 용량 초과/사생활 모드 — 무시 */
+    /* 용량 초과/사생활 모드, 무시 */
   }
 }
 

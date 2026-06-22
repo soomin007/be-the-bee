@@ -29,7 +29,7 @@ export function findLines<T>(cells: ReadonlyMap<string, T>, minLen: number): Lin
     const h = hexFromKey(key)
     for (let axis = 0; axis < HEX_AXES.length; axis++) {
       const dir = HEX_AXES[axis]!
-      // 시작 칸이 아니면(역방향 이웃이 같은 값) 건너뛴다 — 중복 방지.
+      // 시작 칸이 아니면(역방향 이웃이 같은 값) 건너뛴다, 중복 방지.
       if (cells.get(hexKey(hexSubtract(h, dir))) === value) continue
 
       const run: string[] = [key]

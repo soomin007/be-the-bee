@@ -76,7 +76,7 @@ export function createSound(): Sound {
     osc.stop(t0 + dur + 0.03)
   }
 
-  // 날갯짓 버즈 — 톱니파 + 진폭 트레몰로(LFO)로 "붕" 하는 벌 날갯짓 느낌. 짧고 작게.
+  // 날갯짓 버즈, 톱니파 + 진폭 트레몰로(LFO)로 "붕" 하는 벌 날갯짓 느낌. 짧고 작게.
   function buzz(freq: number, dur: number, when = 0, peak = 0.07): void {
     if (sfxVolume <= 0) return
     const c = audio()
@@ -132,7 +132,7 @@ export function createSound(): Sound {
       notes.forEach((f, i) => tone(f, 0.22, 'triangle', i * 0.1, 0.2))
     },
     hive(): void {
-      // 벌집 완성 — 꿀이 차오르는 따뜻한 상승음 + 낮은 바탕 스웰.
+      // 벌집 완성, 꿀이 차오르는 따뜻한 상승음 + 낮은 바탕 스웰.
       const notes = [392, 523.25, 659.25]
       notes.forEach((f, i) => tone(f, 0.3, 'sine', i * 0.09, 0.13))
       tone(196, 0.55, 'triangle', 0, 0.07)

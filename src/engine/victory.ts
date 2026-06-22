@@ -1,5 +1,5 @@
 // 승리 판정: 같은 진영의 말 5개 이상이 일렬(design/rules.md §2).
-// findLines 를 말 소유자로 호출한다 — 벌집과 같은 스캐너, 다른 입력.
+// findLines 를 말 소유자로 호출한다, 벌집과 같은 스캐너, 다른 입력.
 
 import { cellAt, LINE_LENGTH, pieceAt, withPiece, withTile } from './state'
 import { hexFromKey, hexKey, hexNeighbors, type Hex } from './hex'
@@ -31,7 +31,7 @@ export function detectWin(board: Board): Player | null {
 }
 
 /**
- * player 의 말을 한 수로 5목으로 만들 수 있는 빈 셀들(기하학적 — 도달 가능성은 따지지 않음).
+ * player 의 말을 한 수로 5목으로 만들 수 있는 빈 셀들(기하학적, 도달 가능성은 따지지 않음).
  * 5목을 만들려면 새 말이 기존 말과 축으로 인접해야 하므로 후보는 player 말의 이웃뿐.
  * 위협/리치 표시와 AI 차단 양쪽에서 재사용한다.
  */

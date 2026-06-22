@@ -7,10 +7,10 @@
 //
 // 설명서 PDF 초보자 전략 TIP 반영:
 //  - TIP#3 "말 5목이 전부": 말 라인 가중치 ≫ 벌집(W.HIVE 작게). 벌집은 수단일 뿐.
-//  - TIP#1 "허리 끊기": 상대의 열린 3목을 미리 끊기 — 1수 평가로는 못 보지만 빔 서치가
+//  - TIP#1 "허리 끊기": 상대의 열린 3목을 미리 끊기, 1수 평가로는 못 보지만 빔 서치가
 //    "안 끊으면 다음 수에 열린 4목 → 패배"를 내다보고 끊는다.
 //  - TIP#2 "타일엔 주인 없다": 벌집 완성 전엔 상대 타일 위에도 말을 놓아 선점 가능
-//    (validatePiecePlacement 가 이미 허용 — 평가는 라인 기여로 자연히 선점을 선호).
+//    (validatePiecePlacement 가 이미 허용, 평가는 라인 기여로 자연히 선점을 선호).
 
 import {
   HEX_AXES,
@@ -48,7 +48,7 @@ export interface Ai {
 
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
-// AI 성향 — 같은 난이도라도 "어디에 가치를 두는가"가 달라진다(관전 대결 특색).
+// AI 성향, 같은 난이도라도 "어디에 가치를 두는가"가 달라진다(관전 대결 특색).
 //  balanced 균형 / aggressive 공격형 / defensive 수비형 / hive 벌집형.
 export type Persona = 'balanced' | 'aggressive' | 'defensive' | 'hive'
 
@@ -106,10 +106,10 @@ export interface Weights {
   CENTER: number
   CONTEST: number // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
   SEIZE: number // 상대 색 타일 위에 놓은 내 말 = 선점(TIP#2 "타일엔 주인이 없다")
-  FORK: number // 동시 위협(살아있는 위협 2개 이상) — 상대가 다 못 막음 = 주도권
+  FORK: number // 동시 위협(살아있는 위협 2개 이상), 상대가 다 못 막음 = 주도권
   attackMul: number // 내 말 라인/포크 점수 배율(공격성)
   defenseMul: number // 상대 말 라인/포크 점수 배율(수비성)
-  tileDev: number // 내 타일선(벌집 진행) 보상(벌집형). 기본 0 — 말 우선(known_issues)
+  tileDev: number // 내 타일선(벌집 진행) 보상(벌집형). 기본 0, 말 우선(known_issues)
 }
 
 const BASE_WEIGHTS: Weights = {
@@ -294,7 +294,7 @@ function contestBonus(board: Board, p: Player, w: Weights): number {
   return s
 }
 
-// 설명서 TIP#1 "허리 끊기"·TIP#2 "타일 선점" — me 관점, 반대칭.
+// 설명서 TIP#1 "허리 끊기"·TIP#2 "타일 선점", me 관점, 반대칭.
 function hiveContestTerm(board: Board, me: Player, w: Weights): number {
   return contestBonus(board, me, w) - contestBonus(board, opponent(me), w)
 }
@@ -310,7 +310,7 @@ function seizeScore(board: Board, me: Player, w: Weights): number {
   return s
 }
 
-// 내 타일선(벌집 진행) 점수 — 벌집형 성향(w.tileDev>0)에서만 작동. 기본 0이라 영향 없음.
+// 내 타일선(벌집 진행) 점수, 벌집형 성향(w.tileDev>0)에서만 작동. 기본 0이라 영향 없음.
 function tileDevScore(board: Board, p: Player): number {
   let s = 0
   for (const line of findLines(ownerTileMap(board, p), 3)) {
@@ -429,7 +429,7 @@ function relevantCells(board: Board, me: Player, supply: GameState['supplies'][P
 }
 
 // 다양한 후보를 생성한다. 핵심: 기존(특히 상대) 타일 위 말 = 선점/허리 끊기,
-// 타일 2개(①) = 벌집/영역 발전 — 게임 특색을 살린다. 여왕벌은 AI 가 쓰지 않는다(확장 모드 전용).
+// 타일 2개(①) = 벌집/영역 발전, 게임 특색을 살린다. 여왕벌은 AI 가 쓰지 않는다(확장 모드 전용).
 function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
   const allowed = allowedMoveTypes(state)
   if (allowed.length === 0) return []
@@ -455,7 +455,7 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
   // 말 배치 (② 또는 말만)
   for (const p of relevantCells(board, me, supply, cfg)) {
     if (cellAt(board, p) !== undefined) {
-      // 기존 타일 위 말(상대 타일이면 선점/허리 끊기) — 부차 타일은 최상위 1개(throwaway)
+      // 기존 타일 위 말(상대 타일이면 선점/허리 끊기), 부차 타일은 최상위 1개(throwaway)
       if (canTaP) {
         const t = tileSpots.find((ts) => !hexEquals(ts, p))
         if (t) add({ type: 'tileAndPiece', tile: t, piece: { at: p, kind: 'normal' } }, p)
@@ -468,7 +468,7 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
     }
   }
 
-  // 타일 2개 (①) — 상위 타일 + (다른 상위 타일 | T1 의 빈 이웃으로 선 잇기)
+  // 타일 2개 (①), 상위 타일 + (다른 상위 타일 | T1 의 빈 이웃으로 선 잇기)
   if (canTwo) {
     for (const t1 of tileSpots.slice(0, 4)) {
       const seconds: Hex[] = []
@@ -484,9 +484,9 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
 // ---- 승리/차단 (후보 캡과 무관하게 직접 셀 점유) ----------------------------
 
 // 셀에 내 일반 말을 놓는 **합법수**(validateMove 통과)를 반환. 없으면 null.
-// (승리·차단용 — 후보 생성/캡과 독립.) AI 는 여왕벌을 안 쓰므로, 잠긴 상대 벌집 칸처럼
+// (승리·차단용, 후보 생성/캡과 독립.) AI 는 여왕벌을 안 쓰므로, 잠긴 상대 벌집 칸처럼
 // 일반 말로 못 두는 칸은 null 을 돌려 호출 측이 그 승리/차단 칸을 건너뛰게 한다.
-// — 이 검증이 없으면 winningCells 가 (queen 가능성으로) 반환한 잠긴 벌집 칸을 normal 로
+//, 이 검증이 없으면 winningCells 가 (queen 가능성으로) 반환한 잠긴 벌집 칸을 normal 로
 //    두려다 applyMove 가 throw → vs AI 가 "생각 중"에서 멈추는 버그가 났다.
 function placementMove(state: GameState, cell: Hex, me: Player): Move | null {
   const allowed = allowedMoveTypes(state)
@@ -505,7 +505,7 @@ function placementMove(state: GameState, cell: Hex, me: Player): Move | null {
   return null
 }
 
-// 상대 즉시 승리 차단 — 위협 셀(winningCells, 캡 무관)을 내 말로 점유. 평가 최고 차단을 고른다.
+// 상대 즉시 승리 차단, 위협 셀(winningCells, 캡 무관)을 내 말로 점유. 평가 최고 차단을 고른다.
 function findBlock(state: GameState, me: Player, w: Weights): Move | null {
   const opp = opponent(me)
   const threats = winningCells(state.board, opp, state.supplies[opp])
@@ -625,7 +625,7 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
   const supply = state.supplies[me]
   const candidates = generateCandidates(state, cfg)
 
-  // 1) 즉시 승리 — 후보 캡과 무관하게 winningCells 로 확실히 찾는다(붐벼도 자기 승리수를 안 놓침)
+  // 1) 즉시 승리, 후보 캡과 무관하게 winningCells 로 확실히 찾는다(붐벼도 자기 승리수를 안 놓침)
   for (const cell of winningCells(board, me, supply)) {
     const m = placementMove(state, cell, me)
     if (m && isWinningMove(board, m, me)) return m
@@ -637,7 +637,7 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
     if (block) return block
   }
 
-  // 3) 빔 서치(여러 수 앞) — medium/hard. 상대 3목 등 한 수 너머의 위협을 본다.
+  // 3) 빔 서치(여러 수 앞), medium/hard. 상대 3목 등 한 수 너머의 위협을 본다.
   if (cfg.beamWidth > 0 && cfg.beamDepth > 1) {
     const searched = searchBestMove(state, cfg, rng, candidates)
     if (searched) return searched

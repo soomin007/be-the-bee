@@ -1,4 +1,4 @@
-// src/engine — 순수 TypeScript 규칙 엔진 (공개 API 배럴).
+// src/engine, 순수 TypeScript 규칙 엔진 (공개 API 배럴).
 //
 // 규칙(non-negotiable):
 //   - DOM/브라우저 전역 금지, src/ui import 금지
