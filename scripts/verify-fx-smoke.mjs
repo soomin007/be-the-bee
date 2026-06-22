@@ -8,8 +8,13 @@ const page = await browser.newPage({ viewport: { width: 1100, height: 820 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
+await page.evaluate(() => localStorage.setItem('be-the-bee/tutorial-seen', '1')) // 오버레이가 클릭 막지 않게
+await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board')
 
+// 훈수 토글은 '화면·설정' 아코디언 안 → 섹션 먼저 펼친다.
+const viewSec = page.locator('button.acc-head[data-act="sec:view"]')
+if (await viewSec.count()) await viewSec.click()
 // 훈수 모드 ON → 리치 칸이 buzz 클래스로 렌더된다(리치 상황이면).
 await page.locator('button[data-act="toggleHints"]').click()
 

@@ -415,10 +415,23 @@ export function mountGame(root: HTMLElement): void {
             <filter id="hiveGlow" x="-50%" y="-50%" width="200%" height="200%">
               <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f59e0b" flood-opacity="0.95" />
             </filter>
+            <filter id="pieceShadow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="1.6" />
+            </filter>
             <radialGradient id="wax-yellow" cx="38%" cy="32%" r="75%"></radialGradient>
             <radialGradient id="wax-brown" cx="38%" cy="32%" r="75%"></radialGradient>
             <radialGradient id="bee-yellow" cx="35%" cy="28%" r="72%"></radialGradient>
             <radialGradient id="bee-brown" cx="35%" cy="28%" r="72%"></radialGradient>
+            <!-- 말 입체감(테마 무관): 광원(왼쪽 위)에서 멀수록 어두워져 그림자가 오른쪽 아래에 맺힘 -->
+            <radialGradient id="bee-shade" cx="32%" cy="27%" r="88%">
+              <stop offset="0%" stop-color="#2a1c00" stop-opacity="0" />
+              <stop offset="48%" stop-color="#2a1c00" stop-opacity="0" />
+              <stop offset="100%" stop-color="#2a1c00" stop-opacity="0.38" />
+            </radialGradient>
+            <radialGradient id="bee-gloss" cx="33%" cy="26%" r="45%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            </radialGradient>
           </defs>
           <g class="content"></g>
           <g class="fx" pointer-events="none"></g>
@@ -1197,12 +1210,13 @@ export function mountGame(root: HTMLElement): void {
       // 바닥 그림자, 타일에 닿은 듯한 입체감(2.5D). 몸통보다 먼저(아래에) 그린다.
       // 광원이 왼쪽 위(하이라이트 위치)이므로 그림자는 오른쪽 아래로 치우친다.
       const shadow = document.createElementNS(SVGNS, 'ellipse')
-      shadow.setAttribute('cx', String(p.x + r * 0.28))
-      shadow.setAttribute('cy', String(p.y + r * 0.86))
-      shadow.setAttribute('rx', String(r * 0.9))
-      shadow.setAttribute('ry', String(r * 0.24))
+      shadow.setAttribute('cx', String(p.x + r * 0.3))
+      shadow.setAttribute('cy', String(p.y + r * 0.9))
+      shadow.setAttribute('rx', String(r * 0.98))
+      shadow.setAttribute('ry', String(r * 0.26))
       shadow.setAttribute('fill', '#000000')
-      shadow.setAttribute('opacity', '0.18')
+      shadow.setAttribute('opacity', '0.24')
+      shadow.setAttribute('filter', 'url(#pieceShadow)') // 부드러운 그림자 → 떠 있는 듯한 입체감
       shadow.style.pointerEvents = 'none'
       content.appendChild(shadow)
 
@@ -1254,19 +1268,37 @@ export function mountGame(root: HTMLElement): void {
         content.appendChild(s)
       }
 
-      // 윤기 하이라이트, 왼쪽 위 작은 흰 점(광택 = 2.5D 마무리). 줄무늬 위에 얹는다.
-      const spec = document.createElementNS(SVGNS, 'ellipse')
-      const sx = p.x - r * 0.34
-      const sy = p.y - r * 0.4
-      spec.setAttribute('cx', String(sx))
-      spec.setAttribute('cy', String(sy))
-      spec.setAttribute('rx', String(r * 0.26))
-      spec.setAttribute('ry', String(r * 0.16))
-      spec.setAttribute('fill', '#ffffff')
-      spec.setAttribute('opacity', '0.5')
-      spec.setAttribute('transform', `rotate(-32 ${sx} ${sy})`)
-      spec.style.pointerEvents = 'none'
-      content.appendChild(spec)
+      // 음영 터미네이터, 오른쪽 아래로 갈수록 어두워지는 구형감(줄무늬 위에 얹어 통째로 둥글게).
+      const shade = document.createElementNS(SVGNS, 'circle')
+      shade.setAttribute('cx', String(p.x))
+      shade.setAttribute('cy', String(p.y))
+      shade.setAttribute('r', String(r))
+      shade.setAttribute('fill', 'url(#bee-shade)')
+      shade.style.pointerEvents = 'none'
+      content.appendChild(shade)
+
+      // 윤기 하이라이트, 왼쪽 위 부드러운 광택(gloss) + 작은 선명한 코어(= 2.5D 마무리).
+      const gloss = document.createElementNS(SVGNS, 'ellipse')
+      const sx = p.x - r * 0.32
+      const sy = p.y - r * 0.38
+      gloss.setAttribute('cx', String(sx))
+      gloss.setAttribute('cy', String(sy))
+      gloss.setAttribute('rx', String(r * 0.42))
+      gloss.setAttribute('ry', String(r * 0.3))
+      gloss.setAttribute('fill', 'url(#bee-gloss)')
+      gloss.setAttribute('transform', `rotate(-32 ${sx} ${sy})`)
+      gloss.style.pointerEvents = 'none'
+      content.appendChild(gloss)
+
+      const core = document.createElementNS(SVGNS, 'ellipse')
+      core.setAttribute('cx', String(p.x - r * 0.36))
+      core.setAttribute('cy', String(p.y - r * 0.42))
+      core.setAttribute('rx', String(r * 0.13))
+      core.setAttribute('ry', String(r * 0.09))
+      core.setAttribute('fill', '#ffffff')
+      core.setAttribute('opacity', '0.92')
+      core.style.pointerEvents = 'none'
+      content.appendChild(core)
 
       // 직전 수의 말은 말 둘레 파란 링으로(타일의 칸 테두리와 구분)
       if (key === lastPieceKey) {

@@ -5,7 +5,10 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 2 })
 await page.evaluate(() => {}).catch(() => {})
 await page.goto(URL, { waitUntil: 'networkidle' })
-await page.evaluate(() => localStorage.clear())
+await page.evaluate(() => {
+  localStorage.clear()
+  localStorage.setItem('be-the-bee/tutorial-seen', '1') // 튜토리얼 오버레이가 보드 클릭을 막지 않게
+})
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board')
 
