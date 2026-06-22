@@ -3,6 +3,7 @@
 
 import {
   allowedMoveTypes,
+  analyzeMove,
   applyMove,
   createAi,
   createInitialState,
@@ -21,7 +22,7 @@ import {
   winningLine,
   withTile,
 } from '../engine/index'
-import type { Ai, Difficulty, GameState, Hex, Move, Persona, PieceKind, Player } from '../engine/index'
+import type { Ai, Difficulty, GameState, Hex, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
@@ -116,7 +117,15 @@ const MODE_SHORT: Record<Mode, string> = {
   vsAi: 'vs AI',
   watch: 'AI 관전',
 }
-const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움' }
+const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움', expert: '전문가' }
+
+// 전문가 AI 가 결정적 수를 둘 때 보여줄 해설(engine analyzeMove 코드 → 한국어).
+const EXPERT_NOTE: Record<MoveNote, string> = {
+  win: '5목 완성 — 승부를 냈어요.',
+  fork: '이중 위협(포크)이에요. 한쪽을 막아도 다른 쪽으로 5목 — 못 막습니다.',
+  block: '당신의 5목 리치를 막았어요.',
+  corridor: '당신의 벌집 회랑을 끊었어요(그 칸을 선점).',
+}
 const AI_DELAY_MS = 350
 
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
@@ -176,7 +185,7 @@ function defaultSettings(): RoomSettings {
 
 const SETTINGS_KEY = 'be-the-bee/settings'
 const MODES: Mode[] = ['hotseat', 'vsAi', 'watch']
-const DIFFS: Difficulty[] = ['easy', 'medium', 'hard']
+const DIFFS: Difficulty[] = ['easy', 'medium', 'hard', 'expert']
 const PERSONAS: Persona[] = ['balanced', 'aggressive', 'defensive', 'hive']
 const PERSONA_LABEL: Record<Persona, string> = {
   balanced: '균형',
@@ -312,6 +321,7 @@ export function mountGame(root: HTMLElement): void {
   let pieceKind: PieceKind = 'normal'
   let message = '' // 경고(잘못된 수 등), ⚠️ 빨강
   let notice = '' // 긍정 피드백(저장/불러오기 등), ✓ 초록, 다음 수에 사라짐
+  let aiComment = '' // 전문가 AI 의 결정적 수 해설, 다음 수에 사라짐
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   let infoModal: 'queen' | 'saves' | null = null // 팝업(여왕벌 설명/저장 보관함), 결과 모달보다 우선
@@ -349,6 +359,9 @@ export function mountGame(root: HTMLElement): void {
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === 'brown')
   const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
+  // 그 진영을 두는 AI 의 난이도(해설은 전문가일 때만). 관전은 색깔별, vsAi 는 단일.
+  const aiDifficultyFor = (turn: Player): Difficulty =>
+    settings.mode === 'watch' ? (turn === 'yellow' ? settings.difficultyYellow : settings.difficultyBrown) : settings.aiDifficulty
   const rebuildAi = (): void => {
     // 같은 시드면 두 AI 가 결정론적으로 같은 대국을 반복 → 시드를 진영별로 다르게.
     // 관전은 색깔별 난이도·성향, vsAi(갈색)는 단일 난이도(aiDifficulty)·성향.
@@ -874,6 +887,7 @@ export function mountGame(root: HTMLElement): void {
     state = applyMove(state, move)
     message = ''
     notice = ''
+    aiComment = '' // 새 수가 들어오면 이전 해설 지움(전문가 AI 수면 적용 후 다시 채운다)
     modalDismissed = false
     openMenu = null
     if (state.phase === 'finished' && state.result?.kind === 'win') {
@@ -931,7 +945,13 @@ export function mountGame(root: HTMLElement): void {
         // 적용 전 합법성 확인, 불법수면 applyAndAdvance 가 history 를 오염시키며 throw 해
         // "생각 중"에서 영구 정지하던 버그를 막는다(이론상 엔진이 합법수를 보장하지만 방어).
         if (!validateMove(state, mv).ok) throw new Error('AI returned an illegal move')
-        applyAndAdvance(mv)
+        // 전문가 난이도면 결정적 수에 해설을 단다(적용 전 상태로 분석).
+        const note = aiDifficultyFor(state.turn) === 'expert' ? analyzeMove(state, mv) : null
+        applyAndAdvance(mv) // 여기서 aiComment 가 비워지므로
+        if (note) {
+          aiComment = EXPERT_NOTE[note] // 적용 후 다시 채우고 한 번 더 렌더
+          render()
+        }
       } catch {
         message = 'AI가 둘 곳을 찾지 못했어요. 무르기나 새 게임을 눌러 주세요.'
         render()
@@ -1524,7 +1544,7 @@ export function mountGame(root: HTMLElement): void {
     )
     const diffMenu = menu(
       'difficulty',
-      (['easy', 'medium', 'hard'] as Difficulty[]).map(
+      DIFFS.map(
         (d) => `<button data-act="setDiff:${d}" class="${settings.aiDifficulty === d ? 'active' : ''}">${DIFF_LABEL[d]}</button>`,
       ),
     )
@@ -1645,6 +1665,7 @@ export function mountGame(root: HTMLElement): void {
         ${notice ? `<div class="notice">✓ ${notice}</div>` : ''}
       </div>
       ${reach}
+      ${aiComment ? `<div class="ai-comment">🐝 전문가: ${aiComment}</div>` : ''}
       <div class="supplies">
         <div>${supplyLine('yellow')}</div>
         <div>${supplyLine('brown')}</div>

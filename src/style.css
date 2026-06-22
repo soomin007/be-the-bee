@@ -589,6 +589,20 @@ svg.board.panning {
   color: #b8860b;
 }
 
+/* 전문가 AI 결정적 수 해설(말풍선) */
+.ai-comment {
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.7rem;
+  background: #fff7e0;
+  border: 1px solid #e9cf86;
+  border-left: 4px solid #f59e0b;
+  border-radius: 0.5rem;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: #6b4f14;
+  animation: modal-pop 0.25s ease;
+}
+
 @keyframes bee-pulse {
   0%,
   100% {

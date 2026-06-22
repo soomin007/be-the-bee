@@ -46,7 +46,7 @@ export interface Ai {
   chooseMove(state: GameState): Move
 }
 
-export type Difficulty = 'easy' | 'medium' | 'hard'
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert'
 
 // AI 성향, 같은 난이도라도 "어디에 가치를 두는가"가 달라진다(관전 대결 특색).
 //  balanced 균형 / aggressive 공격형 / defensive 수비형 / hive 벌집형.
@@ -71,6 +71,10 @@ function cfgFor(difficulty: Difficulty): Omit<Cfg, 'w'> {
   switch (difficulty) {
     case 'easy':
       return { useBlock: true, beamWidth: 0, beamDepth: 0, relevanceRadius: 2 }
+    case 'expert':
+      // 최상위: 강함은 탐색 깊이(검증된 레버)로 — hard(4)보다 한 단계 깊은 5수. 속도를 위해
+      // 빔은 좁힘(beam^depth). gapped-four 인식(EXPERT_WEIGHTS)을 더해 회랑/벌어진 4목도 본다.
+      return { useBlock: true, beamWidth: 12, beamDepth: 4, relevanceRadius: 2 }
     case 'hard':
       return { useBlock: true, beamWidth: 8, beamDepth: 4, relevanceRadius: 2 }
     case 'medium':
@@ -80,8 +84,11 @@ function cfgFor(difficulty: Difficulty): Omit<Cfg, 'w'> {
 }
 
 export function createAi(opts: AiOptions = {}): Ai {
-  const w: Weights = { ...makeWeights(opts.persona ?? 'balanced'), ...(opts.weights ?? {}) }
-  const cfg: Cfg = { ...cfgFor(opts.difficulty ?? 'medium'), w }
+  const difficulty = opts.difficulty ?? 'medium'
+  // 전문가는 난이도 오버레이를 먼저 깔고, 그 위에 명시적 weights 오버라이드를 덮는다.
+  const expertOverlay = difficulty === 'expert' ? EXPERT_WEIGHTS : {}
+  const w: Weights = { ...makeWeights(opts.persona ?? 'balanced'), ...expertOverlay, ...(opts.weights ?? {}) }
+  const cfg: Cfg = { ...cfgFor(difficulty), w }
   const rng = makeRng(opts.seed ?? 0xb17)
   return {
     chooseMove(state: GameState): Move {
@@ -92,6 +99,50 @@ export function createAi(opts: AiOptions = {}): Ai {
       }
     },
   }
+}
+
+// ---- 결정적 수 해설(전문가 난이도 UI 표시용) -------------------------------
+// 순수 분류만 한다(한국어 문구는 UI 가 매핑). 결정적인 수에만 코드를 주고, 아니면 null.
+export type MoveNote = 'win' | 'fork' | 'block' | 'corridor'
+
+function piecePlacedAt(m: Move): Hex | null {
+  return m.type === 'twoTiles' ? null : m.piece.at
+}
+
+/** before 상태에서 둔 move 가 "결정적"이면 분류 코드, 아니면 null. (전문가 해설용) */
+export function analyzeMove(before: GameState, move: Move): MoveNote | null {
+  const mover = before.turn
+  const opp = opponent(mover)
+  let after: GameState
+  try {
+    after = applyMove(before, move)
+  } catch {
+    return null
+  }
+  // 1) 승리(5목 완성)
+  if (after.phase === 'finished' && after.result?.kind === 'win' && after.result.winner === mover) return 'win'
+
+  const at = piecePlacedAt(move)
+  // 2) 포크(이중 위협): 다음 한 수로 5목 가능한 칸이 2개 이상 → 상대가 다 못 막음(4-3·4-4 콤보)
+  const myWins = winningCells(after.board, mover, after.supplies[mover])
+  if (myWins.length >= 2) return 'fork'
+
+  // 3) 차단: 상대가 직전에 즉시 승리 칸을 갖고 있었는데 이 수로 그 위협을 없앰
+  const oppWinsBefore = winningCells(before.board, opp, before.supplies[opp])
+  if (oppWinsBefore.length > 0) {
+    const oppWinsAfter = winningCells(after.board, opp, after.supplies[opp])
+    const occupiedThreat = at !== null && oppWinsBefore.some((c) => hexEquals(c, at))
+    if (occupiedThreat || oppWinsAfter.length < oppWinsBefore.length) return 'block'
+  }
+
+  // 4) 회랑 끊기/허리 끊기: 상대 색 타일이 이룬 3+ 타일선(곧 벌집 회랑) 위에 내 말을 올림
+  if (at !== null) {
+    for (const line of findLines(ownerTileMap(after.board, opp), 3)) {
+      if (line.cells.length >= 5) continue // 이미 잠긴 벌집
+      if (line.cells.some((k) => hexEquals(hexFromKey(k), at))) return 'corridor'
+    }
+  }
+  return null
 }
 
 // ---- 평가 가중치(튜닝 노브) + 성향 프로파일 --------------------------------
@@ -112,6 +163,7 @@ export interface Weights {
   defenseMul: number // 상대 말 라인/포크 점수 배율(수비성)
   tileDev: number // 내 타일선(벌집 진행) 보상(벌집형). 기본 0, 말 우선(known_issues)
   hiveDef: number // 임박한 벌집(열린 끝 길이-4 타일선) 견제. 반대칭(내 임박 - 상대 임박). 기본 0
+  gapFour: number // 벌어진 4목(X·XXX 등, 한 수면 5목) 인식. 반대칭. 기본 0(전문가 난이도만 켬)
 }
 
 const BASE_WEIGHTS: Weights = {
@@ -130,7 +182,12 @@ const BASE_WEIGHTS: Weights = {
   defenseMul: 1,
   tileDev: 0,
   hiveDef: 0,
+  gapFour: 0,
 }
+
+// 전문가 난이도 가중치 오버레이(성향 위에 덮어씀). gapped-four(벌어진 4목) 인식만 추가.
+// (hiveDef 류 타일-견제 항은 known_issues/A/B 대로 AI 를 약화시켜 제외. 강함은 탐색 깊이로.)
+const EXPERT_WEIGHTS: Partial<Weights> = { gapFour: 12000 }
 
 // 성향별 오버라이드. 즉시 승리/차단(pickMove·useBlock)은 모든 성향 공통이라 자멸하진 않고,
 // 가치 판단(공격 vs 수비 vs 벌집)만 달라져 관전 대결에 특색이 생긴다.
@@ -338,6 +395,47 @@ function imminentHives(board: Board, p: Player): number {
   return n
 }
 
+// 벌어진 4목(X·XXX, XX·XX, XXX·X): 5칸 창에 같은 말 4개 + 가운데(내부) 빈칸 1개.
+// findLines 는 연속 런만 봐서 이런 "한 수면 5목"을 놓친다 → 전문가 평가가 직접 센다.
+function gappedFours(board: Board, p: Player): number {
+  const seen = new Set<string>()
+  let n = 0
+  for (const h of pieceHexes(board)) {
+    const c0 = board[hexKey(h)]!
+    if (!c0.piece || c0.piece.owner !== p) continue
+    for (let a = 0; a < 3; a++) {
+      const dir = HEX_AXES[a]!
+      // h 가 창의 0..4 어느 위치든 될 수 있으니 5개 창을 모두 본다(중복은 seen 으로 제거).
+      for (let pos = 0; pos < 5; pos++) {
+        const sq = h.q - dir.q * pos
+        const sr = h.r - dir.r * pos
+        const wkey = `${a}:${sq},${sr}`
+        if (seen.has(wkey)) continue
+        seen.add(wkey)
+        let pieces = 0
+        let empties = 0
+        let interiorGap = false
+        let ok = true
+        for (let i = 0; i < 5; i++) {
+          const cell = board[`${sq + dir.q * i},${sr + dir.r * i}`]
+          if (cell && cell.piece) {
+            if (cell.piece.owner === p) pieces++
+            else {
+              ok = false
+              break
+            }
+          } else {
+            empties++
+            if (i >= 1 && i <= 3) interiorGap = true
+          }
+        }
+        if (ok && pieces === 4 && empties === 1 && interiorGap) n++
+      }
+    }
+  }
+  return n
+}
+
 function evaluate(board: Board, me: Player, w: Weights): number {
   const opp = opponent(me)
   const m = sideStats(board, me, w)
@@ -351,6 +449,13 @@ function evaluate(board: Board, me: Player, w: Weights): number {
   if (w.tileDev > 0) s += w.tileDev * (tileDevScore(board, me) - tileDevScore(board, opp))
   // 임박한 벌집 견제(반대칭): 상대가 곧 벌집을 완성할 상황이면 그만큼 감점 → 견제를 유도.
   if (w.hiveDef !== 0) s += w.hiveDef * (imminentHives(board, me) - imminentHives(board, opp))
+  // 전문가(gapFour>0): 오목/렌주 — 벌어진 4목(X·XXX, 한 수면 5목)을 위협으로 인식(반대칭).
+  // 연속 런만 보는 sideStats 가 놓치는 형태를 보강. 공격·수비 배율을 그대로 적용.
+  if (w.gapFour !== 0) {
+    const mg = gappedFours(board, me)
+    const og = gappedFours(board, opp)
+    s += w.gapFour * (w.attackMul * mg - w.defenseMul * og)
+  }
   s -= w.CENTER * centralityPenalty(board, me)
   return s
 }
