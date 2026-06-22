@@ -18,6 +18,7 @@
 | `verify-undo.mjs` | 무르기가 사람 차례로 돌아오는지(vs AI) |
 | `verify-replay.mjs` | 복기 진입/되감기/종료 후 실시간 복귀 |
 | `verify-queen-popup.mjs` | 여왕벌 토글 → 설명 팝업 → 취소(안 켜짐)/확인(켜짐)/끄기 즉시 |
+| `verify-fx-smoke.mjs` | 벌 테마 2단계 연출(꿀 차오름·붕붕) — 여러 수 둬도 에러 없음 + 모션 키프레임 존재 |
 
 ## shot-* (시각 미리보기 — PNG 저장)
 | 파일 | 산출물 |

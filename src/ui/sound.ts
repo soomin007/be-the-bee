@@ -28,6 +28,7 @@ export interface Sound {
   setSfxVolume(v: number): void
   place(player: Player): void
   win(): void
+  hive(): void
   alert(): void
   invalid(): void
   setBgmTrack(file: string): void
@@ -75,6 +76,33 @@ export function createSound(): Sound {
     osc.stop(t0 + dur + 0.03)
   }
 
+  // 날갯짓 버즈 — 톱니파 + 진폭 트레몰로(LFO)로 "붕" 하는 벌 날갯짓 느낌. 짧고 작게.
+  function buzz(freq: number, dur: number, when = 0, peak = 0.07): void {
+    if (sfxVolume <= 0) return
+    const c = audio()
+    if (!c) return
+    const t0 = c.currentTime + when
+    const osc = c.createOscillator()
+    const g = c.createGain()
+    const lfo = c.createOscillator()
+    const lfoGain = c.createGain()
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(freq, t0)
+    lfo.type = 'sine' // 날갯짓 트레몰로 ~52Hz
+    lfo.frequency.setValueAtTime(52, t0)
+    lfoGain.gain.setValueAtTime(peak * sfxVolume * 0.6, t0)
+    lfo.connect(lfoGain)
+    lfoGain.connect(g.gain)
+    g.gain.setValueAtTime(peak * sfxVolume * 0.45, t0)
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
+    osc.connect(g)
+    g.connect(c.destination)
+    osc.start(t0)
+    lfo.start(t0)
+    osc.stop(t0 + dur + 0.03)
+    lfo.stop(t0 + dur + 0.03)
+  }
+
   function bgmUrl(file: string): string {
     return `${import.meta.env.BASE_URL}bgm/${file}`
   }
@@ -94,12 +122,20 @@ export function createSound(): Sound {
     },
 
     place(player: Player): void {
-      tone(player === 'yellow' ? 660 : 392, 0.14, 'triangle', 0, 0.18)
-      tone(player === 'yellow' ? 990 : 588, 0.1, 'sine', 0.02, 0.06)
+      // 착지 띵 + 그 아래로 짧은 날갯짓 버즈를 깔아 "벌이 앉는" 느낌.
+      buzz(player === 'yellow' ? 232 : 196, 0.12, 0, 0.07)
+      tone(player === 'yellow' ? 660 : 392, 0.14, 'triangle', 0.03, 0.18)
+      tone(player === 'yellow' ? 990 : 588, 0.1, 'sine', 0.05, 0.06)
     },
     win(): void {
       const notes = [523.25, 659.25, 783.99, 1046.5]
       notes.forEach((f, i) => tone(f, 0.22, 'triangle', i * 0.1, 0.2))
+    },
+    hive(): void {
+      // 벌집 완성 — 꿀이 차오르는 따뜻한 상승음 + 낮은 바탕 스웰.
+      const notes = [392, 523.25, 659.25]
+      notes.forEach((f, i) => tone(f, 0.3, 'sine', i * 0.09, 0.13))
+      tone(196, 0.55, 'triangle', 0, 0.07)
     },
     alert(): void {
       tone(880, 0.12, 'sine', 0, 0.16)

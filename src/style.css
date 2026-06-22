@@ -446,6 +446,50 @@ svg.board.panning {
   animation: bee-pulse 1.1s ease-in-out infinite;
 }
 
+/* 리치 "붕붕" — 펄스(가시성) + 미세 회전 진동(벌이 떠는 느낌). 회전은 배율 무관. */
+@keyframes reach-buzz {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(1.4deg);
+  }
+  50% {
+    transform: rotate(-1deg);
+  }
+  75% {
+    transform: rotate(0.8deg);
+  }
+}
+
+.buzz {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bee-pulse 1.1s ease-in-out infinite, reach-buzz 0.18s linear infinite;
+}
+
+/* 벌집 완성 — 칸 바닥부터 꿀이 차오르며 반짝 사라진다 */
+@keyframes honey-rise {
+  0% {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+
+.honey-rise {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: honey-rise 0.7s ease-out forwards;
+}
+
 @keyframes piece-pop {
   from {
     transform: scale(0.2);

@@ -685,12 +685,36 @@ export function mountGame(root: HTMLElement): void {
     })
   }
 
+  // 벌집 완성 — 새로 잠긴 칸마다 꿀이 바닥부터 차오르는 연출(칸마다 시차).
+  function spawnHoneyRise(cells: Hex[]): void {
+    cells.forEach((h, i) => {
+      const poly = document.createElementNS(SVGNS, 'polygon')
+      poly.setAttribute('points', hexPolygonPoints(hexToPixel(h)))
+      poly.setAttribute('fill', theme.hiveFill)
+      poly.setAttribute('opacity', '0')
+      poly.setAttribute('class', 'honey-rise')
+      poly.style.animationDelay = `${i * 70}ms`
+      fx.appendChild(poly)
+      window.setTimeout(() => poly.remove(), 900 + i * 70)
+    })
+  }
+
+  // 직전 수로 새로 벌집(연속 타일선)에 편입된 칸들 — 꿀 차오름 대상.
+  function newlyHivedCells(before: GameState['board'], after: GameState['board']): Hex[] {
+    const had = new Set<string>()
+    for (const hv of detectHives(before)) for (const k of hv.cells) had.add(k)
+    const fresh: Hex[] = []
+    for (const hv of detectHives(after)) for (const k of hv.cells) if (!had.has(k)) fresh.push(hexFromKey(k))
+    return fresh
+  }
+
   function applyAndAdvance(move: Move): void {
     replayIndex = null // 실시간 수가 들어오면 복기 종료
     history = [...history, state]
     moveLog = [...moveLog, move]
     lastMove = move
     const mover = state.turn
+    const prevBoard = state.board
     state = applyMove(state, move)
     message = ''
     modalDismissed = false
@@ -701,6 +725,12 @@ export function mountGame(root: HTMLElement): void {
     } else {
       sound.place(mover)
       sparkleLastPiece(move, mover)
+      // 이 수로 벌집이 새로 완성/확장됐으면 꿀 차오름 + 완성음
+      const hived = newlyHivedCells(prevBoard, state.board)
+      if (hived.length > 0) {
+        spawnHoneyRise(hived)
+        sound.hive()
+      }
     }
     // 훈수 모드면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
     if (settings.hints && state.phase === 'playing') {
@@ -950,13 +980,14 @@ export function mountGame(root: HTMLElement): void {
       const opp = opponent(state.turn)
       dangerCells = winningCells(state.board, opp, state.supplies[opp])
       winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn])
+      // 리치 칸은 "붕붕" 모션(buzz = 펄스 + 미세 진동)으로 더 눈에 띄게.
       for (const c of dangerCells) {
         content.appendChild(
           makeHexPolygon(hexToPixel(c), {
             fill: 'none',
             stroke: '#dc2626',
             strokeWidth: 3.5,
-            cls: 'pulse',
+            cls: 'buzz',
             interactive: false,
           }),
         )
@@ -967,7 +998,7 @@ export function mountGame(root: HTMLElement): void {
             fill: 'none',
             stroke: '#f59e0b',
             strokeWidth: 3.5,
-            cls: 'pulse',
+            cls: 'buzz',
             interactive: false,
           }),
         )
