@@ -156,11 +156,22 @@ function coverScene(): string {
   return scene(hs, parts.join(''))
 }
 
-// 문구는 게임 설명서(PDF)와 동일하게. 1페이지는 제목·표지, 2페이지부터 규칙.
+// 예시용 ○/✕ 도장(벌집 유효/무효 비교 등). 디지털이라 그림으로 바로 보여 준다.
+function stamp(h: Hex, ok: boolean): string {
+  const c = px(h)
+  const r = S * 0.5
+  const color = ok ? '#16a34a' : '#dc2626'
+  return (
+    `<circle cx="${c.x}" cy="${c.y}" r="${r}" fill="${color}"/>` +
+    `<text x="${c.x}" y="${c.y}" text-anchor="middle" dominant-baseline="central" font-size="${(r * 1.25).toFixed(1)}" fill="#fff" font-weight="bold">${ok ? '✓' : '✕'}</text>`
+  )
+}
+
+// 디지털 변형이라 실물 설명서의 문구·예시 그림을 화면에 맞게 옮겼다. 1페이지는 제목·표지.
 const PAGES: Page[] = [
   {
     title: '🐝 Be the Bee',
-    body: '2인 · 약 10분 · 7세 이상<br><span class="tut-dim">넘겨서 게임 방법을 확인하세요</span>',
+    body: '노랑 vs 갈색, <b>1:1 추상전략 보드게임</b><br><span class="tut-dim">넘겨서 게임 방법을 확인하세요</span>',
     svg: coverScene,
   },
   {
@@ -174,11 +185,12 @@ const PAGES: Page[] = [
     },
   },
   {
-    title: '🧰 게임 준비',
+    title: '🧩 게임 시작',
     body:
-      '1. ‘가장 최근에 꿀을 먹어본 적 있는 사람(꿀이 들어간 음식도 포함)’이 선플레이어가 됩니다.<br>' +
-      '2. 선플레이어가 ‘노란색 육각 타일과 노란색 꿀벌 말’을, 남은 플레이어가 ‘갈색 육각 타일과 갈색 꿀벌 말’을 가집니다.<br>' +
-      '3. 두 플레이어 사이에 ‘노란색 육각 타일 1개’와 ‘갈색 육각 타일 1개’를 한 변이 맞닿은 상태로 내려놓습니다.',
+      '<b>노랑</b>과 <b>갈색</b>의 1:1 대결이에요.<br>' +
+      '• <b>노랑</b>이 먼저 두는 선플레이어예요.<br>' +
+      '• 시작하면 노란 타일 1개와 갈색 타일 1개가 한 변을 맞댄 채 놓여 있어요.<br>' +
+      '• 설정에서 <b>사람 vs 사람 · vs AI · AI 관전</b> 모드를 고를 수 있어요.',
     svg: () => {
       const hs = [hex(0, 0), hex(1, 0)]
       return scene(hs, tile(hex(0, 0), 'yellow', { delay: 0 }) + tile(hex(1, 0), 'brown', { delay: 200 }))
@@ -202,12 +214,18 @@ const PAGES: Page[] = [
   {
     title: '🍯 벌집',
     body:
-      '자신의 색깔 타일 <b>5개 이상을 일렬로</b> 연결하면, 해당 타일들이 하나의 <b>‘벌집’</b>이 됩니다.<br>' +
-      '기본적으로 말은 타일의 색깔과 상관없이 놓을 수 있습니다. 하지만 벌집이 만들어진 뒤에는 <b>해당 벌집의 주인만</b> 자신의 말을 올려놓을 수 있습니다. ' +
-      '<span class="tut-dim">(벌집이 완성되기 전에 놓인 말들은 색깔에 상관없이 그대로 두고 진행합니다.)</span>',
+      '같은 색 타일을 <b>일직선으로 5개 이상</b> 이으면 <b>벌집</b>이 돼요. ' +
+      '<span class="tut-dim">(오른쪽 ✕처럼 꺾이면 벌집이 아니에요.)</span><br>' +
+      '벌집이 생기면 그 위엔 <b>주인만</b> 말을 놓을 수 있어요. ' +
+      '<span class="tut-dim">(벌집이 되기 전에 놓인 말은 그대로 둬요.)</span>',
     svg: () => {
-      const r = row(5)
-      return scene(r, r.map((h, i) => tile(h, 'yellow', { glow: true, delay: i * 110 })).join(''))
+      // 왼쪽: 일직선 5 = 벌집(✓, 금색 글로우) / 오른쪽: 꺾인 5 = 벌집 아님(✕)
+      const straight = [hex(0, 0), hex(1, 0), hex(2, 0), hex(3, 0), hex(4, 0)]
+      const bent = [hex(8, 0), hex(9, 0), hex(10, 0), hex(10, 1), hex(10, 2)]
+      const sTiles = straight.map((h, i) => tile(h, 'yellow', { glow: true, delay: i * 80 })).join('')
+      const bTiles = bent.map((h, i) => tile(h, 'yellow', { delay: i * 80 })).join('')
+      const bounds = [...straight, ...bent, hex(2, -1), hex(9, -1)] // 도장 자리 포함
+      return scene(bounds, sTiles + bTiles + stamp(hex(2, -1), true) + stamp(hex(9, -1), false))
     },
   },
   {
@@ -236,10 +254,12 @@ const PAGES: Page[] = [
     },
   },
   {
-    title: '👑 여왕벌 (확장판)',
+    title: '✨ 확장 모드 (선택)',
     body:
-      '두 플레이어는 게임 중 <b>단 한 번씩</b> 꿀벌 말 대신 <b>여왕벌 말</b>을 사용할 수 있습니다. 여왕벌 말은 <b>모든 타일 위에</b> 놓을 수 있습니다. 심지어 <b>상대의 벌집 위에도</b>요!<br><br>' +
-      '여왕벌과 함께 Be the Bee의 진정한 주인이 되어보세요! 🐝',
+      '설정에서 켤 수 있는 <b>선택 모드</b>예요.<br><br>' +
+      '<b>👑 여왕벌 모드</b> — 게임 중 <b>딱 한 번</b>, 일반 말 대신 여왕벌을 <b>어떤 타일 위에도</b>(상대 벌집 위에도!) 놓을 수 있어요.<br><br>' +
+      '<b>♾️ 무한 모드</b> — 타일 개수 제한이 없어요. 타일 걱정 없이 오직 <b>말 5목</b>으로만 승부해요.<br><br>' +
+      '<b>이제 직접 해볼까요?</b> 🐝',
     svg: () => {
       const hs = [hex(0, 0), hex(1, 0)]
       return scene(hs, tile(hex(0, 0), 'yellow', { delay: 0 }) + tile(hex(1, 0), 'brown', { delay: 80 }) + queen(hex(0, 0), 'yellow', 220))
