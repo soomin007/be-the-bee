@@ -1008,15 +1008,14 @@ export function mountGame(root: HTMLElement): void {
 
     while (content.firstChild) content.removeChild(content.firstChild)
 
-    // 0) 옅은 배경 그리드(점선, 비인터랙티브)
+    // 0) 옅은 벌집 무늬 배경(은은한 honeycomb, 비인터랙티브). 솔리드 테두리 + 미세한 꿀빛 채움.
     for (const h of BG_HEXES) {
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
-          fill: 'none',
-          stroke: '#c9b88f',
-          strokeWidth: 0.6,
-          opacity: 0.3,
-          dash: true,
+          fill: '#fbf3de',
+          stroke: '#e3cf9c',
+          strokeWidth: 1,
+          opacity: 0.5,
           interactive: false,
         }),
       )

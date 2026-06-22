@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 꿀색 둥근 사각 배경 -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#f4c430"/>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="none" stroke="#caa017" stroke-width="2"/>
+  <!-- 더듬이 -->
+  <path d="M27 22 Q24 13 19 10" stroke="#3a2600" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <path d="M37 22 Q40 13 45 10" stroke="#3a2600" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <circle cx="19" cy="9" r="2.6" fill="#3a2600"/>
+  <circle cx="45" cy="9" r="2.6" fill="#3a2600"/>
+  <!-- 날개 -->
+  <ellipse cx="18" cy="30" rx="12" ry="8" fill="#ffffff" opacity="0.9" stroke="#3a2600" stroke-width="1.6" transform="rotate(-18 18 30)"/>
+  <ellipse cx="46" cy="30" rx="12" ry="8" fill="#ffffff" opacity="0.9" stroke="#3a2600" stroke-width="1.6" transform="rotate(18 46 30)"/>
+  <!-- 몸통 + 줄무늬 -->
+  <defs><clipPath id="b"><ellipse cx="32" cy="40" rx="17" ry="16"/></clipPath></defs>
+  <ellipse cx="32" cy="40" rx="17" ry="16" fill="#ffd23f" stroke="#3a2600" stroke-width="3"/>
+  <g clip-path="url(#b)">
+    <rect x="13" y="33" width="38" height="5.5" fill="#3a2600"/>
+    <rect x="13" y="44" width="38" height="5.5" fill="#3a2600"/>
+  </g>
+</svg>

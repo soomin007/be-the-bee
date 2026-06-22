@@ -43,6 +43,7 @@
 | `shot-watch.mjs` | 관전 패널(▶시작/⏸멈춤·양쪽 성향·속도) → `shots/panel-watch.png` |
 | `shot-accordion.mjs` | 설정 아코디언 접힘/펼침 → `shots/panel-accordion.png`·`panel-accordion-view.png` |
 | `shot-tutorial.mjs` | 튜토리얼 표지/진행/TIP → `shots/tutorial-cover.png`·`tutorial-play.png`·`tutorial-tip.png` |
+| `shot-og.mjs` | 공유 미리보기·아이콘 생성(dev 불필요) → `public/og-cover.png`(1200×630)·`public/apple-touch-icon.png` |
 
 ## 분석 도구 (Playwright 아님)
 | 파일 | 무엇 |

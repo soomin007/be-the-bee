@@ -14,7 +14,8 @@ async function clickCenter(loc) {
 }
 
 // vs AI 로 전환 → 사람 첫 수 → AI 가 갈색 한 수 (벌 두 색 확인)
-await clickCenter(page.locator('button[data-act="cycleMode"]'))
+await clickCenter(page.locator('button[data-act="menuMode"]'))
+await clickCenter(page.locator('button[data-act="setMode:vsAi"]'))
 await clickCenter(page.locator('svg.board polygon[opacity="0.22"]').first())
 await page.waitForSelector('svg.board polygon[stroke="#16a34a"]')
 await clickCenter(page.locator('svg.board polygon[stroke="#16a34a"]').first())
