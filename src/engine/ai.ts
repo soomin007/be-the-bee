@@ -48,8 +48,13 @@ export interface Ai {
 
 export type Difficulty = 'easy' | 'medium' | 'hard'
 
+// AI 성향 — 같은 난이도라도 "어디에 가치를 두는가"가 달라진다(관전 대결 특색).
+//  balanced 균형 / aggressive 공격형 / defensive 수비형 / hive 벌집형.
+export type Persona = 'balanced' | 'aggressive' | 'defensive' | 'hive'
+
 export interface AiOptions {
   difficulty?: Difficulty
+  persona?: Persona
   seed?: number
 }
 
@@ -59,9 +64,10 @@ interface Cfg {
   beamDepth: number
   noise: number
   relevanceRadius: number
+  w: Weights // 성향별 평가 가중치
 }
 
-function cfgFor(difficulty: Difficulty): Cfg {
+function cfgFor(difficulty: Difficulty): Omit<Cfg, 'w'> {
   switch (difficulty) {
     case 'easy':
       return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
@@ -74,7 +80,7 @@ function cfgFor(difficulty: Difficulty): Cfg {
 }
 
 export function createAi(opts: AiOptions = {}): Ai {
-  const cfg = cfgFor(opts.difficulty ?? 'medium')
+  const cfg: Cfg = { ...cfgFor(opts.difficulty ?? 'medium'), w: makeWeights(opts.persona ?? 'balanced') }
   const rng = makeRng(opts.seed ?? 0xb17)
   return {
     chooseMove(state: GameState): Move {
@@ -87,9 +93,26 @@ export function createAi(opts: AiOptions = {}): Ai {
   }
 }
 
-// ---- 평가 가중치(튜닝 노브) -------------------------------------------------
+// ---- 평가 가중치(튜닝 노브) + 성향 프로파일 --------------------------------
 
-const W = {
+export interface Weights {
+  OPEN_4: number
+  CLOSED_4: number
+  OPEN_3: number
+  CLOSED_3: number
+  OPEN_2: number
+  CLOSED_2: number
+  HIVE: number
+  CENTER: number
+  CONTEST: number // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
+  SEIZE: number // 상대 색 타일 위에 놓은 내 말 = 선점(TIP#2 "타일엔 주인이 없다")
+  FORK: number // 동시 위협(살아있는 위협 2개 이상) — 상대가 다 못 막음 = 주도권
+  attackMul: number // 내 말 라인/포크 점수 배율(공격성)
+  defenseMul: number // 상대 말 라인/포크 점수 배율(수비성)
+  tileDev: number // 내 타일선(벌집 진행) 보상(벌집형). 기본 0 — 말 우선(known_issues)
+}
+
+const BASE_WEIGHTS: Weights = {
   OPEN_4: 100000,
   CLOSED_4: 12000,
   OPEN_3: 2500,
@@ -98,10 +121,26 @@ const W = {
   CLOSED_2: 20,
   HIVE: 40,
   CENTER: 1,
-  CONTEST: 130, // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
-  SEIZE: 45, // 상대 색 타일 위에 놓은 내 말 = 선점(TIP#2 "타일엔 주인이 없다")
-  FORK: 10000, // 동시 위협(살아있는 위협 2개 이상) — 상대가 다 못 막음 = 주도권
-} as const
+  CONTEST: 130,
+  SEIZE: 45,
+  FORK: 10000,
+  attackMul: 1,
+  defenseMul: 1,
+  tileDev: 0,
+}
+
+// 성향별 오버라이드. 즉시 승리/차단(pickMove·useBlock)은 모든 성향 공통이라 자멸하진 않고,
+// 가치 판단(공격 vs 수비 vs 벌집)만 달라져 관전 대결에 특색이 생긴다.
+const PERSONA_OVERRIDES: Record<Persona, Partial<Weights>> = {
+  balanced: {},
+  aggressive: { attackMul: 1.45, defenseMul: 0.7, FORK: 16000 },
+  defensive: { attackMul: 0.8, defenseMul: 1.55, CONTEST: 260 },
+  hive: { HIVE: 320, tileDev: 32, attackMul: 0.9 },
+}
+
+function makeWeights(persona: Persona): Weights {
+  return { ...BASE_WEIGHTS, ...PERSONA_OVERRIDES[persona] }
+}
 
 const CENTER_HEX: Hex = hex(0, 0)
 const WIN_SCORE = 1e7
@@ -193,12 +232,12 @@ function openEnds(board: Board, line: Line<Player>): number {
   return ends
 }
 
-function runWeight(len: number, ends: number): number {
+function runWeight(len: number, ends: number, w: Weights): number {
   // 양끝이 다 막히면 5목으로 못 늘어남 → 거의 무가치(죽은 줄을 물고 늘어지지 않게).
   if (ends === 0) return len >= 4 ? 60 : 0
-  if (len >= 4) return ends >= 2 ? W.OPEN_4 : W.CLOSED_4
-  if (len === 3) return ends >= 2 ? W.OPEN_3 : W.CLOSED_3
-  if (len === 2) return ends >= 2 ? W.OPEN_2 : W.CLOSED_2
+  if (len >= 4) return ends >= 2 ? w.OPEN_4 : w.CLOSED_4
+  if (len === 3) return ends >= 2 ? w.OPEN_3 : w.CLOSED_3
+  if (len === 2) return ends >= 2 ? w.OPEN_2 : w.CLOSED_2
   return 0
 }
 
@@ -207,18 +246,18 @@ interface SideStats {
   threats: number // 살아있는 위협 수(열린 끝 있는 4목, 열린 3목)
 }
 
-function sideStats(board: Board, p: Player): SideStats {
+function sideStats(board: Board, p: Player, w: Weights): SideStats {
   let score = 0
   let threats = 0
   for (const line of findLines(ownerPieceMap(board, p), 2)) {
     const len = line.cells.length
     if (len >= 5) {
-      score += W.OPEN_4 * 10
+      score += w.OPEN_4 * 10
       threats += 2
       continue
     }
     const ends = openEnds(board, line)
-    score += runWeight(len, ends)
+    score += runWeight(len, ends, w)
     if (len >= 4 && ends >= 1) threats++
     else if (len === 3 && ends >= 2) threats++
   }
@@ -226,8 +265,8 @@ function sideStats(board: Board, p: Player): SideStats {
 }
 
 // 동시 위협(포크): 위협이 2개 이상이면 상대가 다 못 막는다 → 사실상 주도권/승리.
-function forkBonus(threats: number): number {
-  return threats >= 2 ? W.FORK * (threats - 1) : 0
+function forkBonus(threats: number, w: Weights): number {
+  return threats >= 2 ? w.FORK * (threats - 1) : 0
 }
 
 function centralityPenalty(board: Board, p: Player): number {
@@ -241,12 +280,12 @@ function centralityPenalty(board: Board, p: Player): number {
 
 // p 가 상대의 발전 타일선(길이 3·4, 곧 벌집) 위에 놓은 p 의 말 = 선점(허리 끊기) 보너스.
 // 벌집이 잠기기 전에 그 타일을 차지하면, 잠금 후에도 내 말이 남고 상대의 그 칸 사용을 막는다.
-function contestBonus(board: Board, p: Player): number {
+function contestBonus(board: Board, p: Player, w: Weights): number {
   const enemyTiles = ownerTileMap(board, opponent(p))
   let s = 0
   for (const line of findLines(enemyTiles, 3)) {
     if (line.cells.length >= 5) continue // 이미 벌집(잠김)
-    const weight = line.cells.length === 4 ? W.CONTEST : W.CONTEST * 0.5 // 4목 임박일수록 가치↑
+    const weight = line.cells.length === 4 ? w.CONTEST : w.CONTEST * 0.5 // 4목 임박일수록 가치↑
     for (const key of line.cells) {
       const piece = board[key]!.piece
       if (piece && piece.owner === p) s += weight
@@ -256,31 +295,43 @@ function contestBonus(board: Board, p: Player): number {
 }
 
 // 설명서 TIP#1 "허리 끊기"·TIP#2 "타일 선점" — me 관점, 반대칭.
-function hiveContestTerm(board: Board, me: Player): number {
-  return contestBonus(board, me) - contestBonus(board, opponent(me))
+function hiveContestTerm(board: Board, me: Player, w: Weights): number {
+  return contestBonus(board, me, w) - contestBonus(board, opponent(me), w)
 }
 
 // 상대 색 타일 위에 놓인 내 말 = 선점(주도권). 같은 색 타일 위 말은 중립. 반대칭.
-function seizeScore(board: Board, me: Player): number {
+function seizeScore(board: Board, me: Player, w: Weights): number {
   let s = 0
   for (const key of Object.keys(board)) {
     const cell = board[key]!
     if (!cell.piece || cell.piece.owner === cell.tile.owner) continue
-    s += cell.piece.owner === me ? W.SEIZE : -W.SEIZE
+    s += cell.piece.owner === me ? w.SEIZE : -w.SEIZE
   }
   return s
 }
 
-function evaluate(board: Board, me: Player): number {
+// 내 타일선(벌집 진행) 점수 — 벌집형 성향(w.tileDev>0)에서만 작동. 기본 0이라 영향 없음.
+function tileDevScore(board: Board, p: Player): number {
+  let s = 0
+  for (const line of findLines(ownerTileMap(board, p), 3)) {
+    const len = line.cells.length
+    s += len >= 5 ? 100 : len === 4 ? 30 : 10
+  }
+  return s
+}
+
+function evaluate(board: Board, me: Player, w: Weights): number {
   const opp = opponent(me)
-  const m = sideStats(board, me)
-  const o = sideStats(board, opp)
-  let s = m.score + forkBonus(m.threats) - (o.score + forkBonus(o.threats))
+  const m = sideStats(board, me, w)
+  const o = sideStats(board, opp, w)
+  // attackMul/defenseMul 로 공격성·수비성을 성향별로 기울인다.
+  let s = w.attackMul * (m.score + forkBonus(m.threats, w)) - w.defenseMul * (o.score + forkBonus(o.threats, w))
   const hs = totalHiveScores(board)
-  s += W.HIVE * (hs[me] - hs[opp])
-  s += hiveContestTerm(board, me)
-  s += seizeScore(board, me)
-  s -= W.CENTER * centralityPenalty(board, me)
+  s += w.HIVE * (hs[me] - hs[opp])
+  s += hiveContestTerm(board, me, w)
+  s += seizeScore(board, me, w)
+  if (w.tileDev > 0) s += w.tileDev * (tileDevScore(board, me) - tileDevScore(board, opp))
+  s -= w.CENTER * centralityPenalty(board, me)
   return s
 }
 
@@ -455,7 +506,7 @@ function placementMove(state: GameState, cell: Hex, me: Player): Move | null {
 }
 
 // 상대 즉시 승리 차단 — 위협 셀(winningCells, 캡 무관)을 내 말로 점유. 평가 최고 차단을 고른다.
-function findBlock(state: GameState, me: Player): Move | null {
+function findBlock(state: GameState, me: Player, w: Weights): Move | null {
   const opp = opponent(me)
   const threats = winningCells(state.board, opp, state.supplies[opp])
   if (threats.length === 0) return null
@@ -464,7 +515,7 @@ function findBlock(state: GameState, me: Player): Move | null {
   for (const cell of threats) {
     const m = placementMove(state, cell, me) // 이미 합법수만 반환(null 이면 못 막는 칸)
     if (!m) continue
-    const s = evaluate(resultBoard(state.board, m, me), me)
+    const s = evaluate(resultBoard(state.board, m, me), me, w)
     if (s > bestScore) {
       bestScore = s
       best = m
@@ -476,12 +527,12 @@ function findBlock(state: GameState, me: Player): Move | null {
 // ---- 빔 서치 (여러 수 앞) ---------------------------------------------------
 
 // 점수 종료(타일 소진) 리프 값: 점수 승은 5목 승의 절반쯤으로 평가.
-function scoreLeaf(state: GameState, me: Player): number {
+function scoreLeaf(state: GameState, me: Player, w: Weights): number {
   const r = state.result
   if (!r || r.kind !== 'score') return 0
   const diff = r.scores[me] - r.scores[opponent(me)]
   const sign = diff > 0 ? 1 : diff < 0 ? -1 : 0
-  return sign * (WIN_SCORE / 2) + diff * W.HIVE
+  return sign * (WIN_SCORE / 2) + diff * w.HIVE
 }
 
 // 후보를 1수 평가로 정렬해 상위 beamWidth개만 남긴다(분기 제한).
@@ -490,7 +541,7 @@ function beamCandidates(state: GameState, cfg: Cfg): Candidate[] {
   if (cfg.beamWidth <= 0 || cands.length <= cfg.beamWidth) return cands
   const me = state.turn
   return cands
-    .map((c) => ({ c, s: evaluate(resultBoard(state.board, c.move, me), me) }))
+    .map((c) => ({ c, s: evaluate(resultBoard(state.board, c.move, me), me, cfg.w) }))
     .sort((a, b) => b.s - a.s)
     .slice(0, cfg.beamWidth)
     .map((x) => x.c)
@@ -499,9 +550,9 @@ function beamCandidates(state: GameState, cfg: Cfg): Candidate[] {
 // negamax + 알파-베타. 반환값은 state.turn(둘 차례) 관점의 점수.
 function negamax(state: GameState, depth: number, alpha: number, beta: number, cfg: Cfg): number {
   const me = state.turn
-  if (depth <= 0) return evaluate(state.board, me)
+  if (depth <= 0) return evaluate(state.board, me, cfg.w)
   const cands = beamCandidates(state, cfg)
-  if (cands.length === 0) return evaluate(state.board, me)
+  if (cands.length === 0) return evaluate(state.board, me, cfg.w)
   const ply = cfg.beamDepth - depth // 빠른 승리 선호용
   let best = -Infinity
   for (const c of cands) {
@@ -513,7 +564,7 @@ function negamax(state: GameState, depth: number, alpha: number, beta: number, c
     }
     let value: number
     if (next.phase === 'finished') {
-      value = next.result?.kind === 'win' ? WIN_SCORE - ply : scoreLeaf(next, me)
+      value = next.result?.kind === 'win' ? WIN_SCORE - ply : scoreLeaf(next, me, cfg.w)
     } else if (next.turn === me) {
       value = negamax(next, depth - 1, alpha, beta, cfg) // 패스: 같은 사람 → 창 유지
     } else {
@@ -535,7 +586,7 @@ function searchBestMove(
 ): Move | null {
   const me = state.turn
   const roots = candidates
-    .map((c) => ({ move: c.move, s: evaluate(resultBoard(state.board, c.move, me), me) }))
+    .map((c) => ({ move: c.move, s: evaluate(resultBoard(state.board, c.move, me), me, cfg.w) }))
     .sort((a, b) => b.s - a.s)
     .slice(0, Math.max(cfg.beamWidth, 1))
 
@@ -550,7 +601,7 @@ function searchBestMove(
     }
     let val: number
     if (next.phase === 'finished') {
-      val = next.result?.kind === 'win' ? WIN_SCORE : scoreLeaf(next, me)
+      val = next.result?.kind === 'win' ? WIN_SCORE : scoreLeaf(next, me, cfg.w)
     } else if (next.turn === me) {
       val = negamax(next, cfg.beamDepth - 1, -Infinity, Infinity, cfg)
     } else {
@@ -582,7 +633,7 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
 
   // 2) 상대 즉시 승리 차단
   if (cfg.useBlock) {
-    const block = findBlock(state, me)
+    const block = findBlock(state, me, cfg.w)
     if (block) return block
   }
 
@@ -596,7 +647,7 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
   let ties: Move[] = []
   let bestScore = -Infinity
   for (const c of candidates) {
-    const s = evaluate(resultBoard(board, c.move, me), me)
+    const s = evaluate(resultBoard(board, c.move, me), me, cfg.w)
     if (s > bestScore + 1e-9) {
       bestScore = s
       ties = [c.move]

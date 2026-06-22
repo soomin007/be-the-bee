@@ -150,6 +150,48 @@ describe('AI: 잠긴 벌집 승리 칸에서 멈추지 않는다 (리치 오판 
   })
 })
 
+describe('AI 성향(persona)', () => {
+  const sig = (m: Move): string =>
+    m.type === 'twoTiles'
+      ? `2:${hexKey(m.first)}|${hexKey(m.second)}`
+      : m.type === 'tileAndPiece'
+        ? `t:${hexKey(m.tile)}|${hexKey(m.piece.at)}`
+        : `p:${hexKey(m.piece.at)}`
+
+  it('성향마다 합법수를 두고, 같은 국면에서 선택이 갈린다', () => {
+    // 전술 압박이 없는 조용한 초반 — 성향별 가치판단이 그대로 수 선택에 드러난다.
+    const board = build(
+      [
+        [hex(0, 0), 'brown'],
+        [hex(1, 0), 'brown'],
+        [hex(2, 0), 'brown'],
+        [hex(3, 0), 'brown'],
+      ],
+      [[hex(0, 0), 'brown']],
+    )
+    const state = makeState(board, 'brown')
+    const personas = ['balanced', 'aggressive', 'defensive', 'hive'] as const
+    const sigs = personas.map((persona) => {
+      const mv = createAi({ difficulty: 'medium', persona, seed: 3 }).chooseMove(state)
+      expect(validateMove(state, mv).ok).toBe(true)
+      return sig(mv)
+    })
+    // 네 성향이 전부 같은 수를 두지는 않는다(성향이 실제로 작동 — 벌집형은 타일 발전 등).
+    expect(new Set(sigs).size).toBeGreaterThan(1)
+  })
+
+  it('벌집형은 타일선(벌집) 발전을 균형형보다 선호한다(타일 2개 수)', () => {
+    // 빈 타일·프론티어가 넉넉한 초반 국면 — 벌집형은 ①(twoTiles)로 타일선을 깐다.
+    const tiles: Array<[ReturnType<typeof hex>, Player]> = []
+    for (let q = 0; q <= 3; q++) tiles.push([hex(q, 0), 'brown'])
+    const board = build(tiles, [[hex(0, 0), 'brown']])
+    const state = makeState(board, 'brown')
+    const hiveMove = createAi({ difficulty: 'medium', persona: 'hive', seed: 5 }).chooseMove(state)
+    expect(validateMove(state, hiveMove).ok).toBe(true)
+    expect(hiveMove.type).toBe('twoTiles')
+  })
+})
+
 describe('AI: 상대 즉시 승리 차단', () => {
   it('기존 타일 끝을 막는다', () => {
     // 노랑 말 0..3, 왼쪽 끝(-1,0)은 갈색 말로 이미 막힘 → 위협은 (4,0) 하나
