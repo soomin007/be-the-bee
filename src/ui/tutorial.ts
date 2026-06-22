@@ -136,10 +136,36 @@ interface Page {
 
 const row = (n: number, r = 0, q0 = 0): Hex[] => Array.from({ length: n }, (_, i) => hex(q0 + i, r))
 
+// 반경 R 의 벌집(육각형 군집) 표지 일러스트. 대각선 색 교차 + 벌 2마리.
+function coverScene(): string {
+  const hs: Hex[] = []
+  const parts: string[] = []
+  const R = 2
+  for (let q = -R; q <= R; q++) {
+    const r1 = Math.max(-R, -q - R)
+    const r2 = Math.min(R, -q + R)
+    for (let rr = r1; rr <= r2; rr++) {
+      const h = hex(q, rr)
+      hs.push(h)
+      const color: Color = (((q - rr) % 2) + 2) % 2 === 0 ? 'yellow' : 'brown'
+      parts.push(tile(h, color, { delay: (q + R + (rr + R)) * 45 }))
+    }
+  }
+  parts.push(bee(hex(0, 0), 'yellow', 720))
+  parts.push(bee(hex(1, -1), 'brown', 840))
+  return scene(hs, parts.join(''))
+}
+
+// 문구는 게임 설명서(PDF)와 동일하게. 1페이지는 제목·표지, 2페이지부터 규칙.
 const PAGES: Page[] = [
   {
-    title: '🐝 Be the Bee 에 오신 걸 환영해요!',
-    body: '<b>목표</b>는 간단해요. 같은 색 <b>말(꿀벌) 5개를 일렬로</b> 먼저 연결하면 그 줄의 주인, <b>벌집의 주인</b>이 되어 승리!',
+    title: '🐝 Be the Bee',
+    body: '2인 · 약 10분 · 7세 이상<br><span class="tut-dim">넘겨서 게임 방법을 확인하세요</span>',
+    svg: coverScene,
+  },
+  {
+    title: '🎯 게임 목표',
+    body: '상대보다 빠르게 타일 위로 자신의 <b>말 5개를 일렬로</b> 연결해서, <b>벌집의 주인</b>이 되세요!',
     svg: () => {
       const r = row(5)
       const tiles = r.map((h, i) => tile(h, 'yellow', { delay: i * 90 })).join('')
@@ -148,48 +174,60 @@ const PAGES: Page[] = [
     },
   },
   {
-    title: '시작은 타일 두 개',
-    body: '게임은 <b>노란색 타일 1개</b>와 <b>갈색 타일 1개</b>가 한 변을 맞댄 상태로 시작해요. <b>노랑</b>이 선플레이어(먼저 두는 쪽)예요.',
+    title: '🧰 게임 준비',
+    body:
+      '1. ‘가장 최근에 꿀을 먹어본 적 있는 사람(꿀이 들어간 음식도 포함)’이 선플레이어가 됩니다.<br>' +
+      '2. 선플레이어가 ‘노란색 육각 타일과 노란색 꿀벌 말’을, 남은 플레이어가 ‘갈색 육각 타일과 갈색 꿀벌 말’을 가집니다.<br>' +
+      '3. 두 플레이어 사이에 ‘노란색 육각 타일 1개’와 ‘갈색 육각 타일 1개’를 한 변이 맞닿은 상태로 내려놓습니다.',
     svg: () => {
       const hs = [hex(0, 0), hex(1, 0)]
-      return scene(hs, tile(hex(0, 0), 'yellow', { delay: 0 }) + tile(hex(1, 0), 'brown', { delay: 160 }))
+      return scene(hs, tile(hex(0, 0), 'yellow', { delay: 0 }) + tile(hex(1, 0), 'brown', { delay: 200 }))
     },
   },
   {
-    title: '내 턴에 할 수 있는 것',
-    body: '둘 중 <b>하나</b>를 골라요.<br>① 내 <b>타일 2개</b> 놓기<br>② 내 <b>타일 1개</b> + 원하는 타일 위에 <b>말 1개</b> 놓기<br><span class="tut-dim">노랑의 첫 턴만은 ②만 가능해요.</span>',
+    title: '🎮 게임 진행',
+    body:
+      '선플레이어부터 번갈아가며 ‘턴’을 진행합니다. 자신의 턴에 다음 중 하나의 행동만 할 수 있습니다.<br>' +
+      '① 자신의 <b>타일 2개</b> 내려놓기<br>' +
+      '② 자신의 <b>타일 1개</b>를 내려놓은 뒤, 원하는 타일 위에 <b>말 1개</b> 내려놓기<br>' +
+      '<span class="tut-dim">• 선플레이어의 가장 첫 번째 턴에는 ②번 행동만 할 수 있습니다.<br>' +
+      '• 모든 타일은 이미 놓여있는 타일과 최소 한 변이 맞닿은 상태로 놓아야 합니다.<br>' +
+      '• 더 이상 내려놓을 타일이 없는 플레이어는 ‘원하는 타일 위로 자신의 말 1개 내려놓기’만 할 수 있습니다.</span>',
     svg: () => {
-      // 오른쪽 칸에 타일을 깔고 그 위에 말을 얹는 ② 동작 표현
       const hs = [hex(0, 0), hex(1, 0), hex(2, 0)]
       const tiles = hs.map((h, i) => tile(h, 'yellow', { delay: i * 120 })).join('')
       return scene(hs, tiles + bee(hex(2, 0), 'yellow', 520))
     },
   },
   {
-    title: '타일은 “붙여서” 놓아요',
-    body: '새 타일은 항상 <b>이미 놓인 타일에 한 변 이상 붙여서</b> 놓아야 해요. <span class="tut-dim">점선 칸 = 놓을 수 있는 자리</span>',
-    svg: () => {
-      const solid = [hex(0, 0), hex(1, 0), hex(0, 1)]
-      const dashes = [hex(2, 0), hex(1, 1), hex(-1, 1)]
-      const tiles =
-        tile(hex(0, 0), 'yellow', { delay: 0 }) +
-        tile(hex(1, 0), 'brown', { delay: 90 }) +
-        tile(hex(0, 1), 'yellow', { delay: 180 })
-      const frontier = dashes.map((h) => tile(h, 'yellow', { dash: true })).join('')
-      return scene([...solid, ...dashes], frontier + tiles)
-    },
-  },
-  {
-    title: '벌집(Hive)',
-    body: '같은 색 타일 <b>5개를 일렬로</b> 연결하면 <b>벌집</b>이 돼요. 벌집이 생기면 그 위엔 <b>주인만</b> 말을 올릴 수 있어요. <span class="tut-dim">(벌집 전에 놓인 말은 그대로 둬요.)</span>',
+    title: '🍯 벌집',
+    body:
+      '자신의 색깔 타일 <b>5개 이상을 일렬로</b> 연결하면, 해당 타일들이 하나의 <b>‘벌집’</b>이 됩니다.<br>' +
+      '기본적으로 말은 타일의 색깔과 상관없이 놓을 수 있습니다. 하지만 벌집이 만들어진 뒤에는 <b>해당 벌집의 주인만</b> 자신의 말을 올려놓을 수 있습니다. ' +
+      '<span class="tut-dim">(벌집이 완성되기 전에 놓인 말들은 색깔에 상관없이 그대로 두고 진행합니다.)</span>',
     svg: () => {
       const r = row(5)
       return scene(r, r.map((h, i) => tile(h, 'yellow', { glow: true, delay: i * 110 })).join(''))
     },
   },
   {
-    title: '승리, 그리고 작은 전략',
-    body: '같은 색 <b>말 5개를 먼저 일렬로</b> 만들면 승리! <br>💡 벌집에 끌려가지 말고 <b>말 5개</b>에 집중하세요. 상대 타일 위에도 내 말을 놓아 <b>허리를 끊을</b> 수 있어요.',
+    title: '💡 초보자를 위한 전략 TIP',
+    body:
+      '<b>“상대의 허리를 끊어라!”</b><br>상대가 타일 3개를 일렬로 연결한 상황! 이때 내 타일로 양쪽을 모두 막는 것도 방법이지만, 벌집이 될 낌새가 보이는 상대 타일 위에 내 말을 놓아 미리 허리를 끊는 것도 좋은 전략일 수 있습니다.<br><br>' +
+      '<b>“벌집에는 주인이 있지만, 타일에는 주인이 없다!”</b><br>벌집이 완성되지 않은 이상, 말은 타일의 색과 상관없이 놓을 수 있습니다! 전략적으로 상대의 타일을 선점하여 주도권을 잡아볼까요?<br><br>' +
+      '<b>“벌집에 끌려가도 정신만 차리면 산다!”</b><br>Be the Bee는 타일이 아니라 말 5개를 일렬로 먼저 연결하면 승리하는 게임입니다. 상대가 벌집을 완성했더라도, 상대보다 빠르게 말 5개만 연결하면 당신의 승리입니다!',
+    svg: () => {
+      // 허리 끊기: 상대(갈색) 타일선 위에 내(노랑) 말을 선점
+      const hs = [hex(0, 0), hex(1, 0), hex(2, 0)]
+      const tiles = hs.map((h, i) => tile(h, 'brown', { delay: i * 110 })).join('')
+      return scene(hs, tiles + bee(hex(1, 0), 'yellow', 480))
+    },
+  },
+  {
+    title: '🏆 게임 종료',
+    body:
+      '다른 플레이어보다 먼저 자신의 색깔 <b>말 5개 이상을 일렬로</b> 연결하는 플레이어가 승자가 됩니다.<br><br>' +
+      '<b>승부가 나지 않는 경우</b><br>두 플레이어의 색깔 타일을 전부 사용했음에도 승부가 나지 않는 경우, 각자가 만든 <b>벌집의 개수와 길이</b>에 따라 승자를 결정합니다. 타일 5개로 이루어진 벌집은 1점이며, 연결된 타일이 하나씩 늘어날수록 1점씩 추가됩니다. 총점이 더 높은 플레이어가 승자가 되고, 동률인 경우 무승부로 종료됩니다.',
     svg: () => {
       const r = row(5)
       const tiles = r.map((h) => tile(h, 'yellow')).join('')
@@ -198,8 +236,10 @@ const PAGES: Page[] = [
     },
   },
   {
-    title: '여왕벌 (확장), 이제 시작해요!',
-    body: '확장 규칙: <b>여왕벌</b>은 게임당 <b>한 번</b>, <b>어떤 타일 위에도</b>, 상대 벌집 위에도!, 놓을 수 있어요. 설정에서 켤 수 있어요.<br><b>이제 직접 해볼까요?</b> 🐝',
+    title: '👑 여왕벌 (확장판)',
+    body:
+      '두 플레이어는 게임 중 <b>단 한 번씩</b> 꿀벌 말 대신 <b>여왕벌 말</b>을 사용할 수 있습니다. 여왕벌 말은 <b>모든 타일 위에</b> 놓을 수 있습니다. 심지어 <b>상대의 벌집 위에도</b>요!<br><br>' +
+      '여왕벌과 함께 Be the Bee의 진정한 주인이 되어보세요! 🐝',
     svg: () => {
       const hs = [hex(0, 0), hex(1, 0)]
       return scene(hs, tile(hex(0, 0), 'yellow', { delay: 0 }) + tile(hex(1, 0), 'brown', { delay: 80 }) + queen(hex(0, 0), 'yellow', 220))
