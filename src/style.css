@@ -550,6 +550,23 @@ svg.board.panning {
   color: #b8860b;
 }
 
+.help-tut {
+  width: 100%;
+  margin-bottom: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #eab308;
+  border-radius: 9px;
+  background: #fde68a;
+  color: #92660a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.help-tut:hover {
+  background: #fcd34d;
+}
+
 /* 복기 패널 등에서 쓰는 단순 힌트(박스 밖) */
 .hint {
   font-size: 0.8rem;

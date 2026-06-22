@@ -1009,7 +1009,6 @@ export function mountGame(root: HTMLElement): void {
     while (content.firstChild) content.removeChild(content.firstChild)
 
     // 0) 옅은 배경 그리드(점선, 비인터랙티브)
-    const occupied = new Set(Object.keys(viewState.board))
     for (const h of BG_HEXES) {
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
@@ -1068,7 +1067,6 @@ export function mountGame(root: HTMLElement): void {
         }),
       )
     }
-    void occupied
 
     // 4) 잠정 타일(미확정), 점선
     for (const prov of [provisionalFirst, provisionalTile]) {
@@ -1501,7 +1499,6 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
-        <button data-act="tutorial" title="게임 방법 다시 보기">📖 튜토리얼</button>
       </div>`
     const settingsSummary =
       settings.mode === 'hotseat'
@@ -1582,6 +1579,7 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     }
     const helpRows = `
+      <button class="help-tut" data-act="tutorial" title="게임 방법을 처음부터 다시 봐요">📖 튜토리얼 다시 보기</button>
       <div class="help-row"><span class="help-ico">🏆</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
       <div class="help-row"><span class="help-ico">🍯</span><span>타일은 기존 타일에 <b>붙여서</b> 놓기</span></div>
       <div class="help-row"><span class="help-ico">🖱️</span><span>휠 = 확대 · 드래그 = 이동</span></div>

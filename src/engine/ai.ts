@@ -60,9 +60,8 @@ export interface AiOptions {
 
 interface Cfg {
   useBlock: boolean
-  beamWidth: number // 0 = 1수 평가(현재). >0 = 빔 서치(미래)
+  beamWidth: number // 0 = 1수 평가(easy). >0 = 빔 서치 후보 폭
   beamDepth: number
-  noise: number
   relevanceRadius: number
   w: Weights // 성향별 평가 가중치
 }
@@ -70,12 +69,12 @@ interface Cfg {
 function cfgFor(difficulty: Difficulty): Omit<Cfg, 'w'> {
   switch (difficulty) {
     case 'easy':
-      return { useBlock: true, beamWidth: 0, beamDepth: 0, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 0, beamDepth: 0, relevanceRadius: 2 }
     case 'hard':
-      return { useBlock: true, beamWidth: 8, beamDepth: 4, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 8, beamDepth: 4, relevanceRadius: 2 }
     case 'medium':
     default:
-      return { useBlock: true, beamWidth: 6, beamDepth: 2, noise: 0, relevanceRadius: 2 }
+      return { useBlock: true, beamWidth: 6, beamDepth: 2, relevanceRadius: 2 }
   }
 }
 
@@ -341,7 +340,6 @@ function evaluate(board: Board, me: Player, w: Weights): number {
 
 interface Candidate {
   move: Move
-  at: Hex
 }
 
 function moveSig(m: Move): string {
@@ -442,11 +440,11 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
 
   const out: Candidate[] = []
   const seen = new Set<string>()
-  const add = (move: Move, at: Hex): void => {
+  const add = (move: Move): void => {
     const sig = moveSig(move)
     if (!seen.has(sig)) {
       seen.add(sig)
-      out.push({ move, at })
+      out.push({ move })
     }
   }
 
@@ -458,13 +456,13 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
       // 기존 타일 위 말(상대 타일이면 선점/허리 끊기), 부차 타일은 최상위 1개(throwaway)
       if (canTaP) {
         const t = tileSpots.find((ts) => !hexEquals(ts, p))
-        if (t) add({ type: 'tileAndPiece', tile: t, piece: { at: p, kind: 'normal' } }, p)
+        if (t) add({ type: 'tileAndPiece', tile: t, piece: { at: p, kind: 'normal' } })
       } else if (canPieceOnly) {
-        add({ type: 'pieceOnly', piece: { at: p, kind: 'normal' } }, p)
+        add({ type: 'pieceOnly', piece: { at: p, kind: 'normal' } })
       }
     } else if (canTaP) {
       // 프론티어: 타일 깔고 그 위에 말(선 확장)
-      add({ type: 'tileAndPiece', tile: p, piece: { at: p, kind: 'normal' } }, p)
+      add({ type: 'tileAndPiece', tile: p, piece: { at: p, kind: 'normal' } })
     }
   }
 
@@ -474,7 +472,7 @@ function generateCandidates(state: GameState, cfg: Cfg): Candidate[] {
       const seconds: Hex[] = []
       for (const t2 of tileSpots) if (!hexEquals(t1, t2)) seconds.push(t2)
       for (const n of hexNeighbors(t1)) if (cellAt(board, n) === undefined) seconds.push(n)
-      for (const t2 of seconds.slice(0, 3)) add({ type: 'twoTiles', first: t1, second: t2 }, t1)
+      for (const t2 of seconds.slice(0, 3)) add({ type: 'twoTiles', first: t1, second: t2 })
     }
   }
 
@@ -623,7 +621,6 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
   const me = state.turn
   const board = state.board
   const supply = state.supplies[me]
-  const candidates = generateCandidates(state, cfg)
 
   // 1) 즉시 승리, 후보 캡과 무관하게 winningCells 로 확실히 찾는다(붐벼도 자기 승리수를 안 놓침)
   for (const cell of winningCells(board, me, supply)) {
@@ -636,6 +633,9 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
     const block = findBlock(state, me, cfg.w)
     if (block) return block
   }
+
+  // 승리/차단으로 안 끝났을 때만 후보 생성(easy 의 승리·차단 턴에서 불필요한 연산 절약)
+  const candidates = generateCandidates(state, cfg)
 
   // 3) 빔 서치(여러 수 앞), medium/hard. 상대 3목 등 한 수 너머의 위협을 본다.
   if (cfg.beamWidth > 0 && cfg.beamDepth > 1) {
