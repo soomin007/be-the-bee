@@ -155,6 +155,13 @@ svg.board.panning {
   font-size: 0.85rem;
 }
 
+.notice {
+  margin-top: 0.45rem;
+  color: #15803d;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .supplies {
   font-size: 0.9rem;
   display: flex;

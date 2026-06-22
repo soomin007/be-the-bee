@@ -24,6 +24,7 @@ import type { Ai, Difficulty, GameState, Hex, Move, PieceKind, Player } from '..
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
+import { autoSave, hasSlot, loadAutoSave, loadSlot, saveSlot, type GameSnapshot } from './game-save'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -232,7 +233,8 @@ export function mountGame(root: HTMLElement): void {
   let replayTimer: number | null = null // 복기 자동 재생 타이머
   let draft: Draft | null = null
   let pieceKind: PieceKind = 'normal'
-  let message = ''
+  let message = '' // 경고(잘못된 수 등) — ⚠️ 빨강
+  let notice = '' // 긍정 피드백(저장/불러오기 등) — ✓ 초록, 다음 수에 사라짐
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   let infoModal: 'queen' | null = null // 설명 팝업(여왕벌 등) — 떠 있으면 결과 모달보다 우선
@@ -268,6 +270,28 @@ export function mountGame(root: HTMLElement): void {
     ai = settings.mode === 'hotseat' ? null : createAi({ difficulty: settings.aiDifficulty })
   }
   rebuildAi() // 불러온 모드가 vs AI/관전이면 AI 준비
+
+  // ---- 저장/불러오기(localStorage 기보) -------------------------------------
+  function snapshot(): GameSnapshot {
+    return { v: 1, state, history, moveLog, mode: settings.mode, savedAt: Date.now() }
+  }
+  function autoSaveNow(): void {
+    autoSave(snapshot())
+  }
+  // 스냅샷으로 현재 판을 통째로 교체(복기/연출 정리 포함). 모드는 settings 가 단일 소스.
+  function applySnapshot(s: GameSnapshot): void {
+    state = s.state
+    history = s.history
+    moveLog = s.moveLog
+    lastMove = moveLog.length > 0 ? moveLog[moveLog.length - 1]! : null
+    replayIndex = null
+    draft = null
+    message = ''
+    modalDismissed = false
+    openMenu = null
+    clearFx()
+    startTurn()
+  }
 
   root.innerHTML = `
     <div class="game">
@@ -717,6 +741,7 @@ export function mountGame(root: HTMLElement): void {
     const prevBoard = state.board
     state = applyMove(state, move)
     message = ''
+    notice = ''
     modalDismissed = false
     openMenu = null
     if (state.phase === 'finished' && state.result?.kind === 'win') {
@@ -738,6 +763,7 @@ export function mountGame(root: HTMLElement): void {
       if (winningCells(state.board, opp, state.supplies[opp]).length > 0) sound.alert()
     }
     startTurn()
+    autoSaveNow() // 매 수 자동 저장 → 새로고침해도 이어하기
     render()
     maybeScheduleAi()
   }
@@ -1331,6 +1357,8 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="cycleTheme" title="${theme.desc}">🎨 테마: ${theme.label}</button>
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
+        <button data-act="saveGame" title="지금 판을 저장해 둬요">💾 저장</button>
+        <button data-act="loadGame" ${hasSlot() ? '' : 'disabled'} title="저장한 판을 불러와요">📂 불러오기</button>
         <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
         <button data-act="new">새 게임</button>
       </div>`
@@ -1385,6 +1413,7 @@ export function mountGame(root: HTMLElement): void {
         <div class="status-header">${header}</div>
         <div class="instruction">${instruction}</div>
         ${message ? `<div class="message">⚠️ ${message}</div>` : ''}
+        ${notice ? `<div class="notice">✓ ${notice}</div>` : ''}
       </div>
       ${reach}
       <div class="supplies">
@@ -1543,10 +1572,12 @@ export function mountGame(root: HTMLElement): void {
             moveLog = moveLog.slice(0, -1) // history 와 보조 맞춤
           } while (history.length > 0 && aiControls(state.turn))
           message = ''
+          notice = ''
           lastMove = null
           modalDismissed = false
           openMenu = null
           startTurn()
+          autoSaveNow() // 무른 결과도 이어하기에 반영
         }
         break
       case 'closeModal':
@@ -1583,6 +1614,21 @@ export function mountGame(root: HTMLElement): void {
         applyThemeColors()
         break
       }
+      case 'saveGame':
+        saveSlot(snapshot())
+        notice = '현재 판을 저장했어요.'
+        break
+      case 'loadGame': {
+        const s = loadSlot()
+        if (s) {
+          clearAiTimer()
+          stopReplayTimer()
+          applySnapshot(s)
+          autoSaveNow()
+          notice = '저장한 판을 불러왔어요.'
+        }
+        break
+      }
       case 'toggleMusic':
         sound.toggleMusic()
         break
@@ -1616,9 +1662,11 @@ export function mountGame(root: HTMLElement): void {
         history = []
         moveLog = []
         message = ''
+        notice = ''
         lastMove = null
         modalDismissed = false
         startTurn()
+        autoSaveNow() // 새 게임도 이어하기 기준점으로 저장
         break
       default:
         return
@@ -1628,8 +1676,11 @@ export function mountGame(root: HTMLElement): void {
     maybeScheduleAi()
   }
 
+  // 진행 중이던 판이 있으면 자동 복원(이어하기). 없으면 새 게임으로 시작.
+  const resumed = loadAutoSave()
+  if (resumed) applySnapshot(resumed)
+  else startTurn()
   setInitialCamera()
-  startTurn()
   render()
-  maybeScheduleAi() // 불러온 모드가 관전이면 AI 가 바로 시작
+  maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
 }
