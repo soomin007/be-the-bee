@@ -155,10 +155,16 @@
           ].map(([x, y]) => new THREE.Vector2(x, y))
         }
 
-        // 현실 꿀벌: 머리(+z) · 가슴 · 배(-z, 줄무늬) · 날개 2쌍 · 다리 6 · 더듬이 2
-        function realBee() {
+        // 현실 꿀벌: 원판 + 머리(+z) · 가슴 · 배(-z, 줄무늬) · 날개 1쌍 · 다리 6 · 더듬이 2
+        const DISC = { yellow: '#d2a230', brown: '#6f3529' } // 진영 = 원판 색
+        function realBee(side) {
           const g = new THREE.Group()
-          const Y = 0.46 // 몸 중심 높이(타일 위에 다리로 섬)
+          // 원판(진영색) — 말은 원판 위에 선다("원판까지가 말", 색 구분용)
+          const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.14, 44), mat(DISC[side], 0.6))
+          disc.position.y = 0.29
+          disc.castShadow = disc.receiveShadow = true
+          g.add(disc)
+          const Y = 0.64 // 몸 중심 높이(원판 위로 떠서 다리로 섬)
 
           // 배(뒤, -z) — 줄무늬 회전체, 끝이 뾰족
           const abdomen = new THREE.Mesh(
@@ -200,16 +206,16 @@
             g.add(knob)
           }
 
-          // 다리 6개(가슴 아래 → 바깥·아래로 타일까지)
-          const legY = Y - 0.12
+          // 다리 6개(가슴 아래 → 바깥·아래로 원판 윗면(y=0.36)에 발끝이 닿게)
+          const legY = Y - 0.14
           const legs = [
-            [0.26, 0.35], // 앞다리: [안쪽 z, 바깥 z]
-            [0.1, 0.06],
-            [-0.04, -0.24],
+            [0.24, 0.46], // 앞다리: [안쪽 z, 바깥 발끝 z]
+            [0.08, 0.12],
+            [-0.06, -0.28],
           ]
           for (const dir of [-1, 1]) {
             for (const [zin, zout] of legs) {
-              g.add(limb([dir * 0.14, legY, zin], [dir * 0.4, 0.23, zout], 0.016, '#1c140a'))
+              g.add(limb([dir * 0.15, legY, zin], [dir * 0.5, 0.36, zout], 0.016, '#1c140a'))
             }
           }
 
@@ -233,8 +239,7 @@
             return m
           }
           for (const dir of [-1, 1]) {
-            g.add(wing([dir * 0.05, Y + 0.26, 0.14], [dir * 0.44, Y + 0.18, -0.5], 0.17)) // 앞날개(큼)
-            g.add(wing([dir * 0.05, Y + 0.22, 0.09], [dir * 0.34, Y + 0.15, -0.52], 0.12)) // 뒷날개(작음)
+            g.add(wing([dir * 0.05, Y + 0.26, 0.14], [dir * 0.44, Y + 0.18, -0.5], 0.17)) // 날개 1쌍(가슴 뿌리→꼬리로 퍼짐)
           }
           return g
         }
@@ -249,7 +254,7 @@
           const t = hexTile(TILE[side])
           t.position.set(x, 0, z)
           scene.add(t)
-          const bee = realBee()
+          const bee = realBee(side)
           bee.position.set(x, 0, z)
           bee.rotation.y = (x * 0.6) % 1.2 // 살짝씩 다른 방향
           scene.add(bee)
