@@ -64,6 +64,19 @@ Write the line-scanning function once and reuse it for both. Do not duplicate it
 - Keep the AI in `engine/ai.ts` behind a small interface so difficulty and
   strategy can be swapped without touching the rest of the engine.
 
+## UI 문구 규칙 (한국어, 사용자에게 보이는 모든 멘트)
+
+해설·코칭·안내 등 사용자에게 보이는 한국어 문구는 다음을 지킨다(코칭 멘트 `NOTE_TEXT` 포함).
+
+- **한글 사이 em dash(—) 금지.** 마침표·쉼표·줄바꿈으로 대신한다.
+- **쉬운 말만 쓴다.** 전문 용어(오목 "리치", 자작어 "회랑", 체스 "포크")는 금지하고 뜻을 풀어 쓴다:
+  - 리치 → "다음 한 수로 5목"
+  - 회랑 → "벌집을 만들려던 줄"
+  - 포크 → "두 곳을 동시에 노림"
+
+  게임 기본 용어 "5목"·"벌집"은 그대로 쓴다(튜토리얼에서 가르침).
+- **"이겨요/이겼어요" 대신 "승리"** 를 쓴다.
+
 ## Commands
 
 - `npm run dev`        — local dev server

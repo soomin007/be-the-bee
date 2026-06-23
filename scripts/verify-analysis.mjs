@@ -32,16 +32,16 @@ await page.locator('button[data-act="importGame"]').click()
 await page.waitForSelector('.replay-nav', { timeout: 4000 })
 const enteredReplay = (await page.locator('.replay-nav').count()) > 0
 
-// 2) 마지막 수(35수) → win 해설(✓, good)
+// 2) 마지막 수(35수) → win 해설(✓, good). 복기 해설은 보드 옆 board-notes 에 떠야 한다.
 await page.locator('button[data-act="replayLast"]').click()
 await page.waitForTimeout(80)
-const winText = (await page.locator('.coach-comment.good').first().textContent()) ?? ''
-const winOk = winText.includes('5목') // "5목 완성 — 승부를 냈어요!"
+const winText = (await page.locator('.board-notes .coach-comment.good').first().textContent()) ?? ''
+const winOk = winText.includes('승리') // "5목을 완성해 승리했어요."
 
 // 3) 한 수 뒤로(34수) → missBlock 해설(✗, bad)
 await page.locator('button[data-act="replayPrev"]').click()
 await page.waitForTimeout(80)
-const badText = (await page.locator('.coach-comment.bad').first().textContent()) ?? ''
+const badText = (await page.locator('.board-notes .coach-comment.bad').first().textContent()) ?? ''
 const blunderOk = badText.includes('막았어야') // missBlock: "…막았어야 했어요."
 
 // 4) 복기 종료 → 패널 "공유하기" 버튼이 BTB1 코드를 클립보드에 복사

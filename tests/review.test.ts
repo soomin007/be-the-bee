@@ -43,4 +43,11 @@ describe('reviewMove — 실제 기보 분석', () => {
   it('벌집을 완성한 수는 hive로 칭찬(예: 6수 AI 벌집)', () => {
     expect(reviewMove(states[5]!, moves[5]!)).toBe('hive')
   })
+
+  it('4목(다음 한 수로 5목)을 만든 수는 threat — 33수 노랑이 4목 완성', () => {
+    // 33수로 (0,-3)~(3,-3) 4목 → 승리칸 (4,-3) 하나 = 단일 위협(threat).
+    const note = reviewMove(states[32]!, moves[32]!)
+    expect(note).toBe('threat')
+    expect(notePolarity(note!)).toBe('good')
+  })
 })

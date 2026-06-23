@@ -122,15 +122,17 @@ const MODE_SHORT: Record<Mode, string> = {
 const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움', expert: '전문가' }
 
 // 수 해설 코드(engine reviewMove) → 한국어. 복기 해설·전문가 라이브 코칭 공용.
-// 쉬운 말로(오목 용어 "리치"·자작어 "회랑"·체스 용어 "포크" 안 씀). "5목"·"벌집"은 게임 기본 용어.
+// 문구 규칙(CLAUDE.md): 쉬운 말(오목 용어 "리치"·자작어 "회랑"·체스 용어 "포크" 금지, "5목"·"벌집"만
+// 게임 기본 용어). 한글 사이 em dash(—) 금지. "이겨요" 대신 "승리".
 const NOTE_TEXT: Record<MoveNote, string> = {
-  win: '5목 완성 — 이겼어요!',
-  fork: '두 곳을 동시에 노렸어요 — 상대가 다 막을 수 없어요(5목 자리 2개).',
+  win: '5목을 완성해 승리했어요.',
+  fork: '두 곳을 동시에 노렸어요. 상대가 다 막을 수 없어요(5목 자리 2개).',
+  threat: '다음 한 수로 5목을 노릴 수 있어요. 상대가 막아야 합니다.',
   block: '상대가 다음 한 수로 두려던 5목을 막았어요.',
   corridor: '상대가 벌집을 만들려던 줄을 끊었어요.',
   hive: '벌집을 완성해 점수를 얻었어요.',
-  missWin: '여기서 바로 5목으로 이길 수 있었어요 — 그 자리를 놓쳤어요.',
-  missBlock: '상대가 다음 한 수로 5목을 둘 수 있어요 — 막았어야 했어요.',
+  missWin: '여기서 바로 5목으로 승리할 수 있었어요. 그 자리를 놓쳤어요.',
+  missBlock: '상대가 다음 한 수로 5목을 둘 수 있어요. 막았어야 했어요.',
 }
 // 코드를 ✓(칭찬)/✗(지적) 아이콘과 함께 한 줄로. 색은 notePolarity 로 CSS 클래스(good/bad).
 function noteLine(note: MoveNote): string {
@@ -1374,16 +1376,28 @@ export function mountGame(root: HTMLElement): void {
     renderModal()
   }
 
-  // 인게임 메시지(경고/훈수 = 리치, 칭찬/지적 = 해설·코칭)를 보드 옆 — 행동 버튼의 반대쪽에 띄운다.
-  // 설정 패널이 아니라 시야 안(보드 위/아래)에 둬서 플레이 중 바로 보이게. 복기 중엔 비운다.
+  // 인게임 메시지(경고/훈수 = 위협, 칭찬/지적 = 해설·코칭)를 보드 옆, 행동 버튼의 반대쪽에 띄운다.
+  // 설정 패널이 아니라 시야 안(보드 위/아래)에 둬서 보드만 봐도 읽히게 한다.
+  //  - 복기 중: 지금 보는 수의 해설(모든 모드 공통).
+  //  - 실시간: 위협(리치) 경고/훈수 + AI 자기 해설 + 내 수 코칭(전문가 vs AI).
   function renderBoardNotes(): void {
     const parts: string[] = []
-    if (replayIndex === null) {
+    if (replayIndex !== null) {
+      const idx = replayIndex
+      if (idx >= 1) {
+        const tl = timeline()
+        const note = reviewMove(tl[idx - 1]!, moveLog[idx - 1]!)
+        const mover = tl[idx - 1]!.turn
+        if (note) {
+          parts.push(`<div class="coach-comment ${notePolarity(note)}">${PLAYER_LABEL[mover]}: ${noteLine(note)}</div>`)
+        }
+      }
+    } else {
       if (state.phase === 'playing') {
         if (winNowCells.length > 0) {
-          parts.push(`<div class="reach win">✨ 여기 두면 5목 완성 — 이겨요!</div>`)
+          parts.push(`<div class="reach win">✨ 여기 두면 5목 완성, 승리!</div>`)
         } else if (dangerCells.length > 0) {
-          parts.push(`<div class="reach danger">⚠️ 상대가 다음 한 수로 5목을 둘 수 있어요 — 막으세요!</div>`)
+          parts.push(`<div class="reach danger">⚠️ 상대가 다음 한 수로 5목을 둘 수 있어요. 막으세요!</div>`)
         }
       }
       if (aiComment) parts.push(`<div class="ai-comment">🐝 전문가: ${aiComment}</div>`)
@@ -1538,20 +1552,13 @@ export function mountGame(root: HTMLElement): void {
     const playing = replayTimer !== null
     const disPrev = idx <= 0 ? 'disabled' : ''
     const disNext = idx >= n ? 'disabled' : ''
-    // 이 수에 대한 해설(중요한 수·실수에만). 받은 기보든 끝난 판이든 동일하게 분석.
-    const note = idx >= 1 ? reviewMove(tl[idx - 1]!, moveLog[idx - 1]!) : null
-    const mover = idx >= 1 ? tl[idx - 1]!.turn : null
+    // 이 수의 해설(✓/✗)은 보드 옆 board-notes 에 띄운다(renderBoardNotes). 보드만 봐도 읽히게.
     panel.innerHTML = `
       <h2>🐝 복기</h2>
       <div class="status replay">
         <div class="status-header">복기 ${idx} / ${n} 수</div>
         <div class="instruction">${describeMove(idx)}</div>
       </div>
-      ${
-        note && mover
-          ? `<div class="coach-comment ${notePolarity(note)}">${PLAYER_LABEL[mover]}: ${noteLine(note)}</div>`
-          : ''
-      }
       <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       <div class="replay-nav">
         <button data-act="replayFirst" ${disPrev} title="처음으로">⏮</button>

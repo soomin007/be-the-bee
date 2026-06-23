@@ -148,11 +148,17 @@
   위협으로 센다(반대칭) — 연속 런만 보는 `sideStats` 의 사각을 메워 **벌집 회랑/스플릿 4목**을 봄.
 - **해설/복기 분석(`reviewMove`)**: 한 수를 코드로 분류 → UI 가 한국어로 매핑. winningCells 기반이라
   가짜 위협을 안 잡음. 평범한 수는 null(중요한 수·실수에만 반응).
-  - 잘한/결정적 수: `win·fork·block·corridor·hive`, 실수(블런더): `missWin`(이길 수 있었는데 안 둠)·
-    `missBlock`(상대 리치를 안 막음). 우선순위 win > missWin > missBlock > fork > block > corridor > hive.
-  - **복기 해설**: 복기에서 매 수의 코드를 ✓(칭찬)/✗(지적)로 표시 — 받은 공유 기보든 끝난 판이든 동일.
-  - **전문가 라이브 코칭**: vs AI(전문가)에서 내(사람) 수도 평가해 패널에 코멘트(AI 즉답에 안 지워지게
-    다음 내 수까지 유지). `analyzeMove` 는 `reviewMove` 의 "잘한 수만" 걸러 AI 자기 해설로 재사용.
+  - 잘한/결정적 수: `win·fork·threat·block·corridor·hive`, 실수(블런더): `missWin`(이길 수 있었는데
+    안 둠)·`missBlock`(상대 위협을 안 막음). 우선순위 win > missWin > missBlock > fork > block >
+    threat > corridor > hive.
+  - **`threat`(단일 위협 = 4목)**: 이 수로 승리칸이 1개 생김. winningCells 가 떨어진 4목(X·XXX 등)의
+    빈칸도 승리칸으로 잡으므로, 전문가 평가의 `gapFour`(떨어진 4목)까지 코칭이 자연히 포함한다.
+    fork/threat 는 "놓친 승리" 가드를 지나므로 항상 "이번 수로 새로 만든" 위협.
+  - **복기 해설**: 복기에서 매 수의 코드를 ✓(칭찬)/✗(지적)로 보드 옆(board-notes)에 표시. 받은 공유
+    기보든 끝난 판이든, 모든 모드에서 동일.
+  - **전문가 라이브 코칭**: vs AI(전문가)에서 내(사람) 수도 평가해 보드 옆에 코멘트(AI 즉답에 안 지워지게
+    다음 내 수까지 유지). `analyzeMove` 는 `reviewMove` 의 "잘한 수만"(win·fork·threat·block·corridor)
+    걸러 AI 자기 해설로 재사용.
 - **튜닝 일지(중요)**: 두 번 회귀했다.
   - 1차 `gapFour=9000 + hiveDef=1400`(+포크 이중계산)·빔10 → **0-8 hard 완패**. 범인 `hiveDef`
     (A/B 에서 확인된 "타일 쫓기" 함정 재현) + 포크 이중계산 과대평가.
