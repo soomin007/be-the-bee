@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Be the Bee — three.js 3D 토큰 시연</title>
+    <title>Be the Bee — 3D 벌(스타일 토큰 버전)</title>
     <style>
       html,
       body {
@@ -24,6 +24,26 @@
         border-radius: 999px;
         padding: 8px 16px;
         font-size: 14px;
+      }
+      #nav {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 14px;
+      }
+      #nav a {
+        color: #6e5114;
+        text-decoration: none;
+        background: #fff8e6cc;
+        border: 1px solid #e3cf9c;
+        border-radius: 999px;
+        padding: 6px 14px;
+        margin: 0 4px;
+      }
+      #nav a.on {
+        background: #6e5114;
+        color: #fff8e6;
       }
       #err {
         position: fixed;
@@ -47,7 +67,8 @@
     </script>
   </head>
   <body>
-    <div id="hint">드래그로 돌려보세요 · 휠로 확대 · 자동 회전 중</div>
+    <div id="nav"><a href="three-demo.html" class="on">① 스타일(회전체 2개)</a><a href="three-demo-real.html">② 현실 벌</a></div>
+    <div id="hint">드래그로 돌려보세요 · 휠로 확대 · 자동 회전 중 — 스타일(토큰) 버전</div>
     <div id="err">three.js 를 CDN 에서 불러오지 못했어요. 인터넷 연결을 확인하세요.</div>
     <script type="module">
       try {
@@ -98,71 +119,98 @@
           return g
         }
 
-        // 위에서 내려다본 벌(타일에 배를 대고 엎드린 모습) — 절차적 프리미티브로 조립.
-        //   머리(앞 +z) → 가슴 → 길쭉한 마디 배(노랑/검정 교대 = 줄무늬, 뒤로 갈수록 가늘게).
-        //   등 위로 납작한 흰 날개가 또렷이 펼쳐진다. SVG 게임 말과 같은 탑다운 방향, Blender 없이.
-        function blob(color, s, pos, opts = {}) {
-          const m = new THREE.Mesh(
-            new THREE.SphereGeometry(1, 28, 18),
-            new THREE.MeshStandardMaterial({
-              color,
-              roughness: opts.rough ?? 0.5,
-              metalness: 0.03,
-              transparent: opts.opacity != null,
-              opacity: opts.opacity ?? 1,
-            }),
-          )
-          m.scale.set(s[0], s[1], s[2]) // (폭 x · 높이 y(납작) · 길이 z)
-          m.position.set(pos[0], pos[1], pos[2])
-          m.castShadow = opts.shadow ?? true
-          return m
+        // 말 = 원판 위의 벌. 벌은 회전체 단 2개(머리 구 + 몸통 LatheGeometry)로만 만들고,
+        //   몸통 줄무늬는 그 표면에 텍스처로 "색칠"한다(마디 블롭 쌓기 금지). 진영 = 원판 색.
+
+        // 몸통 표면 줄무늬 텍스처(머리쪽=캔버스 위 → 꼬리=캔버스 아래): 노랑·흰띠·검정·노랑·어두운꼬리
+        function bodyTexture() {
+          const c = document.createElement('canvas')
+          c.width = 64
+          c.height = 256
+          const x = c.getContext('2d')
+          x.fillStyle = '#f6c414'
+          x.fillRect(0, 0, 64, 256) // 노랑 바탕
+          x.fillStyle = '#f1ede2'
+          x.fillRect(0, 36, 64, 46) // 넓은 흰 띠(머리쪽)
+          x.fillStyle = '#241200'
+          x.fillRect(0, 82, 64, 26) // 검정 줄 1
+          x.fillStyle = '#241200'
+          x.fillRect(0, 150, 64, 26) // 검정 줄 2
+          x.fillStyle = '#241200'
+          x.fillRect(0, 212, 64, 44) // 어두운 꼬리
+          const t = new THREE.CanvasTexture(c)
+          t.anisotropy = 4
+          return t
         }
 
-        // 말 = 고동색 원판(disc) 위에 칠한 벌. "원판까지가 말" 하나(실물 토큰 그대로).
-        function token(base) {
+        // 몸통 회전체 옆선(x=반지름, y=축 0=꼬리→1=머리쪽): 꼬리(점)→통통→머리쪽(좁아짐)
+        function bodyProfile() {
+          return [
+            [0.02, 0.0],
+            [0.16, 0.05],
+            [0.27, 0.14],
+            [0.34, 0.3],
+            [0.37, 0.5],
+            [0.36, 0.68],
+            [0.3, 0.82],
+            [0.18, 0.93],
+            [0.04, 1.0],
+          ].map(([x, y]) => new THREE.Vector2(x, y))
+        }
+
+        const TILE = { yellow: 0xf0c531, brown: 0x97581d }
+        const DISC = { yellow: '#d8a92b', brown: '#743f30' } // 진영 = 원판 색(실물 보드게임)
+
+        function token(side) {
           const g = new THREE.Group()
-          // 원판(고동색) — 타일 위에 얹힘
-          const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.64, 0.14, 40), mat('#6e3328', 0.6))
+          // 원판(진영색)
+          const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.14, 40), mat(DISC[side], 0.6))
           disc.position.y = 0.29
           disc.castShadow = disc.receiveShadow = true
           g.add(disc)
-          const Y = 0.46 // 벌 몸 중심 높이(원판 위)
-          // 벌 몸: 마디 5개 +z(머리)→-z(꼬리) = 노랑·검정·흰띠·노랑·어두운꼬리(레퍼런스 줄무늬)
-          const seg = [
-            [base, [0.34, 0.13, 0.15], 0.04],
-            ['#241603', [0.33, 0.12, 0.1], -0.1],
-            ['#eeeae0', [0.34, 0.13, 0.14], -0.22], // 넓은 흰 띠
-            [base, [0.28, 0.12, 0.11], -0.36],
-            ['#241603', [0.18, 0.11, 0.1], -0.47], // 어두운 꼬리
-          ]
-          for (const [c, s, z] of seg) g.add(blob(c, s, [0, Y, z], { rough: 0.45 }))
-          // 가슴(둥근 털북숭이, 어둑한 갈색)
-          g.add(blob('#5b3e1e', [0.3, 0.14, 0.2], [0, Y + 0.01, 0.22], { rough: 0.78 }))
-          // 머리(앞, 검정 — 작게)
-          g.add(blob('#19110a', [0.22, 0.12, 0.18], [0, Y, 0.44], { rough: 0.5 }))
-          // 흰 눈 2개(작은 점)
-          for (const dir of [-1, 1]) g.add(blob('#fff', [0.05, 0.05, 0.04], [dir * 0.11, Y + 0.05, 0.5], { rough: 0.2, shadow: false }))
+          const Y = 0.47
+          // 몸통 = 회전체 1개(Lathe) + 표면 줄무늬 텍스처. 눕혀서 길쭉·납작하게 원판 위에.
+          const body = new THREE.Mesh(
+            new THREE.LatheGeometry(bodyProfile(), 48),
+            new THREE.MeshStandardMaterial({ map: bodyTexture(), roughness: 0.5, metalness: 0.02 }),
+          )
+          body.castShadow = true
+          body.rotation.x = Math.PI / 2 // 길이축(원래 +y)을 +z(머리)로 눕힘
+          body.scale.set(1.2, 1.45, 0.42) // (폭 x · 길이 z · 높이 y(더 납작))
+          body.position.set(0, Y, -0.74) // 길이 가운데를 원판 중심에
+          g.add(body)
+          // 머리 = 회전체 1개(구), 어둑한 검정, 앞(+z) — 작게
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 28, 20), mat('#241606', 0.6))
+          head.scale.set(1, 0.78, 0.92)
+          head.position.set(0, Y + 0.01, 0.6)
+          head.castShadow = true
+          g.add(head)
+          // 흰 눈 2개(머리 표면에 색칠한 느낌 = 납작 원판 decal)
+          for (const dir of [-1, 1]) {
+            const eye = new THREE.Mesh(new THREE.CircleGeometry(0.045, 16), mat('#ffffff', 0.3))
+            eye.position.set(dir * 0.075, Y + 0.11, 0.66)
+            eye.rotation.x = -0.7
+            g.add(eye)
+          }
           return g
         }
 
-        // 작은 클러스터 배치(가운데 노랑, 둘레 노랑/갈색 교대) — 게임 화면과 닮게
-        const TILE = { yellow: 0xf0c531, brown: 0x97581d }
-        const BODY = { yellow: '#f4b40a', brown: '#e8771a' } // 진영색 벌 몸(노랑 / 주황 — SVG 게임 말과 동일)
+        // 작은 클러스터 배치(노랑/갈색 원판 교대) — 두 진영 다 보이게
         const layout = [
           [0, 0, 'yellow'],
           [1.6, 0, 'brown'],
           [-1.6, 0, 'brown'],
           [0.8, 1.4, 'yellow'],
           [-0.8, 1.4, 'yellow'],
-          [0.8, -1.4, 'yellow'],
-          [-0.8, -1.4, 'brown'],
+          [0.8, -1.4, 'brown'],
+          [-0.8, -1.4, 'yellow'],
         ]
         for (const [x, z, side] of layout) {
           const t = hexTile(TILE[side])
           t.position.set(x, 0, z)
           scene.add(t)
-          const tk = token(BODY[side])
-          tk.position.set(x, 0, z) // 원판+벌(token 내부에서 타일 위 y 위치 잡음)
+          const tk = token(side)
+          tk.position.set(x, 0, z)
           scene.add(tk)
         }
 

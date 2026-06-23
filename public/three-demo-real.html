@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Be the Bee — 3D 벌(현실 벌 버전)</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: radial-gradient(circle at 50% 30%, #fbf3de, #efe0bd);
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+      }
+      #hint {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        color: #6e5114;
+        background: #fff8e6cc;
+        border: 1px solid #e3cf9c;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-size: 14px;
+      }
+      #nav {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 14px;
+      }
+      #nav a {
+        color: #6e5114;
+        text-decoration: none;
+        background: #fff8e6cc;
+        border: 1px solid #e3cf9c;
+        border-radius: 999px;
+        padding: 6px 14px;
+        margin: 0 4px;
+      }
+      #nav a.on {
+        background: #6e5114;
+        color: #fff8e6;
+      }
+      #err {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: #8a3b1d;
+        padding: 24px;
+      }
+    </style>
+    <!-- 번들 없이 브라우저가 직접 three.js 를 CDN 에서 불러온다(public/ 정적 파일이라 Vite 가 손대지 않음). -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://esm.sh/three@0.160.0",
+          "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="nav"><a href="three-demo.html">① 스타일(회전체 2개)</a><a href="three-demo-real.html" class="on">② 현실 벌</a></div>
+    <div id="hint">드래그로 돌려보세요 · 휠로 확대 · 자동 회전 중 — 현실 벌 버전</div>
+    <div id="err">three.js 를 CDN 에서 불러오지 못했어요. 인터넷 연결을 확인하세요.</div>
+    <script type="module">
+      try {
+        const THREE = await import('three')
+        const { OrbitControls } = await import('three/addons/controls/OrbitControls.js')
+
+        const scene = new THREE.Scene()
+        const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100)
+        camera.position.set(1.8, 3.6, 5.2)
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+        renderer.setSize(innerWidth, innerHeight)
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+        renderer.shadowMap.enabled = true
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap
+        document.body.appendChild(renderer.domElement)
+
+        scene.add(new THREE.AmbientLight(0xfff4d8, 0.8))
+        const key = new THREE.DirectionalLight(0xfff1c0, 1.3)
+        key.position.set(-4, 7, 4)
+        key.castShadow = true
+        key.shadow.mapSize.set(2048, 2048)
+        scene.add(key)
+        const fill = new THREE.DirectionalLight(0xffffff, 0.35)
+        fill.position.set(5, 3, 2)
+        scene.add(fill)
+
+        const ground = new THREE.Mesh(new THREE.CircleGeometry(9, 48), new THREE.ShadowMaterial({ opacity: 0.2 }))
+        ground.rotation.x = -Math.PI / 2
+        ground.position.y = -0.001
+        ground.receiveShadow = true
+        scene.add(ground)
+
+        const mat = (c, rough = 0.55) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.05 })
+
+        function hexTile(color) {
+          const tile = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.22, 6), mat(color, 0.7))
+          tile.castShadow = tile.receiveShadow = true
+          tile.position.y = 0.11
+          return tile
+        }
+
+        // 두 점 a→b 를 잇는 가는 원기둥(다리·더듬이용)
+        function limb(a, b, radius, color, rough = 0.5) {
+          const va = new THREE.Vector3(...a)
+          const vb = new THREE.Vector3(...b)
+          const dir = new THREE.Vector3().subVectors(vb, va)
+          const len = dir.length()
+          const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.8, len, 8), mat(color, rough))
+          m.position.copy(va).add(vb).multiplyScalar(0.5)
+          m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize())
+          m.castShadow = true
+          return m
+        }
+
+        // 배(abdomen) 줄무늬 텍스처(앞=캔버스 위 → 꼬리=아래): 호박/검정 띠 교대
+        function abdomenTexture() {
+          const c = document.createElement('canvas')
+          c.width = 64
+          c.height = 256
+          const x = c.getContext('2d')
+          x.fillStyle = '#e3a52c'
+          x.fillRect(0, 0, 64, 256)
+          x.fillStyle = '#3a2410'
+          for (const y of [10, 70, 130, 190]) x.fillRect(0, y, 64, 26)
+          x.fillStyle = '#241608'
+          x.fillRect(0, 232, 64, 24) // 꼬리 끝 어둑
+          const t = new THREE.CanvasTexture(c)
+          t.anisotropy = 4
+          return t
+        }
+
+        // 배 옆선(x=반지름, y=축 0=꼬리(점)→1=앞(가슴쪽))
+        function abdomenProfile() {
+          return [
+            [0.02, 0.0],
+            [0.1, 0.05],
+            [0.2, 0.15],
+            [0.29, 0.33],
+            [0.33, 0.54],
+            [0.33, 0.74],
+            [0.28, 0.9],
+            [0.18, 1.0],
+          ].map(([x, y]) => new THREE.Vector2(x, y))
+        }
+
+        // 현실 꿀벌: 머리(+z) · 가슴 · 배(-z, 줄무늬) · 날개 2쌍 · 다리 6 · 더듬이 2
+        function realBee() {
+          const g = new THREE.Group()
+          const Y = 0.46 // 몸 중심 높이(타일 위에 다리로 섬)
+
+          // 배(뒤, -z) — 줄무늬 회전체, 끝이 뾰족
+          const abdomen = new THREE.Mesh(
+            new THREE.LatheGeometry(abdomenProfile(), 40),
+            new THREE.MeshStandardMaterial({ map: abdomenTexture(), roughness: 0.5, metalness: 0.02 }),
+          )
+          abdomen.rotation.x = Math.PI / 2 // 앞(y=1)→+z
+          abdomen.scale.set(1.0, 0.95, 0.78) // 폭·길이·높이(살짝 납작)
+          abdomen.position.set(0, Y, -0.82) // 앞이 가슴쪽(z≈-0.05), 꼬리 z≈-0.82
+          abdomen.castShadow = true
+          g.add(abdomen)
+
+          // 가슴(털북숭이 황갈색)
+          const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.27, 28, 22), mat('#9a6a2a', 0.92))
+          thorax.scale.set(1.05, 0.92, 1.0)
+          thorax.position.set(0, Y + 0.03, 0.12)
+          thorax.castShadow = true
+          g.add(thorax)
+
+          // 머리(앞, 어두움)
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 26, 20), mat('#2a2014', 0.6))
+          head.scale.set(1.05, 0.95, 0.9)
+          head.position.set(0, Y + 0.01, 0.5)
+          head.castShadow = true
+          g.add(head)
+          // 겹눈 2개(청동색, 머리 옆)
+          for (const dir of [-1, 1]) {
+            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 14), mat('#4a3618', 0.25))
+            eye.scale.set(0.7, 1.05, 0.85)
+            eye.position.set(dir * 0.14, Y + 0.04, 0.5)
+            g.add(eye)
+          }
+          // 더듬이 2개(굽은: 머리→앞위, 끝 점)
+          for (const dir of [-1, 1]) {
+            g.add(limb([dir * 0.06, Y + 0.06, 0.6], [dir * 0.13, Y + 0.16, 0.78], 0.012, '#1c140a'))
+            g.add(limb([dir * 0.13, Y + 0.16, 0.78], [dir * 0.1, Y + 0.2, 0.92], 0.011, '#1c140a'))
+            const knob = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), mat('#1c140a', 0.5))
+            knob.position.set(dir * 0.1, Y + 0.2, 0.92)
+            g.add(knob)
+          }
+
+          // 다리 6개(가슴 아래 → 바깥·아래로 타일까지)
+          const legY = Y - 0.12
+          const legs = [
+            [0.26, 0.35], // 앞다리: [안쪽 z, 바깥 z]
+            [0.1, 0.06],
+            [-0.04, -0.24],
+          ]
+          for (const dir of [-1, 1]) {
+            for (const [zin, zout] of legs) {
+              g.add(limb([dir * 0.14, legY, zin], [dir * 0.4, 0.23, zout], 0.016, '#1c140a'))
+            }
+          }
+
+          // 날개 2쌍(반투명, 가슴에서 등 위로 뒤·바깥. 앞날개 크고 뒷날개 작게)
+          const wingMat = new THREE.MeshStandardMaterial({
+            color: '#ffffff',
+            roughness: 0.15,
+            metalness: 0,
+            transparent: true,
+            opacity: 0.3,
+            side: THREE.DoubleSide,
+          })
+          for (const dir of [-1, 1]) {
+            const fore = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), wingMat)
+            fore.scale.set(0.17, 0.015, 0.46)
+            fore.position.set(dir * 0.26, Y + 0.22, -0.22)
+            fore.rotation.set(0.12, dir * 0.42, 0)
+            g.add(fore)
+            const hind = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), wingMat)
+            hind.scale.set(0.12, 0.015, 0.3)
+            hind.position.set(dir * 0.24, Y + 0.19, -0.36)
+            hind.rotation.set(0.1, dir * 0.55, 0)
+            g.add(hind)
+          }
+          return g
+        }
+
+        const TILE = { yellow: 0xf0c531, brown: 0x97581d }
+        const layout = [
+          [0, 0, 'yellow'],
+          [1.7, 0.2, 'brown'],
+          [-1.7, -0.2, 'brown'],
+        ]
+        for (const [x, z, side] of layout) {
+          const t = hexTile(TILE[side])
+          t.position.set(x, 0, z)
+          scene.add(t)
+          const bee = realBee()
+          bee.position.set(x, 0, z)
+          bee.rotation.y = (x * 0.6) % 1.2 // 살짝씩 다른 방향
+          scene.add(bee)
+        }
+
+        const controls = new OrbitControls(camera, renderer.domElement)
+        controls.target.set(0, 0.45, 0)
+        controls.enableDamping = true
+        controls.autoRotate = true
+        controls.autoRotateSpeed = 1.2
+        controls.minDistance = 2.5
+        controls.maxDistance = 14
+
+        addEventListener('resize', () => {
+          camera.aspect = innerWidth / innerHeight
+          camera.updateProjectionMatrix()
+          renderer.setSize(innerWidth, innerHeight)
+        })
+
+        function loop() {
+          controls.update()
+          renderer.render(scene, camera)
+          window.__rendered = true
+          requestAnimationFrame(loop)
+        }
+        loop()
+      } catch (e) {
+        console.error(e)
+        document.getElementById('err').style.display = 'flex'
+        document.getElementById('hint').style.display = 'none'
+      }
+    </script>
+  </body>
+</html>
