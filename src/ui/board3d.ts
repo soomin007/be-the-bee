@@ -33,6 +33,10 @@ export interface BoardHints {
   pieceTargets?: readonly Hex[] // 말 놓을 수 있는 타일(초록 링)
   provisional?: readonly Hex[] // 드래프트 진행 중 잠정 타일(고스트, 클릭 가능)
   lastPiece?: Hex | null // 직전에 놓인 말(파란 링)
+  lastTiles?: readonly Hex[] // 직전 수 타일(파란 테두리)
+  reachDanger?: readonly Hex[] // 상대 리치 = 한 수면 상대 5목(빨강, 펄스)
+  reachWin?: readonly Hex[] // 내 리치 = 한 수면 내 5목(주황, 펄스)
+  winLine?: readonly Hex[] // 승리한 5목 라인(초록, 펄스)
 }
 
 export interface Board3D {
@@ -347,6 +351,7 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   let centered = false // 첫 표시는 스냅(슬라이드-인 방지), 이후는 매 수마다 부드럽게 이동
   // 클릭 가능한 칸(보드 타일 + 프론티어/잠정 고스트). 레이캐스팅 대상.
   const clickable: { mesh: THREE.Mesh; hex: Hex }[] = []
+  const pulsers: THREE.Mesh[] = [] // 펄스 애니메이션(리치·승리 라인 링), loop 에서 깜빡임
 
   // 호버/선택 링(게임 색: 초록=둘 수 있음, 파랑=직전/선택). 6각 토러스를 타일 방향에 맞춘다:
   // 보드 면(XZ)에 눕히고(rotateX), 육각 꼭짓점을 pointy-top 타일에 맞추려 30° 보정(rotateY).
@@ -425,6 +430,14 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
     raf = requestAnimationFrame(loop)
     // 보드 중심을 목표로 부드럽게 슬라이드(매 수마다 확 점프하지 않게). 이미 도달했으면 정지.
     boardGroup.position.lerp(targetCenter, 0.12)
+    // 리치·승리 링 펄스(2D 의 buzz/pulse 모션에 대응) — 밝기 + 크기 깜빡임.
+    if (pulsers.length > 0) {
+      const p = 0.5 + 0.5 * Math.sin(performance.now() * 0.006)
+      for (const m of pulsers) {
+        ;(m.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.35 + 0.65 * p
+        m.scale.setScalar(1 + 0.14 * p)
+      }
+    }
     controls.update()
     renderer.render(scene, camera)
   }
@@ -439,6 +452,7 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
     for (const child of [...boardGroup.children]) disposeObject(child)
     boardGroup.clear()
     clickable.length = 0
+    pulsers.length = 0
     const keys = Object.keys(state.board)
     const hiveCells = new Set<string>()
     for (const hv of detectHives(state.board)) for (const c of hv.cells) hiveCells.add(c)
@@ -523,6 +537,23 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
       const { x, z } = at(hints.lastPiece)
       boardGroup.add(ringAt(x, z, 0x2563eb, TILE_TOP + 0.016))
     }
+    // 직전 수 타일 — 파란 링(2D 의 파란 점선 테두리에 대응)
+    for (const h of hints.lastTiles ?? []) {
+      const { x, z } = at(h)
+      boardGroup.add(ringAt(x, z, 0x2563eb, TILE_TOP + 0.016))
+    }
+    // 리치/승리 — 펄스 링(2D 색 그대로): 상대 리치=빨강, 내 리치=주황, 승리 5목=초록
+    const addPulse = (cells: readonly Hex[] | undefined, color: number, y: number): void => {
+      for (const h of cells ?? []) {
+        const { x, z } = at(h)
+        const r = ringAt(x, z, color, y)
+        boardGroup.add(r)
+        pulsers.push(r)
+      }
+    }
+    addPulse(hints.reachDanger, 0xdc2626, TILE_TOP + 0.022)
+    addPulse(hints.reachWin, 0xf59e0b, TILE_TOP + 0.024)
+    addPulse(hints.winLine, 0x16a34a, TILE_TOP + 0.026)
   }
 
   function dispose(): void {

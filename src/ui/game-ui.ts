@@ -1423,7 +1423,23 @@ export function mountGame(root: HTMLElement): void {
         const provisional: Hex[] = []
         if (provisionalFirst) provisional.push(provisionalFirst)
         if (provisionalTile) provisional.push(provisionalTile)
-        const hints: BoardHints = { frontier, pieceTargets, provisional, lastPiece: lpc }
+        const lastTiles = viewLast ? lastTileCells(viewLast) : []
+        const winLine: Hex[] = []
+        if (viewState.phase === 'finished' && viewState.result?.kind === 'win') {
+          const wl = winningLine(viewState.board)
+          if (wl) for (const wk of wl.cells) winLine.push(hexFromKey(wk))
+        }
+        // dangerCells/winNowCells 는 위 훈수 블록에서 채워짐(훈수 모드 아니면 빈 배열) → 2D 와 동일 조건.
+        const hints: BoardHints = {
+          frontier,
+          pieceTargets,
+          provisional,
+          lastPiece: lpc,
+          lastTiles,
+          reachDanger: dangerCells,
+          reachWin: winNowCells,
+          winLine,
+        }
         board3dApi.update(viewState, hints)
       }
     }
