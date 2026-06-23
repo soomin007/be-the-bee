@@ -26,9 +26,8 @@ import {
 } from './hex'
 import { opponent } from './types'
 import type { Board, GameState, Move, Player } from './types'
-import { cellAt, pieceAt, withPiece, withTile } from './state'
+import { cellAt, pieceAt, withPiece, withTile, LINE_LENGTH } from './state'
 import { findLines, type Line } from './lines'
-import { totalHiveScores } from './hive'
 import { detectWin } from './victory'
 import {
   allowedMoveTypes,
@@ -229,15 +228,6 @@ function makeRng(seed: number): () => number {
 
 // ---- 보드 보조 -------------------------------------------------------------
 
-function ownerPieceMap(board: Board, owner: Player): Map<string, Player> {
-  const m = new Map<string, Player>()
-  for (const key of Object.keys(board)) {
-    const piece = board[key]!.piece
-    if (piece && piece.owner === owner) m.set(key, owner)
-  }
-  return m
-}
-
 function ownerTileMap(board: Board, owner: Player): Map<string, Player> {
   const m = new Map<string, Player>()
   for (const key of Object.keys(board)) {
@@ -306,10 +296,10 @@ interface SideStats {
   threats: number // 살아있는 위협 수(열린 끝 있는 4목, 열린 3목)
 }
 
-function sideStats(board: Board, p: Player, w: Weights): SideStats {
+function sideStats(board: Board, lines: readonly Line<Player>[], w: Weights): SideStats {
   let score = 0
   let threats = 0
-  for (const line of findLines(ownerPieceMap(board, p), 2)) {
+  for (const line of lines) {
     const len = line.cells.length
     if (len >= 5) {
       score += w.OPEN_4 * 10
@@ -329,21 +319,19 @@ function forkBonus(threats: number, w: Weights): number {
   return threats >= 2 ? w.FORK * (threats - 1) : 0
 }
 
-function centralityPenalty(board: Board, p: Player): number {
+function centralityPenalty(phex: readonly Hex[]): number {
   let d = 0
-  for (const h of pieceHexes(board)) {
-    const cell = board[hexKey(h)]!
-    if (cell.piece && cell.piece.owner === p) d += hexDistance(h, CENTER_HEX)
-  }
+  for (const h of phex) d += hexDistance(h, CENTER_HEX)
   return d
 }
 
 // p 가 상대의 발전 타일선(길이 3·4, 곧 벌집) 위에 놓은 p 의 말 = 선점(허리 끊기) 보너스.
 // 벌집이 잠기기 전에 그 타일을 차지하면, 잠금 후에도 내 말이 남고 상대의 그 칸 사용을 막는다.
-function contestBonus(board: Board, p: Player, w: Weights): number {
-  const enemyTiles = ownerTileMap(board, opponent(p))
+// p 가 상대 타일선(enemyTileLines, 길이 3+) 위에 놓은 p 의 말 = 선점(허리 끊기) 보너스.
+// 설명서 TIP#1 "허리 끊기"·TIP#2 "타일 선점". evaluate 가 미리 만든 타일선을 받아 쓴다.
+function contestBonus(board: Board, enemyTileLines: readonly Line<Player>[], p: Player, w: Weights): number {
   let s = 0
-  for (const line of findLines(enemyTiles, 3)) {
+  for (const line of enemyTileLines) {
     if (line.cells.length >= 5) continue // 이미 벌집(잠김)
     const weight = line.cells.length === 4 ? w.CONTEST : w.CONTEST * 0.5 // 4목 임박일수록 가치↑
     for (const key of line.cells) {
@@ -354,26 +342,10 @@ function contestBonus(board: Board, p: Player, w: Weights): number {
   return s
 }
 
-// 설명서 TIP#1 "허리 끊기"·TIP#2 "타일 선점", me 관점, 반대칭.
-function hiveContestTerm(board: Board, me: Player, w: Weights): number {
-  return contestBonus(board, me, w) - contestBonus(board, opponent(me), w)
-}
-
-// 상대 색 타일 위에 놓인 내 말 = 선점(주도권). 같은 색 타일 위 말은 중립. 반대칭.
-function seizeScore(board: Board, me: Player, w: Weights): number {
-  let s = 0
-  for (const key of Object.keys(board)) {
-    const cell = board[key]!
-    if (!cell.piece || cell.piece.owner === cell.tile.owner) continue
-    s += cell.piece.owner === me ? w.SEIZE : -w.SEIZE
-  }
-  return s
-}
-
 // 내 타일선(벌집 진행) 점수, 벌집형 성향(w.tileDev>0)에서만 작동. 기본 0이라 영향 없음.
-function tileDevScore(board: Board, p: Player): number {
+function tileDevScore(tileLines: readonly Line<Player>[]): number {
   let s = 0
-  for (const line of findLines(ownerTileMap(board, p), 3)) {
+  for (const line of tileLines) {
     const len = line.cells.length
     s += len >= 5 ? 100 : len === 4 ? 30 : 10
   }
@@ -382,10 +354,10 @@ function tileDevScore(board: Board, p: Player): number {
 
 // 임박한 벌집 수: p 의 "정확히 4타일 + 열린(빈) 끝이 있어 한 수면 5타일 벌집" 타일선 개수.
 // hiveDef 항에서만 호출(기본 0이면 evaluate 가 건너뛴다).
-function imminentHives(board: Board, p: Player): number {
+function imminentHives(board: Board, tileLines: readonly Line<Player>[]): number {
   let n = 0
-  for (const line of findLines(ownerTileMap(board, p), 4)) {
-    if (line.cells.length !== 4) continue // 5+ 는 이미 벌집(별도 계산)
+  for (const line of tileLines) {
+    if (line.cells.length !== 4) continue // 4목만(3 이하·5+ 는 제외, 5+ 는 이미 벌집)
     const dir = HEX_AXES[line.axis]!
     const before = hexSubtract(hexFromKey(line.cells[0]!), dir)
     const after = hexAdd(hexFromKey(line.cells[line.cells.length - 1]!), dir)
@@ -397,12 +369,11 @@ function imminentHives(board: Board, p: Player): number {
 
 // 벌어진 4목(X·XXX, XX·XX, XXX·X): 5칸 창에 같은 말 4개 + 가운데(내부) 빈칸 1개.
 // findLines 는 연속 런만 봐서 이런 "한 수면 5목"을 놓친다 → 전문가 평가가 직접 센다.
-function gappedFours(board: Board, p: Player): number {
+function gappedFours(board: Board, phex: readonly Hex[], p: Player): number {
   const seen = new Set<string>()
   let n = 0
-  for (const h of pieceHexes(board)) {
-    const c0 = board[hexKey(h)]!
-    if (!c0.piece || c0.piece.owner !== p) continue
+  for (const h of phex) {
+    // phex 는 이미 p 의 말 위치만 담겨 있다(소유자 필터는 evaluate 의 1회 스캔에서 끝남).
     for (let a = 0; a < 3; a++) {
       const dir = HEX_AXES[a]!
       // h 가 창의 0..4 어느 위치든 될 수 있으니 5개 창을 모두 본다(중복은 seen 으로 제거).
@@ -438,25 +409,61 @@ function gappedFours(board: Board, p: Player): number {
 
 function evaluate(board: Board, me: Player, w: Weights): number {
   const opp = opponent(me)
-  const m = sideStats(board, me, w)
-  const o = sideStats(board, opp, w)
+  // 보드를 단 한 번만 훑어 owner 맵(말/타일)·말 위치·선점 점수를 동시에 모은다.
+  // (이전엔 헬퍼마다 ownerPieceMap/ownerTileMap/pieceHexes 로 노드당 풀스캔을 6~9회 반복했다.)
+  const pieceMe = new Map<string, Player>()
+  const pieceOpp = new Map<string, Player>()
+  const tileMe = new Map<string, Player>()
+  const tileOpp = new Map<string, Player>()
+  const phexMe: Hex[] = []
+  const phexOpp: Hex[] = []
+  let seize = 0 // 상대 색 타일 위 내 말 = +SEIZE, 상대 말 = −SEIZE(반대칭)
+  for (const key of Object.keys(board)) {
+    const cell = board[key]!
+    if (cell.tile.owner === me) tileMe.set(key, me)
+    else tileOpp.set(key, opp)
+    const piece = cell.piece
+    if (piece) {
+      if (piece.owner === me) {
+        pieceMe.set(key, me)
+        phexMe.push(hexFromKey(key))
+      } else {
+        pieceOpp.set(key, opp)
+        phexOpp.push(hexFromKey(key))
+      }
+      if (piece.owner !== cell.tile.owner) seize += piece.owner === me ? w.SEIZE : -w.SEIZE
+    }
+  }
+  // findLines 는 최대 run + minLen 필터 → 각 맵당 1회만 구해 공유한다.
+  const pieceLinesMe = findLines(pieceMe, 2)
+  const pieceLinesOpp = findLines(pieceOpp, 2)
+  const tileLinesMe = findLines(tileMe, 3)
+  const tileLinesOpp = findLines(tileOpp, 3)
+
+  const m = sideStats(board, pieceLinesMe, w)
+  const o = sideStats(board, pieceLinesOpp, w)
   // attackMul/defenseMul 로 공격성·수비성을 성향별로 기울인다.
   let s = w.attackMul * (m.score + forkBonus(m.threats, w)) - w.defenseMul * (o.score + forkBonus(o.threats, w))
-  const hs = totalHiveScores(board)
-  s += w.HIVE * (hs[me] - hs[opp])
-  s += hiveContestTerm(board, me, w)
-  s += seizeScore(board, me, w)
-  if (w.tileDev > 0) s += w.tileDev * (tileDevScore(board, me) - tileDevScore(board, opp))
+  // 벌집 점수 = 같은 색 타일 5+ 런(len−4)의 합. 미리 만든 타일선에서 바로 합산(detectHives 풀스캔 대체).
+  let hiveMe = 0
+  let hiveOpp = 0
+  for (const line of tileLinesMe) if (line.cells.length >= LINE_LENGTH) hiveMe += line.cells.length - (LINE_LENGTH - 1)
+  for (const line of tileLinesOpp) if (line.cells.length >= LINE_LENGTH) hiveOpp += line.cells.length - (LINE_LENGTH - 1)
+  s += w.HIVE * (hiveMe - hiveOpp)
+  // 허리 끊기(반대칭): 내가 상대 타일선 위 선점 − 상대가 내 타일선 위 선점.
+  s += contestBonus(board, tileLinesOpp, me, w) - contestBonus(board, tileLinesMe, opp, w)
+  s += seize
+  if (w.tileDev > 0) s += w.tileDev * (tileDevScore(tileLinesMe) - tileDevScore(tileLinesOpp))
   // 임박한 벌집 견제(반대칭): 상대가 곧 벌집을 완성할 상황이면 그만큼 감점 → 견제를 유도.
-  if (w.hiveDef !== 0) s += w.hiveDef * (imminentHives(board, me) - imminentHives(board, opp))
+  if (w.hiveDef !== 0) s += w.hiveDef * (imminentHives(board, tileLinesMe) - imminentHives(board, tileLinesOpp))
   // 전문가(gapFour>0): 오목/렌주 — 벌어진 4목(X·XXX, 한 수면 5목)을 위협으로 인식(반대칭).
   // 연속 런만 보는 sideStats 가 놓치는 형태를 보강. 공격·수비 배율을 그대로 적용.
   if (w.gapFour !== 0) {
-    const mg = gappedFours(board, me)
-    const og = gappedFours(board, opp)
+    const mg = gappedFours(board, phexMe, me)
+    const og = gappedFours(board, phexOpp, opp)
     s += w.gapFour * (w.attackMul * mg - w.defenseMul * og)
   }
-  s -= w.CENTER * centralityPenalty(board, me)
+  s -= w.CENTER * centralityPenalty(phexMe)
   return s
 }
 
