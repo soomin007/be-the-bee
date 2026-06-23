@@ -122,14 +122,15 @@ const MODE_SHORT: Record<Mode, string> = {
 const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움', expert: '전문가' }
 
 // 수 해설 코드(engine reviewMove) → 한국어. 복기 해설·전문가 라이브 코칭 공용.
+// 쉬운 말로(오목 용어 "리치"·자작어 "회랑"·체스 용어 "포크" 안 씀). "5목"·"벌집"은 게임 기본 용어.
 const NOTE_TEXT: Record<MoveNote, string> = {
-  win: '5목 완성 — 승부를 냈어요!',
-  fork: '이중 위협(포크)! 한쪽을 막아도 다른 쪽으로 5목 — 못 막습니다.',
-  block: '상대의 5목 리치를 막았어요.',
-  corridor: '상대 벌집 회랑을 끊었어요(그 칸을 선점).',
-  hive: '벌집을 완성/확장해 점수를 챙겼어요.',
-  missWin: '여기서 바로 5목으로 이길 수 있었어요! 그 자리를 놓쳤습니다.',
-  missBlock: '상대 5목 리치를 막지 않았어요 — 다음 한 수로 위험합니다.',
+  win: '5목 완성 — 이겼어요!',
+  fork: '두 곳을 동시에 노렸어요 — 상대가 다 막을 수 없어요(5목 자리 2개).',
+  block: '상대가 다음 한 수로 두려던 5목을 막았어요.',
+  corridor: '상대가 벌집을 만들려던 줄을 끊었어요.',
+  hive: '벌집을 완성해 점수를 얻었어요.',
+  missWin: '여기서 바로 5목으로 이길 수 있었어요 — 그 자리를 놓쳤어요.',
+  missBlock: '상대가 다음 한 수로 5목을 둘 수 있어요 — 막았어야 했어요.',
 }
 // 코드를 ✓(칭찬)/✗(지적) 아이콘과 함께 한 줄로. 색은 notePolarity 로 CSS 클래스(good/bad).
 function noteLine(note: MoveNote): string {
@@ -490,6 +491,7 @@ export function mountGame(root: HTMLElement): void {
           <g class="fx" pointer-events="none"></g>
         </svg>
         <div class="action-bar"></div>
+        <div class="board-notes"></div>
       </div>
     </div>
     <div class="modal-layer"></div>
@@ -501,6 +503,7 @@ export function mountGame(root: HTMLElement): void {
   const panel = root.querySelector('.panel') as HTMLElement
   const boardWrap = root.querySelector('.board-wrap') as HTMLElement
   const actionBar = root.querySelector('.action-bar') as HTMLElement
+  const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
 
   // 행동 바(턴 안내+①②)를 보드 위/아래로, CSS order 로만 전환(DOM 순서는 유지).
@@ -1367,7 +1370,28 @@ export function mountGame(root: HTMLElement): void {
 
     renderPanel()
     renderActionBar()
+    renderBoardNotes()
     renderModal()
+  }
+
+  // 인게임 메시지(경고/훈수 = 리치, 칭찬/지적 = 해설·코칭)를 보드 옆 — 행동 버튼의 반대쪽에 띄운다.
+  // 설정 패널이 아니라 시야 안(보드 위/아래)에 둬서 플레이 중 바로 보이게. 복기 중엔 비운다.
+  function renderBoardNotes(): void {
+    const parts: string[] = []
+    if (replayIndex === null) {
+      if (state.phase === 'playing') {
+        if (winNowCells.length > 0) {
+          parts.push(`<div class="reach win">✨ 여기 두면 5목 완성 — 이겨요!</div>`)
+        } else if (dangerCells.length > 0) {
+          parts.push(`<div class="reach danger">⚠️ 상대가 다음 한 수로 5목을 둘 수 있어요 — 막으세요!</div>`)
+        }
+      }
+      if (aiComment) parts.push(`<div class="ai-comment">🐝 전문가: ${aiComment}</div>`)
+      if (coachNote !== null && settings.mode === 'vsAi' && settings.aiDifficulty === 'expert') {
+        parts.push(`<div class="coach-comment ${notePolarity(coachNote)}">🧑‍🏫 내 수: ${noteLine(coachNote)}</div>`)
+      }
+    }
+    boardNotes.innerHTML = parts.join('')
   }
 
   // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
@@ -1676,15 +1700,6 @@ export function mountGame(root: HTMLElement): void {
         </div>`
     }
 
-    let reach = ''
-    if (state.phase === 'playing') {
-      if (winNowCells.length > 0) {
-        reach = `<div class="reach win">✨ ${PLAYER_LABEL[state.turn]} 리치! 여기 두면 승리</div>`
-      } else if (dangerCells.length > 0) {
-        reach = `<div class="reach danger">⚠️ ${PLAYER_LABEL[opponent(state.turn)]} 리치! 다음 한 수로 5목! 막으세요</div>`
-      }
-    }
-
     const trackOpts = BGM_TRACKS.map(
       (t, i) => `<option value="${i}" ${i === settings.bgmTrack ? 'selected' : ''}>${t.title}</option>`,
     ).join('')
@@ -1729,13 +1744,6 @@ export function mountGame(root: HTMLElement): void {
         ${message ? `<div class="message">⚠️ ${message}</div>` : ''}
         ${notice ? `<div class="notice">✓ ${notice}</div>` : ''}
       </div>
-      ${reach}
-      ${aiComment ? `<div class="ai-comment">🐝 전문가: ${aiComment}</div>` : ''}
-      ${
-        coachNote !== null && settings.mode === 'vsAi' && settings.aiDifficulty === 'expert'
-          ? `<div class="coach-comment ${notePolarity(coachNote)}">🧑‍🏫 내 수: ${noteLine(coachNote)}</div>`
-          : ''
-      }
       <div class="supplies">
         <div>${supplyLine('yellow')}</div>
         <div>${supplyLine('brown')}</div>
