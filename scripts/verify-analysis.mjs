@@ -58,25 +58,35 @@ const shareCopyOk = typeof copied === 'string' && copied.startsWith('BTB1:')
 await page.locator('.panel button[data-act="undo"]').click()
 await page.waitForTimeout(80)
 const reachText = (await page.locator('.board-notes .reach').first().textContent().catch(() => '')) ?? ''
-const reachInGameOk = reachText.includes('5목') // "✨ 여기 두면 5목 완성 — 이겨요!"
+const reachInGameOk = reachText.includes('5목') // "✨ 여기 두면 5목 완성, 승리!"
 
-// 6) 위치: 인게임 메시지는 행동 버튼의 반대쪽(order 부호 반대). 행동 버튼 위/아래 토글 시 함께 뒤집힘.
-const orderOf = (sel) =>
-  page.evaluate((s) => parseInt(getComputedStyle(document.querySelector(s)).order || '0', 10), sel)
-const noteOrd1 = await orderOf('.board-notes')
-const barOrd1 = await orderOf('.action-bar')
+// 6) 위치: 인게임 메시지(팁)는 행동 버튼과 "같은 쪽". 행동 버튼 위/아래 토글 시 팁도 같이 따라간다.
+const sideOf = () =>
+  page.evaluate(() => {
+    const mid = (s) => {
+      const e = document.querySelector(s)
+      if (!e) return null
+      const b = e.getBoundingClientRect()
+      return (b.top + b.bottom) / 2
+    }
+    const sv = mid('svg.board')
+    const ab = mid('.action-bar')
+    const bn = mid('.board-notes')
+    if (sv == null || ab == null || bn == null) return null
+    return { abAbove: ab < sv, bnAbove: bn < sv } // svg 기준 위/아래
+  })
+const s1 = await sideOf()
 await page.locator('button[data-act="sec:view"]').click() // 화면·설정 섹션 펼치기
 await page.locator('button[data-act="toggleActionPos"]').click()
 await page.waitForTimeout(80)
-const noteOrd2 = await orderOf('.board-notes')
-const barOrd2 = await orderOf('.action-bar')
-// 메시지와 행동 바는 항상 반대쪽(서로 다른 order), 토글하면 위/아래가 뒤집힌다
-const oppositeOk =
-  noteOrd1 !== barOrd1 && noteOrd2 !== barOrd2 && noteOrd1 > barOrd1 !== noteOrd2 > barOrd2
+const s2 = await sideOf()
+// 토글 전후 모두 팁이 행동 버튼과 같은 쪽이고, 토글하면 둘 다 반대편으로 이동
+const sameSideOk =
+  !!s1 && !!s2 && s1.abAbove === s1.bnAbove && s2.abAbove === s2.bnAbove && s1.abAbove !== s2.abAbove
 
 await browser.close()
-console.log({ enteredReplay, winOk, blunderOk, shareBtnOk, shareCopyOk, reachInGameOk, oppositeOk, errors: errors.length })
+console.log({ enteredReplay, winOk, blunderOk, shareBtnOk, shareCopyOk, reachInGameOk, sameSideOk, errors: errors.length })
 const ok =
-  enteredReplay && winOk && blunderOk && shareBtnOk && shareCopyOk && reachInGameOk && oppositeOk && errors.length === 0
-console.log(ok ? 'PASS: 분석 해설 + 공유 버튼 + 인게임 메시지(행동 버튼 반대쪽) + 리치' : 'FAIL')
+  enteredReplay && winOk && blunderOk && shareBtnOk && shareCopyOk && reachInGameOk && sameSideOk && errors.length === 0
+console.log(ok ? 'PASS: 분석 해설 + 공유 버튼 + 인게임 팁(행동 버튼과 같은 쪽) + 리치' : 'FAIL')
 process.exit(ok ? 0 : 1)

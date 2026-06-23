@@ -504,7 +504,10 @@ export function mountGame(root: HTMLElement): void {
       </div>
     </div>
     <div class="modal-layer"></div>
-    <div class="credit">제작 · 김수민 · 김재현 · 조주현</div>
+    <div class="credit">
+      <div class="credit-line">원본 보드게임: 김수민 · 김재현 · 조주현</div>
+      <div class="credit-line">프로그램 구현: 김수민</div>
+    </div>
   `
   const svg = root.querySelector('svg.board') as SVGSVGElement
   const content = svg.querySelector('g.content') as SVGGElement
