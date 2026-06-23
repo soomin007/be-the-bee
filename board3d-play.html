@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Be the Bee — 3D 보드(엔진 연결 테스트)</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: radial-gradient(circle at 50% 30%, #fbf3de, #efe0bd);
+        font-family: system-ui, sans-serif;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      #bar {
+        position: fixed;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        z-index: 2;
+      }
+      button {
+        background: #fff8e6;
+        border: 1px solid #e3cf9c;
+        border-radius: 999px;
+        padding: 6px 14px;
+        color: #6e5114;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      #status {
+        color: #6e5114;
+        font-size: 13px;
+        background: #fff8e6cc;
+        border: 1px solid #e3cf9c;
+        border-radius: 999px;
+        padding: 6px 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- src/ui/board3d.ts(엔진 상태 → 3D 렌더러) 가 실제 엔진과 붙는지 검증하는 dev 페이지.
+         npm run dev 후 /board3d-play.html. 게임 본체(index.html)와는 별개. -->
+    <div id="bar">
+      <button id="step">AI 두 수 더</button>
+      <span id="status"></span>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="/src/board3d-play.ts"></script>
+  </body>
+</html>
