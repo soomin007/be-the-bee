@@ -343,6 +343,8 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
 
   const boardGroup = new THREE.Group()
   scene.add(boardGroup)
+  const targetCenter = new THREE.Vector3() // 보드 중심 목표(−centroid). loop 에서 부드럽게 따라감.
+  let centered = false // 첫 표시는 스냅(슬라이드-인 방지), 이후는 매 수마다 부드럽게 이동
   // 클릭 가능한 칸(보드 타일 + 프론티어/잠정 고스트). 레이캐스팅 대상.
   const clickable: { mesh: THREE.Mesh; hex: Hex }[] = []
 
@@ -421,6 +423,8 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   let raf = 0
   function loop(): void {
     raf = requestAnimationFrame(loop)
+    // 보드 중심을 목표로 부드럽게 슬라이드(매 수마다 확 점프하지 않게). 이미 도달했으면 정지.
+    boardGroup.position.lerp(targetCenter, 0.12)
     controls.update()
     renderer.render(scene, camera)
   }
@@ -450,9 +454,16 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
       cx /= keys.length
       cz /= keys.length
     }
+    // 보드를 원점에 맞추되, 매 수마다 '확' 옮기지 않고 그룹 위치를 부드럽게 따라가게(loop 의 lerp).
+    // 칸들은 절대 좌표로 두고, 중심 맞춤은 boardGroup.position 한 곳에서만 처리.
+    targetCenter.set(-cx, 0, -cz)
+    if (!centered) {
+      boardGroup.position.copy(targetCenter)
+      centered = true
+    }
     const at = (h: Hex): { x: number; z: number } => {
       const p = hexToXZ(h)
-      return { x: p.x - cx, z: p.z - cz }
+      return { x: p.x, z: p.z }
     }
     // 타일 + 말
     for (const k of keys) {
