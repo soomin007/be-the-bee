@@ -40,7 +40,7 @@ import {
   type GameSnapshot,
 } from './game-save'
 import { maybeShowTutorial, openTutorial } from './tutorial'
-import type { Board3D, BoardHints } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
+import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -155,6 +155,7 @@ interface RoomSettings {
   watchDelay: number // 관전 모드 수 간격(ms)
   actionBarPos: ActionBarPos // 인게임 행동 바(턴 안내+①②) 위치
   board3d: boolean // 보드를 3D(three.js)로 표시(실험). 기본 꺼짐 → 2D SVG.
+  board3dStyle: PieceStyle // 3D 말 스타일: 일반(스타일 토큰) / 실사(사실적 벌)
   themeId: string // 컬러 테마(themes.ts COLOR_THEMES 의 id)
   personaYellow: Persona // 관전 시 노랑 AI 성향
   personaBrown: Persona // 갈색 AI 성향(vsAi 상대 + 관전 갈색)
@@ -189,6 +190,7 @@ function defaultSettings(): RoomSettings {
     watchDelay: 700,
     actionBarPos: 'top',
     board3d: false,
+    board3dStyle: 'stylized',
     themeId: DEFAULT_THEME_ID,
     personaYellow: 'aggressive', // 관전 기본 대진을 대비되게(공격 vs 균형)
     personaBrown: 'balanced',
@@ -248,6 +250,7 @@ function loadSettings(): RoomSettings {
         ? (s.actionBarPos as ActionBarPos)
         : d.actionBarPos,
       board3d: typeof s.board3d === 'boolean' ? s.board3d : d.board3d,
+      board3dStyle: s.board3dStyle === 'realistic' ? 'realistic' : d.board3dStyle,
       themeId: COLOR_THEMES.some((t) => t.id === s.themeId) ? (s.themeId as string) : d.themeId,
       personaYellow: PERSONAS.includes(s.personaYellow as Persona) ? (s.personaYellow as Persona) : d.personaYellow,
       personaBrown: PERSONAS.includes(s.personaBrown as Persona) ? (s.personaBrown as Persona) : d.personaBrown,
@@ -525,7 +528,7 @@ export function mountGame(root: HTMLElement): void {
     board3dLoading = true
     import('./board3d')
       .then(({ createBoard3D }) => {
-        board3dApi = createBoard3D(board3dHost, { onCellClick: onHexClick })
+        board3dApi = createBoard3D(board3dHost, { onCellClick: onHexClick, style: settings.board3dStyle })
         board3dLoading = false
         render() // 로드 완료 후 3D 로 다시 그린다
       })
@@ -1712,11 +1715,11 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     const viewGrid = `
       <div class="settings-grid">
-        <button data-act="cycleTheme" title="${theme.desc}">🎨 테마: ${theme.label}</button>
+        <button data-act="cycleTheme" title="${settings.board3d ? '3D 벌 스타일 전환(일반/실사)' : theme.desc}">${settings.board3d ? `🐝 벌: ${settings.board3dStyle === 'realistic' ? '실사' : '일반'}` : `🎨 테마: ${theme.label}`}</button>
         <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D로 표시(실험)">🧊 3D 보드${settings.board3d ? ' ✓' : ''}</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
-        <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
+        <button data-act="resetView" title="${settings.board3d ? '3D 카메라(시점·줌)를 처음 위치로' : '보드 확대·이동을 처음 상태로'}">카메라 리셋</button>
       </div>`
     const settingsSummary =
       settings.mode === 'hotseat'
@@ -2063,10 +2066,16 @@ export function mountGame(root: HTMLElement): void {
         applyActionBarPos()
         break
       case 'cycleTheme': {
-        const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
-        theme = COLOR_THEMES[(i + 1) % COLOR_THEMES.length]!
-        settings.themeId = theme.id
-        applyThemeColors()
+        if (settings.board3d) {
+          // 3D 모드: 테마 버튼은 벌 스타일(일반 ↔ 실사) 전환. 색 테마는 2D 에서만.
+          settings.board3dStyle = settings.board3dStyle === 'stylized' ? 'realistic' : 'stylized'
+          board3dApi?.setStyle(settings.board3dStyle)
+        } else {
+          const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
+          theme = COLOR_THEMES[(i + 1) % COLOR_THEMES.length]!
+          settings.themeId = theme.id
+          applyThemeColors()
+        }
         break
       }
       case 'toggleWatch':
@@ -2135,7 +2144,8 @@ export function mountGame(root: HTMLElement): void {
         sound.setSfxVolume(settings.sfxVolume)
         break
       case 'resetView':
-        setInitialCamera()
+        if (settings.board3d) board3dApi?.resetCamera()
+        else setInitialCamera()
         return
       case 'tutorial':
         openTutorial(root)

@@ -15,10 +15,14 @@ const SIZE = 1 // 3D 헥스 크기(중심→꼭짓점)
 const TILE_TOP = 0.22 // 타일 윗면 y
 const PIECE_K = 0.33 // 핸드오프 말(원판 r2)을 타일에 맞게 축소
 
+/** 3D 말 스타일: 일반(핸드오프 스타일 토큰) / 실사(사실적 꿀벌). */
+export type PieceStyle = 'stylized' | 'realistic'
+
 export interface Board3DOptions {
   /** 셀(헥스) 클릭 시 호출. 실제 수 적용은 호출 측이 SVG 와 동일하게 처리. */
   onCellClick?: (h: Hex) => void
   autoRotate?: boolean
+  style?: PieceStyle
 }
 
 /** 게임 오버레이 힌트(SVG 보드와 동일). 좌표는 엔진 Hex. */
@@ -32,6 +36,10 @@ export interface BoardHints {
 export interface Board3D {
   /** 엔진 상태(+선택 힌트)로 보드를 다시 그린다(타일/말/벌집 글로우/오버레이). */
   update(state: GameState, hints?: BoardHints): void
+  /** 말 스타일(일반/실사) 전환. 다음 update 부터 반영(호출 측이 update 재호출). */
+  setStyle(style: PieceStyle): void
+  /** 카메라(시점·줌)를 처음 위치로 되돌린다. */
+  resetCamera(): void
   /** 리소스 해제 + 캔버스 제거. */
   dispose(): void
 }
@@ -161,6 +169,111 @@ function buildPiece(owner: Player, queen: boolean): THREE.Group {
   return g
 }
 
+// ---- 말(실사 꿀벌) = three-demo-real 포팅. 그룹 원점 = 타일 접촉면(y=0), 원판 바닥 y≈0.22. ----
+const DISC_REAL: Record<Player, number> = { yellow: 0xd2a230, brown: 0x6f3529 }
+function limb3(a: [number, number, number], b: [number, number, number], radius: number, color: number): THREE.Mesh {
+  const va = new THREE.Vector3(...a)
+  const vb = new THREE.Vector3(...b)
+  const dir = new THREE.Vector3().subVectors(vb, va)
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.8, dir.length(), 8), new THREE.MeshStandardMaterial({ color, roughness: 0.5 }))
+  m.position.copy(va).add(vb).multiplyScalar(0.5)
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize())
+  m.castShadow = true
+  return m
+}
+function abdomenTexture(): THREE.Texture {
+  const c = document.createElement('canvas')
+  c.width = 64
+  c.height = 256
+  const x = c.getContext('2d')!
+  x.fillStyle = '#e3a52c'
+  x.fillRect(0, 0, 64, 256)
+  x.fillStyle = '#3a2410'
+  for (const y of [10, 70, 130, 190]) x.fillRect(0, y, 64, 26)
+  x.fillStyle = '#241608'
+  x.fillRect(0, 232, 64, 24)
+  const t = new THREE.CanvasTexture(c)
+  t.anisotropy = 4
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+function abdomenProfile(): THREE.Vector2[] {
+  return [
+    [0.02, 0.0],
+    [0.1, 0.05],
+    [0.2, 0.15],
+    [0.29, 0.33],
+    [0.33, 0.54],
+    [0.33, 0.74],
+    [0.28, 0.9],
+    [0.18, 1.0],
+  ].map(([x, y]) => new THREE.Vector2(x, y))
+}
+function buildRealBee(owner: Player, queen: boolean): THREE.Group {
+  const g = new THREE.Group()
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.14, 44), new THREE.MeshStandardMaterial({ color: DISC_REAL[owner], roughness: 0.6 }))
+  disc.position.y = 0.29
+  disc.castShadow = disc.receiveShadow = true
+  g.add(disc)
+  const beeGrp = new THREE.Group()
+  const Y = 0.64
+  const abdomen = new THREE.Mesh(new THREE.LatheGeometry(abdomenProfile(), 40), new THREE.MeshStandardMaterial({ map: abdomenTexture(), roughness: 0.5 }))
+  abdomen.rotation.x = Math.PI / 2
+  abdomen.scale.set(1.0, 0.95, 0.78)
+  abdomen.position.set(0, Y, -0.82)
+  abdomen.castShadow = true
+  beeGrp.add(abdomen)
+  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.27, 28, 22), new THREE.MeshStandardMaterial({ color: 0x9a6a2a, roughness: 0.92 }))
+  thorax.scale.set(1.05, 0.92, 1.0)
+  thorax.position.set(0, Y + 0.03, 0.12)
+  thorax.castShadow = true
+  beeGrp.add(thorax)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 26, 20), new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.6 }))
+  head.scale.set(1.05, 0.95, 0.9)
+  head.position.set(0, Y + 0.01, 0.5)
+  head.castShadow = true
+  beeGrp.add(head)
+  for (const dir of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 14), new THREE.MeshStandardMaterial({ color: 0x4a3618, roughness: 0.25 }))
+    eye.scale.set(0.7, 1.05, 0.85)
+    eye.position.set(dir * 0.14, Y + 0.04, 0.5)
+    beeGrp.add(eye)
+  }
+  for (const dir of [-1, 1]) {
+    beeGrp.add(limb3([dir * 0.06, Y + 0.06, 0.6], [dir * 0.13, Y + 0.16, 0.78], 0.012, 0x1c140a))
+    beeGrp.add(limb3([dir * 0.13, Y + 0.16, 0.78], [dir * 0.1, Y + 0.2, 0.92], 0.011, 0x1c140a))
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), new THREE.MeshStandardMaterial({ color: 0x1c140a, roughness: 0.5 }))
+    knob.position.set(dir * 0.1, Y + 0.2, 0.92)
+    beeGrp.add(knob)
+  }
+  const legY = Y - 0.14
+  for (const dir of [-1, 1]) {
+    for (const [zin, zout] of [[0.24, 0.46], [0.08, 0.12], [-0.06, -0.28]]) {
+      beeGrp.add(limb3([dir * 0.15, legY, zin!], [dir * 0.5, 0.36, zout!], 0.016, 0x1c140a))
+    }
+  }
+  const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, roughness: 0.15, side: THREE.DoubleSide, depthWrite: false })
+  for (const dir of [-1, 1]) {
+    const root = new THREE.Vector3(dir * 0.05, Y + 0.26, 0.14)
+    const tip = new THREE.Vector3(dir * 0.44, Y + 0.18, -0.5)
+    const wing = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), wingMat)
+    wing.scale.set(0.17, 0.012, new THREE.Vector3().subVectors(tip, root).length() / 2)
+    wing.position.copy(root.clone().add(tip).multiplyScalar(0.5))
+    wing.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tip.clone().sub(root).normalize())
+    beeGrp.add(wing)
+  }
+  g.add(beeGrp)
+  beeGrp.scale.setScalar(0.85)
+  beeGrp.position.y = 0.36 * (1 - 0.85)
+  if (queen) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.03, 12, 60), new THREE.MeshStandardMaterial({ color: 0xcf2a1c, roughness: 0.5 }))
+    ring.rotation.x = Math.PI / 2
+    ring.position.y = 0.37
+    g.add(ring)
+  }
+  return g
+}
+
 function hexTile(owner: Player, isHive: boolean): THREE.Mesh {
   const m = isHive
     ? new THREE.MeshStandardMaterial({ color: TILE_COLOR[owner], roughness: 0.6, emissive: 0xf59e0b, emissiveIntensity: 0.35 })
@@ -183,9 +296,12 @@ function disposeObject(o: THREE.Object3D): void {
 }
 
 export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {}): Board3D {
+  let style: PieceStyle = opts.style ?? 'stylized'
+  const CAM_POS = new THREE.Vector3(2.5, 9, 9.5) // 카메라 리셋 기준
+  const CAM_TARGET = new THREE.Vector3(0, 0.4, 0)
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200)
-  camera.position.set(2.5, 9, 9.5)
+  camera.position.copy(CAM_POS)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -221,15 +337,17 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   // 클릭 가능한 칸(보드 타일 + 프론티어/잠정 고스트). 레이캐스팅 대상.
   const clickable: { mesh: THREE.Mesh; hex: Hex }[] = []
 
-  // 호버/선택 링(게임 색: 초록=둘 수 있음, 파랑=직전/선택)
+  // 호버/선택 링(게임 색: 초록=둘 수 있음, 파랑=직전/선택). 6각 토러스를 타일 방향에 맞춘다:
+  // 보드 면(XZ)에 눕히고(rotateX), 육각 꼭짓점을 pointy-top 타일에 맞추려 30° 보정(rotateY).
   const ringGeo = new THREE.TorusGeometry(SIZE * 0.84, 0.05, 10, 6)
+  ringGeo.rotateX(Math.PI / 2)
+  ringGeo.rotateY(Math.PI / 6)
   const hoverRing = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x16a34a, emissiveIntensity: 0.7 }))
-  hoverRing.rotation.x = Math.PI / 2
   hoverRing.visible = false
   scene.add(hoverRing)
 
   const controls = new OrbitControls(camera, renderer.domElement)
-  controls.target.set(0, 0.4, 0)
+  controls.target.copy(CAM_TARGET)
   controls.enableDamping = true
   controls.autoRotate = opts.autoRotate ?? false
   controls.autoRotateSpeed = 0.7
@@ -297,7 +415,6 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
 
   function ringAt(x: number, z: number, color: number, y: number): THREE.Mesh {
     const ring = new THREE.Mesh(ringGeo.clone(), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 }))
-    ring.rotation.x = Math.PI / 2
     ring.position.set(x, y, z)
     return ring
   }
@@ -334,11 +451,19 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
       boardGroup.add(tile)
       clickable.push({ mesh: tile, hex })
       if (cell.piece) {
-        const tk = buildPiece(cell.piece.owner, cell.piece.kind === 'queen')
-        tk.scale.setScalar(PIECE_K)
-        // 원판 바닥을 타일 윗면에 닿게(+0.3*K) 두되, 살짝(-0.06) 박아 넣어 떠 보이지 않게.
-        tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.06, z)
-        boardGroup.add(tk)
+        const queen = cell.piece.kind === 'queen'
+        if (style === 'realistic') {
+          // 실사 벌: 그룹 원점=타일 접촉면(자체 원판 바닥 y≈0.22). 살짝(-0.06) 박아 안착.
+          const tk = buildRealBee(cell.piece.owner, queen)
+          tk.position.set(x, -0.06, z)
+          boardGroup.add(tk)
+        } else {
+          // 일반(스타일 토큰): 원판 r2 → PIECE_K 축소, 원판 바닥을 타일 윗면에 닿게 + 살짝 박음.
+          const tk = buildPiece(cell.piece.owner, queen)
+          tk.scale.setScalar(PIECE_K)
+          tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.06, z)
+          boardGroup.add(tk)
+        }
       }
     }
     // 프론티어(타일 놓을 빈 칸) — 초록 고스트 헥스, 클릭 가능
@@ -381,5 +506,14 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
     if (renderer.domElement.parentElement === container) container.removeChild(renderer.domElement)
   }
 
-  return { update, dispose }
+  function setStyle(s: PieceStyle): void {
+    style = s
+  }
+  function resetCamera(): void {
+    camera.position.copy(CAM_POS)
+    controls.target.copy(CAM_TARGET)
+    controls.update()
+  }
+
+  return { update, setStyle, resetCamera, dispose }
 }
