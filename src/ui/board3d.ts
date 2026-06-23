@@ -189,11 +189,10 @@ function abdomenTexture(): THREE.Texture {
   c.width = 64
   c.height = 256
   const x = c.getContext('2d')!
-  x.fillStyle = '#f3b836' // 밝은 호박색(칙칙함 완화)
+  x.fillStyle = '#f2b80a' // 진한 노랑(고대비)
   x.fillRect(0, 0, 64, 256)
-  x.fillStyle = '#3a2410'
-  for (const y of [10, 70, 130, 190]) x.fillRect(0, y, 64, 26)
-  x.fillStyle = '#2a1a0a'
+  x.fillStyle = '#160d04' // 검정 줄무늬(거의 검정 — 노랑과 고대비)
+  for (const y of [10, 70, 130, 190]) x.fillRect(0, y, 64, 28)
   x.fillRect(0, 232, 64, 24)
   const t = new THREE.CanvasTexture(c)
   t.anisotropy = 4
@@ -237,18 +236,22 @@ function buildRealBee(owner: Player, queen: boolean): THREE.Group {
   head.position.set(0, Y + 0.01, 0.5)
   head.castShadow = true
   beeGrp.add(head)
-  // 작은 검은 눈(노란 머리 위에서 또렷, 큰 검정 머리 인상 제거)
+  // 검은 겹눈 — 머리 옆쪽(더듬이와 겹치지 않게)
   for (const dir of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 12), new THREE.MeshStandardMaterial({ color: 0x1c140a, roughness: 0.3 }))
-    eye.scale.set(0.9, 1.1, 0.8)
-    eye.position.set(dir * 0.11, Y + 0.05, 0.6)
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 12), new THREE.MeshStandardMaterial({ color: 0x140e06, roughness: 0.25 }))
+    eye.scale.set(0.82, 1.15, 0.8)
+    eye.position.set(dir * 0.14, Y + 0.05, 0.5)
     beeGrp.add(eye)
   }
+  // 더듬이 — 얼굴 앞-중앙(눈이 아니라)에서 나와 앞·위로 길게 굽음(팔꿈치형). 눈에서 분리.
   for (const dir of [-1, 1]) {
-    beeGrp.add(limb3([dir * 0.06, Y + 0.06, 0.6], [dir * 0.13, Y + 0.16, 0.78], 0.012, 0x1c140a))
-    beeGrp.add(limb3([dir * 0.13, Y + 0.16, 0.78], [dir * 0.1, Y + 0.2, 0.92], 0.011, 0x1c140a))
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), new THREE.MeshStandardMaterial({ color: 0x1c140a, roughness: 0.5 }))
-    knob.position.set(dir * 0.1, Y + 0.2, 0.92)
+    const base: [number, number, number] = [dir * 0.04, Y - 0.01, 0.64]
+    const elbow: [number, number, number] = [dir * 0.09, Y + 0.13, 0.73]
+    const tip: [number, number, number] = [dir * 0.07, Y + 0.31, 0.75]
+    beeGrp.add(limb3(base, elbow, 0.013, 0x1c140a))
+    beeGrp.add(limb3(elbow, tip, 0.011, 0x1c140a))
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), new THREE.MeshStandardMaterial({ color: 0x1c140a, roughness: 0.5 }))
+    knob.position.set(tip[0], tip[1], tip[2])
     beeGrp.add(knob)
   }
   const legY = Y - 0.14
