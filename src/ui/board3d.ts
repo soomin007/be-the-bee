@@ -9,9 +9,10 @@ import type { GameState, Player } from '../engine/types'
 import { hexFromKey, type Hex } from '../engine/hex'
 import { detectHives } from '../engine/hive'
 
-const TILE_COLOR: Record<Player, number> = { yellow: 0xf0c531, brown: 0x97581d } // = 2D themes.ts tile.mid(honey)
-// 원판색 = 2D themes.ts piece.body(honey) 와 동일 값 → 2D/3D 말 색 통일.
-const DISC_COLOR: Record<Player, number> = { yellow: 0xe0a106, brown: 0x8a5418 }
+// 색은 2D 와 "체감 밝기"를 맞춘다(정확 hex 가 아니라 보이는 값). 3D 조명 음영으로 어두워지는 만큼
+// 2D themes.ts(tile.mid / piece.body)보다 albedo 를 올려 화면에서 2D 처럼 밝게 보이게.
+const TILE_COLOR: Record<Player, number> = { yellow: 0xf8d24c, brown: 0xb06c28 }
+const DISC_COLOR: Record<Player, number> = { yellow: 0xf2b41c, brown: 0xa56824 }
 const HIVE_BORDER = 0xf97316 // 완성된 벌집 테두리 = 2D hiveGlow(honey)
 const SIZE = 1 // 3D 헥스 크기(중심→꼭짓점)
 const TILE_TOP = 0.22 // 타일 윗면 y
@@ -260,7 +261,7 @@ function buildRealBee(owner: Player, queen: boolean): THREE.Group {
   rim.position.y = 0.3
   g.add(rim)
 
-  const golden = new THREE.MeshStandardMaterial({ color: 0xe6a019, roughness: 1 }) // 선명한 꿀빛 가슴(칙칙X)
+  const golden = new THREE.MeshStandardMaterial({ color: 0x7d5419, roughness: 1 }) // 올록볼록 가슴: 어둑한 털색(배는 밝게 = 실제 꿀벌)
   const goldenHead = new THREE.MeshStandardMaterial({ color: 0xedaa22, roughness: 1 }) // 머리도 밝은 금색
   const darkLeg = new THREE.MeshStandardMaterial({ color: 0x241810, roughness: 0.45, metalness: 0.15 })
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0d0a06, roughness: 0.2 })
