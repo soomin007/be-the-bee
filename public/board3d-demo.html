@@ -118,9 +118,11 @@
           const m = isHive
             ? new THREE.MeshStandardMaterial({ color: TILE[owner], roughness: 0.6, emissive: 0xf59e0b, emissiveIntensity: 0.35 })
             : mat(TILE[owner], 0.7)
-          const tile = new THREE.Mesh(new THREE.CylinderGeometry(TILE_SIZE, TILE_SIZE, 0.4, 6), m)
-          tile.rotation.y = Math.PI / 6 // 꼭짓점이 위(±z) = pointy-top
-          tile.position.y = 0.2
+          // 회전 없음 = pointy-top: CylinderGeometry(6) 기본 꼭짓점이 ±z 라 엔진 layout(pointy-top)과
+          // 그대로 맞물린다. (이전에 rotate(π/6)을 줘서 flat-top 이 돼 가로 폭이 간격보다 커져 겹쳤음.)
+          // 메시만 살짝 줄여(0.98) 얇은 틈 + 면 겹침(z-fighting) 방지.
+          const tile = new THREE.Mesh(new THREE.CylinderGeometry(TILE_SIZE * 0.98, TILE_SIZE * 0.98, 0.22, 6), m)
+          tile.position.y = 0.11 // 윗면 y=0.22 (스타일 토큰 데모와 같은 두께 → 말이 떠 보이지 않게)
           tile.castShadow = tile.receiveShadow = true
           return tile
         }
@@ -288,6 +290,8 @@
 
         const board = new THREE.Group()
         const PIECE_K = 0.33
+        const TILE_TOP = 0.22 // 타일 윗면 y
+        const tiles = [] // 레이캐스팅용(셀 좌표·말 유무 포함)
         for (const [q, r, tileOwner, pieceOwner, queen] of CELLS) {
           const p = hexToXZ(q, r)
           const x = p.x - cx
@@ -295,10 +299,11 @@
           const tile = hexTile(tileOwner, HIVE.has(`${q},${r}`))
           tile.position.set(x, 0, z)
           board.add(tile)
+          tiles.push({ mesh: tile, q, r, x, z, hasPiece: !!pieceOwner })
           if (pieceOwner) {
             const tk = buildPiece(pieceOwner, !!queen)
             tk.scale.setScalar(PIECE_K)
-            tk.position.set(x, 0.4 + 0.3 * PIECE_K, z) // 원판 바닥(−0.3*K)을 타일 윗면(0.4)에
+            tk.position.set(x, TILE_TOP + 0.3 * PIECE_K, z) // 원판 바닥(−0.3*K)을 타일 윗면에
             board.add(tk)
           }
         }
@@ -311,6 +316,56 @@
         controls.autoRotateSpeed = 0.7
         controls.minDistance = 5
         controls.maxDistance = 30
+
+        // ---- 2단계: 레이캐스팅 입력(헥스 히트테스트) ----
+        // 마우스 아래 타일을 찾아 호버 링(초록=게임의 '여기 둘 수 있음' 색) 표시, 클릭하면 선택 링(파랑).
+        // 드래그(카메라 회전)는 선택으로 치지 않는다(이동 거리 임계). 실제 수 적용은 엔진 연결(다음)에서.
+        const raycaster = new THREE.Raycaster()
+        const ndc = new THREE.Vector2()
+        const tileMeshes = tiles.map((t) => t.mesh)
+        const ringGeo = new THREE.TorusGeometry(TILE_SIZE * 0.84, 0.05, 10, 6)
+        const hoverRing = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x16a34a, emissiveIntensity: 0.7 }))
+        hoverRing.rotation.x = Math.PI / 2 // 보드 면(XZ)에 눕힘 + 꼭짓점 방향 맞춤
+        hoverRing.visible = false
+        scene.add(hoverRing)
+        const selRing = new THREE.Mesh(ringGeo.clone(), new THREE.MeshStandardMaterial({ color: 0x2563eb, emissive: 0x2563eb, emissiveIntensity: 0.7 }))
+        selRing.rotation.x = Math.PI / 2
+        selRing.visible = false
+        scene.add(selRing)
+        function pickTile(ev) {
+          const rect = renderer.domElement.getBoundingClientRect()
+          ndc.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1
+          ndc.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1
+          raycaster.setFromCamera(ndc, camera)
+          const hit = raycaster.intersectObjects(tileMeshes, false)[0]
+          return hit ? tiles.find((t) => t.mesh === hit.object) : null
+        }
+        renderer.domElement.addEventListener('pointermove', (ev) => {
+          const t = pickTile(ev)
+          if (t) {
+            hoverRing.position.set(t.x, TILE_TOP + 0.02, t.z)
+            hoverRing.visible = true
+            renderer.domElement.style.cursor = 'pointer'
+          } else {
+            hoverRing.visible = false
+            renderer.domElement.style.cursor = 'grab'
+          }
+        })
+        let downPos = null
+        renderer.domElement.addEventListener('pointerdown', (ev) => {
+          downPos = { x: ev.clientX, y: ev.clientY }
+        })
+        renderer.domElement.addEventListener('pointerup', (ev) => {
+          if (!downPos) return
+          const moved = Math.hypot(ev.clientX - downPos.x, ev.clientY - downPos.y)
+          downPos = null
+          if (moved > 6) return // 드래그(카메라 회전)는 선택 아님
+          const t = pickTile(ev)
+          if (t) {
+            selRing.position.set(t.x, TILE_TOP + 0.03, t.z)
+            selRing.visible = true
+          }
+        })
 
         addEventListener('resize', () => {
           camera.aspect = innerWidth / innerHeight
