@@ -318,9 +318,11 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   renderer.domElement.style.touchAction = 'none'
   container.appendChild(renderer.domElement)
 
-  scene.add(new THREE.AmbientLight(0xfff4d8, 0.8))
-  const key = new THREE.DirectionalLight(0xfff1c0, 1.25)
-  key.position.set(-6, 12, 6)
+  // 2D(평면 단색)보다 어두워 보이는 건 3D 조명 음영 때문 → 앰비언트(전역광)를 크게 올려
+  // 그림자를 채우고 전체를 밝게(2D 색에 근접). 방향광은 형태감만 약하게.
+  scene.add(new THREE.AmbientLight(0xfffbf2, 1.15))
+  const key = new THREE.DirectionalLight(0xfffaf0, 0.95)
+  key.position.set(-3, 16, 5) // 더 위에서 → 말·원판 그림자가 짧아져 "떠 있는" 느낌 감소
   key.castShadow = true
   key.shadow.mapSize.set(2048, 2048)
   key.shadow.camera.near = 1
@@ -330,7 +332,7 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   key.shadow.camera.top = 12
   key.shadow.camera.bottom = -12
   scene.add(key)
-  const fill = new THREE.DirectionalLight(0xffffff, 0.32)
+  const fill = new THREE.DirectionalLight(0xffffff, 0.4)
   fill.position.set(7, 4, -5)
   scene.add(fill)
   const ground = new THREE.Mesh(new THREE.CircleGeometry(30, 48), new THREE.ShadowMaterial({ opacity: 0.16 }))
@@ -381,7 +383,7 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
     if (t) {
       const w = new THREE.Vector3()
       t.mesh.getWorldPosition(w)
-      hoverRing.position.set(w.x, TILE_TOP + 0.02, w.z)
+      hoverRing.position.set(w.x, TILE_TOP + 0.008, w.z)
       hoverRing.visible = true
       renderer.domElement.style.cursor = 'pointer'
     } else {
@@ -464,7 +466,7 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
       // 완성된 벌집 타일: 금색 육각 테두리(2D 와 동일하게 색 대신 테두리로 표시)
       if (hiveCells.has(k)) {
         const border = new THREE.Mesh(hiveBorderGeo.clone(), new THREE.MeshStandardMaterial({ color: HIVE_BORDER, emissive: HIVE_BORDER, emissiveIntensity: 0.55 }))
-        border.position.set(x, TILE_TOP + 0.02, z)
+        border.position.set(x, TILE_TOP - 0.015, z) // 타일 윗면 모서리에 박히게(떠 보이지 않게)
         boardGroup.add(border)
       }
       if (cell.piece) {
@@ -473,13 +475,13 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
           // 실사 벌: 그룹 원점=타일 접촉면. 좀 크다는 의견 → 0.85 축소(원판 바닥 ≈ TILE_TOP-0.06).
           const tk = buildRealBee(cell.piece.owner, queen)
           tk.scale.setScalar(0.85)
-          tk.position.set(x, -0.03, z)
+          tk.position.set(x, -0.05, z)
           boardGroup.add(tk)
         } else {
           // 일반(스타일 토큰): 원판 r2 → PIECE_K 축소, 원판 바닥을 타일 윗면에 닿게 + 살짝 박음.
           const tk = buildPiece(cell.piece.owner, queen)
           tk.scale.setScalar(PIECE_K)
-          tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.06, z)
+          tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.08, z)
           boardGroup.add(tk)
         }
       }
@@ -503,12 +505,12 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
     // 말 놓을 수 있는 타일 — 초록 링(시각)
     for (const h of hints.pieceTargets ?? []) {
       const { x, z } = at(h)
-      boardGroup.add(ringAt(x, z, 0x16a34a, TILE_TOP + 0.04))
+      boardGroup.add(ringAt(x, z, 0x16a34a, TILE_TOP + 0.01))
     }
     // 직전 말 — 파란 링(시각)
     if (hints.lastPiece) {
       const { x, z } = at(hints.lastPiece)
-      boardGroup.add(ringAt(x, z, 0x2563eb, TILE_TOP + 0.05))
+      boardGroup.add(ringAt(x, z, 0x2563eb, TILE_TOP + 0.016))
     }
   }
 
