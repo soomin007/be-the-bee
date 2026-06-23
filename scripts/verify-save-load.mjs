@@ -57,7 +57,7 @@ await page.locator('.save-row button[data-act^="loadSlot:"]').first().click()
 await page.waitForTimeout(80)
 const loadOk = grew === 3 && (await pieces()) === 2
 
-// 4) 공유 가져오기: 새 게임(0) → 코드 붙여넣기(다이얼로그) → 2로 복원
+// 4) 공유 가져오기: 새 게임(0) → 코드 붙여넣기(다이얼로그) → 분석(복기)으로 진입 → 마지막 수=2로 복원
 await page.locator('button[data-act="new"]').click()
 await page.waitForTimeout(60)
 const fresh = await pieces() // 0
@@ -65,6 +65,9 @@ page.once('dialog', (d) => d.accept(code))
 await openSaves()
 await page.locator('button[data-act="importGame"]').click()
 await page.waitForTimeout(120)
+// 가져오면 분석(복기) 모드로 진입한다 → 마지막 수로 이동해 복원 확인
+await page.locator('button[data-act="replayLast"]').click()
+await page.waitForTimeout(80)
 const importOk = fresh === 0 && (await pieces()) === 2
 
 await browser.close()

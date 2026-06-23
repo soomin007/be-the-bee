@@ -603,6 +603,30 @@ svg.board.panning {
   animation: modal-pop 0.25s ease;
 }
 
+/* 수 해설/코칭 한 줄(복기 + 전문가 라이브). good=칭찬(초록), bad=지적(빨강). */
+.coach-comment {
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #64748b;
+  border-radius: 0.5rem;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  animation: modal-pop 0.25s ease;
+}
+.coach-comment.good {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  border-left-color: #10b981;
+  color: #065f46;
+}
+.coach-comment.bad {
+  background: #fef2f2;
+  border-color: #fecaca;
+  border-left-color: #ef4444;
+  color: #991b1b;
+}
+
 @keyframes bee-pulse {
   0%,
   100% {

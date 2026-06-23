@@ -14,7 +14,9 @@ import {
   hexFromKey,
   hexKey,
   isTilePlaceable,
+  notePolarity,
   opponent,
+  reviewMove,
   totalHiveScores,
   validateMove,
   validatePiecePlacement,
@@ -119,12 +121,19 @@ const MODE_SHORT: Record<Mode, string> = {
 }
 const DIFF_LABEL: Record<Difficulty, string> = { easy: '쉬움', medium: '보통', hard: '어려움', expert: '전문가' }
 
-// 전문가 AI 가 결정적 수를 둘 때 보여줄 해설(engine analyzeMove 코드 → 한국어).
-const EXPERT_NOTE: Record<MoveNote, string> = {
-  win: '5목 완성 — 승부를 냈어요.',
-  fork: '이중 위협(포크)이에요. 한쪽을 막아도 다른 쪽으로 5목 — 못 막습니다.',
-  block: '당신의 5목 리치를 막았어요.',
-  corridor: '당신의 벌집 회랑을 끊었어요(그 칸을 선점).',
+// 수 해설 코드(engine reviewMove) → 한국어. 복기 해설·전문가 라이브 코칭 공용.
+const NOTE_TEXT: Record<MoveNote, string> = {
+  win: '5목 완성 — 승부를 냈어요!',
+  fork: '이중 위협(포크)! 한쪽을 막아도 다른 쪽으로 5목 — 못 막습니다.',
+  block: '상대의 5목 리치를 막았어요.',
+  corridor: '상대 벌집 회랑을 끊었어요(그 칸을 선점).',
+  hive: '벌집을 완성/확장해 점수를 챙겼어요.',
+  missWin: '여기서 바로 5목으로 이길 수 있었어요! 그 자리를 놓쳤습니다.',
+  missBlock: '상대 5목 리치를 막지 않았어요 — 다음 한 수로 위험합니다.',
+}
+// 코드를 ✓(칭찬)/✗(지적) 아이콘과 함께 한 줄로. 색은 notePolarity 로 CSS 클래스(good/bad).
+function noteLine(note: MoveNote): string {
+  return `${notePolarity(note) === 'bad' ? '✗' : '✓'} ${NOTE_TEXT[note]}`
 }
 const AI_DELAY_MS = 350
 
@@ -322,6 +331,7 @@ export function mountGame(root: HTMLElement): void {
   let message = '' // 경고(잘못된 수 등), ⚠️ 빨강
   let notice = '' // 긍정 피드백(저장/불러오기 등), ✓ 초록, 다음 수에 사라짐
   let aiComment = '' // 전문가 AI 의 결정적 수 해설, 다음 수에 사라짐
+  let coachNote: MoveNote | null = null // 전문가 vs AI: 직전 "내(사람) 수" 코칭(다음 내 수까지 유지)
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   let infoModal: 'queen' | 'saves' | null = null // 팝업(여왕벌 설명/저장 보관함), 결과 모달보다 우선
@@ -430,6 +440,7 @@ export function mountGame(root: HTMLElement): void {
     replayIndex = null
     draft = null
     message = ''
+    coachNote = null
     modalDismissed = false
     openMenu = null
     clearFx()
@@ -919,8 +930,14 @@ export function mountGame(root: HTMLElement): void {
     moveLog = [...moveLog, move]
     lastMove = move
     const mover = state.turn
+    const before = state
     const prevBoard = state.board
     state = applyMove(state, move)
+    // 전문가 vs AI: 내(사람) 수면 코칭 코드를 갱신(평범한 수는 null → 코멘트 사라짐). AI 수일 땐
+    // 건드리지 않아, 내 코칭이 AI 즉답(짧은 딜레이)에 지워지지 않고 다음 내 수까지 남는다.
+    if (settings.mode === 'vsAi' && settings.aiDifficulty === 'expert' && !aiControls(mover)) {
+      coachNote = reviewMove(before, move)
+    }
     message = ''
     notice = ''
     aiComment = '' // 새 수가 들어오면 이전 해설 지움(전문가 AI 수면 적용 후 다시 채운다)
@@ -985,7 +1002,7 @@ export function mountGame(root: HTMLElement): void {
         const note = aiDifficultyFor(state.turn) === 'expert' ? analyzeMove(state, mv) : null
         applyAndAdvance(mv) // 여기서 aiComment 가 비워지므로
         if (note) {
-          aiComment = EXPERT_NOTE[note] // 적용 후 다시 채우고 한 번 더 렌더
+          aiComment = NOTE_TEXT[note] // 적용 후 다시 채우고 한 번 더 렌더
           render()
         }
       } catch {
@@ -1491,17 +1508,26 @@ export function mountGame(root: HTMLElement): void {
 
   function renderReplayPanel(idx: number): void {
     const n = moveLog.length
-    const vs = timeline()[idx]!
+    const tl = timeline()
+    const vs = tl[idx]!
     const scores = totalHiveScores(vs.board)
     const playing = replayTimer !== null
     const disPrev = idx <= 0 ? 'disabled' : ''
     const disNext = idx >= n ? 'disabled' : ''
+    // 이 수에 대한 해설(중요한 수·실수에만). 받은 기보든 끝난 판이든 동일하게 분석.
+    const note = idx >= 1 ? reviewMove(tl[idx - 1]!, moveLog[idx - 1]!) : null
+    const mover = idx >= 1 ? tl[idx - 1]!.turn : null
     panel.innerHTML = `
       <h2>🐝 복기</h2>
       <div class="status replay">
         <div class="status-header">복기 ${idx} / ${n} 수</div>
         <div class="instruction">${describeMove(idx)}</div>
       </div>
+      ${
+        note && mover
+          ? `<div class="coach-comment ${notePolarity(note)}">${PLAYER_LABEL[mover]}: ${noteLine(note)}</div>`
+          : ''
+      }
       <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       <div class="replay-nav">
         <button data-act="replayFirst" ${disPrev} title="처음으로">⏮</button>
@@ -1599,6 +1625,7 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="new">새 게임</button>
+        <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">📤 공유하기</button>
         <button data-act="saveGame" title="지금 판을 보관함에 저장">💾 저장</button>
         <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">📂 보관함</button>
       </div>`
@@ -1704,6 +1731,11 @@ export function mountGame(root: HTMLElement): void {
       </div>
       ${reach}
       ${aiComment ? `<div class="ai-comment">🐝 전문가: ${aiComment}</div>` : ''}
+      ${
+        coachNote !== null && settings.mode === 'vsAi' && settings.aiDifficulty === 'expert'
+          ? `<div class="coach-comment ${notePolarity(coachNote)}">🧑‍🏫 내 수: ${noteLine(coachNote)}</div>`
+          : ''
+      }
       <div class="supplies">
         <div>${supplyLine('yellow')}</div>
         <div>${supplyLine('brown')}</div>
@@ -1919,6 +1951,7 @@ export function mountGame(root: HTMLElement): void {
           } while (history.length > 0 && aiControls(state.turn))
           message = ''
           notice = ''
+          coachNote = null
           lastMove = null
           modalDismissed = false
           openMenu = null
@@ -2000,6 +2033,12 @@ export function mountGame(root: HTMLElement): void {
           applySnapshot(s)
           autoSaveNow()
           infoModal = null
+          // 받은 기보는 분석이 목적 — 바로 복기(해설)로 진입해 한 수씩 평가를 볼 수 있게.
+          // (복기 종료를 누르면 마지막 국면으로 가 이어서 둘 수도 있다.)
+          if (s.moveLog.length > 0) {
+            handleReplay('replayEnter')
+            return
+          }
           notice = '기보를 불러왔어요.'
         }
         break
@@ -2041,6 +2080,7 @@ export function mountGame(root: HTMLElement): void {
         moveLog = []
         message = ''
         notice = ''
+        coachNote = null
         lastMove = null
         modalDismissed = false
         startTurn()

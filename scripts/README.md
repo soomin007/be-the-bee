@@ -22,7 +22,8 @@
 | `verify-replay.mjs` | 복기 진입/되감기/종료 후 실시간 복귀 |
 | `verify-queen-popup.mjs` | 여왕벌 토글 → 설명 팝업 → 취소(안 켜짐)/확인(켜짐)/끄기 즉시 (+ `shots/queen-popup.png`) |
 | `verify-fx-smoke.mjs` | 벌 테마 2단계 연출(꿀 차오름·붕붕) — 여러 수 둬도 에러 없음 + 모션 키프레임 존재 |
-| `verify-save-load.mjs` | 자동 이어하기 + 보관함 슬롯(저장·불러오기·삭제) + 공유 코드 내보내기/가져오기 |
+| `verify-save-load.mjs` | 자동 이어하기 + 보관함 슬롯(저장·불러오기·삭제) + 공유 코드 내보내기/가져오기(가져오면 분석 모드) |
+| `verify-analysis.mjs` | 공유 코드 가져오기→복기 해설(중요 수·블런더 ✓/✗) + 패널 "공유하기" 버튼 클립보드 복사 |
 | `verify-watch-control.mjs` | 관전 자동시작 안 함 + ▶시작/⏸멈춤 동작 + 양쪽 성향 셀렉트 |
 | `verify-tutorial.mjs` | 첫 접속 튜토리얼 자동표시·페이지 넘김·완료 기억·재열기 (+ `shots/tutorial-1·3.png`) |
 | `verify-watch-persona.mjs` | 관전 색깔별 난이도 + 성향 설명 + 종료 시 자동 멈춤 (+ `shots/panel-watch2.png`) |

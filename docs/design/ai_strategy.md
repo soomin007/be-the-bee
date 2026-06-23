@@ -146,8 +146,13 @@
   깊이는 hard 와 같게 두고 **넓은 빔 + gapped-four** 로 강함을 가져감.
 - **`gapFour`(벌어진 4목 인식)**: `X·XXX`/`XX·XX`/`XXX·X` 처럼 연속이 아닌 4목(한 수면 5목)을
   위협으로 센다(반대칭) — 연속 런만 보는 `sideStats` 의 사각을 메워 **벌집 회랑/스플릿 4목**을 봄.
-- **해설(`analyzeMove`)**: 결정적 수를 코드로 분류(win·fork·block·corridor) → UI 가 한국어 말풍선.
-  전문가 난이도일 때만 표시. winningCells 기반이라 가짜 위협을 안 잡음.
+- **해설/복기 분석(`reviewMove`)**: 한 수를 코드로 분류 → UI 가 한국어로 매핑. winningCells 기반이라
+  가짜 위협을 안 잡음. 평범한 수는 null(중요한 수·실수에만 반응).
+  - 잘한/결정적 수: `win·fork·block·corridor·hive`, 실수(블런더): `missWin`(이길 수 있었는데 안 둠)·
+    `missBlock`(상대 리치를 안 막음). 우선순위 win > missWin > missBlock > fork > block > corridor > hive.
+  - **복기 해설**: 복기에서 매 수의 코드를 ✓(칭찬)/✗(지적)로 표시 — 받은 공유 기보든 끝난 판이든 동일.
+  - **전문가 라이브 코칭**: vs AI(전문가)에서 내(사람) 수도 평가해 패널에 코멘트(AI 즉답에 안 지워지게
+    다음 내 수까지 유지). `analyzeMove` 는 `reviewMove` 의 "잘한 수만" 걸러 AI 자기 해설로 재사용.
 - **튜닝 일지(중요)**: 두 번 회귀했다.
   - 1차 `gapFour=9000 + hiveDef=1400`(+포크 이중계산)·빔10 → **0-8 hard 완패**. 범인 `hiveDef`
     (A/B 에서 확인된 "타일 쫓기" 함정 재현) + 포크 이중계산 과대평가.

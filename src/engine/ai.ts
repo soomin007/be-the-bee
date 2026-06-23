@@ -29,6 +29,7 @@ import type { Board, GameState, Move, Player } from './types'
 import { cellAt, pieceAt, withPiece, withTile, LINE_LENGTH } from './state'
 import { findLines, type Line } from './lines'
 import { detectWin } from './victory'
+import { totalHiveScores } from './hive'
 import {
   allowedMoveTypes,
   applyMove,
@@ -100,16 +101,27 @@ export function createAi(opts: AiOptions = {}): Ai {
   }
 }
 
-// ---- 결정적 수 해설(전문가 난이도 UI 표시용) -------------------------------
-// 순수 분류만 한다(한국어 문구는 UI 가 매핑). 결정적인 수에만 코드를 주고, 아니면 null.
-export type MoveNote = 'win' | 'fork' | 'block' | 'corridor'
+// ---- 수 해설/복기 분석(UI 표시용) ------------------------------------------
+// 순수 분류만 한다(한국어 문구는 UI 가 매핑). 평범한 수는 null, 의미 있는 수에만 코드.
+//   잘한/결정적 수: win·fork·block·corridor·hive
+//   실수(블런더):   missWin(이길 수 있었는데 안 둠)·missBlock(상대 리치를 안 막음)
+export type MoveNote = 'win' | 'fork' | 'block' | 'corridor' | 'hive' | 'missWin' | 'missBlock'
+
+/** 코드의 성향: 칭찬(good) / 지적(bad). UI 가 ✓/✗·색을 고를 때 쓴다. */
+export function notePolarity(note: MoveNote): 'good' | 'bad' {
+  return note === 'missWin' || note === 'missBlock' ? 'bad' : 'good'
+}
 
 function piecePlacedAt(m: Move): Hex | null {
   return m.type === 'twoTiles' ? null : m.piece.at
 }
 
-/** before 상태에서 둔 move 가 "결정적"이면 분류 코드, 아니면 null. (전문가 해설용) */
-export function analyzeMove(before: GameState, move: Move): MoveNote | null {
+/**
+ * before 상태에서 둔 move 를 분류(복기 해설 + 전문가 라이브 코칭 공용). 평범하면 null.
+ * 우선순위: 승리 > 놓친 승리 > 놓친 차단 > 포크 > 차단 > 회랑끊기 > 벌집.
+ * (놓친 차단이 포크·차단보다 위 — 내 위협을 만들어도 상대가 먼저 5목 내면 소용없다.)
+ */
+export function reviewMove(before: GameState, move: Move): MoveNote | null {
   const mover = before.turn
   const opp = opponent(mover)
   let after: GameState
@@ -121,27 +133,42 @@ export function analyzeMove(before: GameState, move: Move): MoveNote | null {
   // 1) 승리(5목 완성)
   if (after.phase === 'finished' && after.result?.kind === 'win' && after.result.winner === mover) return 'win'
 
-  const at = piecePlacedAt(move)
-  // 2) 포크(이중 위협): 다음 한 수로 5목 가능한 칸이 2개 이상 → 상대가 다 못 막음(4-3·4-4 콤보)
-  const myWins = winningCells(after.board, mover, after.supplies[mover])
-  if (myWins.length >= 2) return 'fork'
+  // 2) 놓친 승리: 이번에 바로 5목 낼 자리가 있었는데 다른 수를 둠
+  if (winningCells(before.board, mover, before.supplies[mover]).length > 0) return 'missWin'
 
-  // 3) 차단: 상대가 직전에 즉시 승리 칸을 갖고 있었는데 이 수로 그 위협을 없앰
+  const at = piecePlacedAt(move)
   const oppWinsBefore = winningCells(before.board, opp, before.supplies[opp])
+  const oppWinsAfter = winningCells(after.board, opp, after.supplies[opp])
+
+  // 3) 놓친 차단(블런더): 상대가 즉시 승리 칸을 가졌는데 막지 못해 그대로 남김
+  if (oppWinsBefore.length > 0 && oppWinsAfter.length > 0) return 'missBlock'
+
+  // 4) 포크(이중 위협): 다음 한 수로 5목 가능한 칸이 2개 이상 → 상대가 다 못 막음(4-3·4-4 콤보)
+  if (winningCells(after.board, mover, after.supplies[mover]).length >= 2) return 'fork'
+
+  // 5) 차단: 상대가 직전에 즉시 승리 칸을 갖고 있었는데 이 수로 그 위협을 없앰
   if (oppWinsBefore.length > 0) {
-    const oppWinsAfter = winningCells(after.board, opp, after.supplies[opp])
     const occupiedThreat = at !== null && oppWinsBefore.some((c) => hexEquals(c, at))
     if (occupiedThreat || oppWinsAfter.length < oppWinsBefore.length) return 'block'
   }
 
-  // 4) 회랑 끊기/허리 끊기: 상대 색 타일이 이룬 3+ 타일선(곧 벌집 회랑) 위에 내 말을 올림
+  // 6) 회랑 끊기/허리 끊기: 상대 색 타일이 이룬 3+ 타일선(곧 벌집 회랑) 위에 내 말을 올림
   if (at !== null) {
     for (const line of findLines(ownerTileMap(after.board, opp), 3)) {
       if (line.cells.length >= 5) continue // 이미 잠긴 벌집
       if (line.cells.some((k) => hexEquals(hexFromKey(k), at))) return 'corridor'
     }
   }
+
+  // 7) 벌집 완성/확장: 이 수로 내 벌집 점수가 늘었다(점수 획득)
+  if (totalHiveScores(after.board)[mover] > totalHiveScores(before.board)[mover]) return 'hive'
   return null
+}
+
+/** before 상태에서 둔 move 가 "결정적 잘한 수"면 코드, 아니면 null. (전문가 AI 자기 해설용) */
+export function analyzeMove(before: GameState, move: Move): MoveNote | null {
+  const n = reviewMove(before, move)
+  return n === 'win' || n === 'fork' || n === 'block' || n === 'corridor' ? n : null
 }
 
 // ---- 평가 가중치(튜닝 노브) + 성향 프로파일 --------------------------------
