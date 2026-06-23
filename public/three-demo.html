@@ -56,7 +56,7 @@
 
         const scene = new THREE.Scene()
         const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100)
-        camera.position.set(2.6, 3.4, 6.2)
+        camera.position.set(2.2, 4.6, 5.4) // 위에서 내려다보는 각(탑다운 벌이 잘 보이게)
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
         renderer.setSize(innerWidth, innerHeight)
@@ -98,76 +98,58 @@
           return g
         }
 
-        // 줄무늬(배)·머리색을 캔버스에 "색칠"해 텍스처로. LatheGeometry 의 v(축 방향: 0=꼬리 → 1=머리)에
-        // 맞춰 가로 밴드로 그린다 → 회전체 둘레를 띠가 두른다. 눈은 별도 납작 원판(아래 token).
-        function beeTexture(base) {
-          const c = document.createElement('canvas')
-          c.width = 128
-          c.height = 256
-          const x = c.getContext('2d')
-          x.fillStyle = base
-          x.fillRect(0, 0, 128, 256)
-          // 머리(검정) = 텍스처 위쪽(v 큰 쪽 = 머리). 둘레 전체를 두름.
-          x.fillStyle = '#231507'
-          x.fillRect(0, 0, 128, 70)
-          // 배 줄무늬(검정 띠) — 배 영역에 촘촘히
-          x.fillStyle = '#241603'
-          for (const y of [108, 134, 160, 186]) x.fillRect(0, y, 128, 14)
-          // 눈: 눕힌 회전체의 "위쪽"은 u≈0.75(=캔버스 x≈96). 머리(위쪽 v)의 그 지점에 눈을 색칠.
-          for (const ex of [84, 108] ) {
-            const dir = ex < 96 ? 1 : -1
-            x.fillStyle = '#ffffff'
-            x.beginPath()
-            x.ellipse(ex, 36, 9, 12, 0, 0, 7)
-            x.fill()
-            x.fillStyle = '#15100a'
-            x.beginPath()
-            x.ellipse(ex + dir * 2, 41, 4.6, 5, 0, 0, 7)
-            x.fill()
-            x.fillStyle = '#ffffff'
-            x.beginPath()
-            x.ellipse(ex + dir * 2 - 1.5, 38, 1.6, 1.6, 0, 0, 7)
-            x.fill()
-          }
-          const tex = new THREE.CanvasTexture(c)
-          tex.anisotropy = 4
-          return tex
+        // 위에서 내려다본 벌(타일에 배를 대고 엎드린 모습) — 절차적 프리미티브로 조립.
+        //   머리(앞 +z) → 가슴 → 길쭉한 마디 배(노랑/검정 교대 = 줄무늬, 뒤로 갈수록 가늘게).
+        //   등 위로 납작한 흰 날개가 또렷이 펼쳐진다. SVG 게임 말과 같은 탑다운 방향, Blender 없이.
+        function blob(color, s, pos, opts = {}) {
+          const m = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 28, 18),
+            new THREE.MeshStandardMaterial({
+              color,
+              roughness: opts.rough ?? 0.5,
+              metalness: 0.03,
+              transparent: opts.opacity != null,
+              opacity: opts.opacity ?? 1,
+            }),
+          )
+          m.scale.set(s[0], s[1], s[2]) // (폭 x · 높이 y(납작) · 길이 z)
+          m.position.set(pos[0], pos[1], pos[2])
+          m.castShadow = opts.shadow ?? true
+          return m
         }
 
-        // 옆에서 본 벌 실루엣(x=반지름, y=축 0=꼬리→1=머리): 배(통통)→허리(잘록)→머리(둥글)→끝.
-        function beeProfile() {
-          const p = [
-            [0.03, 0.0],
-            [0.26, 0.06],
-            [0.4, 0.16],
-            [0.46, 0.3],
-            [0.46, 0.44],
-            [0.41, 0.54],
-            [0.3, 0.62],
-            [0.25, 0.66], // 허리(잘록)
-            [0.32, 0.71],
-            [0.4, 0.79], // 머리 불룩
-            [0.4, 0.86],
-            [0.31, 0.93],
-            [0.16, 0.98],
-            [0.03, 1.0],
-          ]
-          return p.map(([x, y]) => new THREE.Vector2(x, y))
-        }
-
-        // 길쭉한 회전체 벌(LatheGeometry). 눕혀서 위아래로 납작하게, 타일에 반쯤 박는다.
-        // 눈만 머리 위에 납작한 원판으로(색칠한 것처럼, 돌출 X).
         function token(base) {
           const g = new THREE.Group()
-          const body = new THREE.Mesh(
-            new THREE.LatheGeometry(beeProfile(), 48),
-            new THREE.MeshStandardMaterial({ map: beeTexture(base), roughness: 0.45, metalness: 0.03 }),
-          )
-          body.castShadow = true
-          body.rotation.x = Math.PI / 2 // 축(길이)을 +z 로 눕힘(머리 +z, 카메라 쪽)
-          body.scale.set(0.9, 1.0, 0.5) // x 폭 · y 길이(유지=길쭉) · z 높이(납작)
-          body.position.set(0, 0.25, -0.5) // 길이축 가운데로 + 타일에 반쯤 박힘
-          g.add(body)
+          const Y = 0.33 // 몸통 중심 높이(배 바닥이 타일에 살짝 박힘 = 엎드린 느낌)
+          // 배: 마디 5개를 +z(머리)→-z(꼬리)로 쌓아 노랑(진영)·검정 교대 = 또렷한 줄무늬
+          const seg = [
+            [base, [0.4, 0.14, 0.17], 0.02],
+            ['#241603', [0.38, 0.13, 0.13], -0.16],
+            [base, [0.33, 0.13, 0.12], -0.3],
+            ['#241603', [0.26, 0.12, 0.11], -0.42],
+            [base, [0.16, 0.11, 0.1], -0.52],
+          ]
+          for (const [c, s, z] of seg) g.add(blob(c, s, [0, Y, z], { rough: 0.45 }))
+          // 가슴(둥근 털북숭이, 어둑한 갈색)
+          g.add(blob('#5b3e1e', [0.34, 0.15, 0.22], [0, Y + 0.01, 0.26], { rough: 0.78 }))
+          // 머리(앞, 검정 — 작게)
+          g.add(blob('#241606', [0.24, 0.13, 0.2], [0, Y, 0.5], { rough: 0.5 }))
+          // 작은 눈 2개
+          for (const dir of [-1, 1]) g.add(blob('#000', [0.06, 0.06, 0.05], [dir * 0.12, Y + 0.06, 0.56], { rough: 0.2, shadow: false }))
+          // 더듬이 2개(가는 막대 + 끝 점, 앞으로)
+          for (const dir of [-1, 1]) {
+            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.26, 8), mat('#1c1208', 0.6))
+            ant.position.set(dir * 0.1, Y + 0.12, 0.66)
+            ant.rotation.set(-0.6, 0, dir * 0.4)
+            g.add(ant)
+            g.add(blob('#1c1208', [0.03, 0.03, 0.03], [dir * 0.16, Y + 0.2, 0.74], { shadow: false }))
+          }
+          // 날개 2장(등 위로 또렷한 납작 흰 날개, 뒤·바깥으로 펼침 → 가운데 줄무늬는 안 가림)
+          for (const dir of [-1, 1]) {
+            const w = blob('#ffffff', [0.5, 0.04, 0.26], [dir * 0.22, Y + 0.15, 0.04], { rough: 0.3, opacity: 0.6, shadow: false })
+            w.rotation.y = dir * 0.5
+            g.add(w)
+          }
           return g
         }
 

@@ -1212,9 +1212,10 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 6) 말 = 귀여운 꿀벌(실물 토큰을 위에서 본 모습). 디스크/두께 없이 벌 그림만(가시성 우선).
-    //    진영색 = 벌의 둥근 배(노랑 진영=노랑벌 / 갈색 진영=호박색벌), 머리·큰 눈·날개·줄무늬는 공통.
-    //    "반쯤 파묻힌 돔": 배를 살짝 아래로 두고 떠 있는 그림자 없이 타일에 박힌 듯하게.
+    // 6) 말 = 위에서 내려다본 벌(타일에 배를 대고 엎드린 모습). 디스크/두께 없이 벌 그림만(가시성 우선).
+    //    구성(앞→뒤): 검은 머리(작은 눈) → 둥근 가슴 → 길쭉한 줄무늬 배. 등 위로 흰 날개가 또렷이 펼쳐진다.
+    //    진영색 = 배 바탕색(노랑 진영=노랑벌 / 갈색 진영=호박색벌). 머리·눈·날개·줄무늬는 공통 → "벌답게".
+    //    가슴(circle.piece)이 테스트/검증이 세는 요소다(배는 ellipse라 셀 수 없음).
     const mk = (tag: string, attrs: Record<string, string | number>): SVGElement => {
       const e = document.createElementNS(SVGNS, tag)
       for (const k in attrs) e.setAttribute(k, String(attrs[k]))
@@ -1231,63 +1232,67 @@ export function mountGame(root: HTMLElement): void {
       const bodyEdge = shade(base, -0.5) // 배 외곽선
       const cx = p.x
       const cy = p.y
-      const acy = cy + r * 0.08 // 배 중심(살짝 아래 = 박힌 느낌)
-      const R = r * 0.62 // 배 반지름
+      const stripeCol = theme.piece[owner].stripe // 줄무늬 = 진영별 어두운 색
+      const aby = cy + r * 0.3 // 배 중심(아래로 길쭉)
+      const A = r * 0.42 // 배 가로 반지름
+      const B = r * 0.58 // 배 세로 반지름(길쭉한 타원)
 
-      // 바닥 접지 그림자(아주 옅게 — 떠 있지 않고 박힌 느낌)
-      content.appendChild(mk('ellipse', { cx, cy: cy + r * 0.66, rx: r * 0.72, ry: r * 0.15, fill: '#000', opacity: 0.13 }))
+      // 0) 바닥 접지 그림자(아주 옅게 — 타일에 배를 댄 엎드린 느낌)
+      content.appendChild(mk('ellipse', { cx, cy: cy + r * 0.52, rx: r * 0.5, ry: r * 0.16, fill: '#000', opacity: 0.1 }))
 
-      // 날개 2장(배 뒤, 흰색 반투명)
+      // 1) 배(길쭉한 타원, 진영색) — 등에 줄무늬가 얹히는 바탕
+      content.appendChild(mk('ellipse', { cx, cy: aby, rx: A, ry: B, fill: `url(#bee-${owner})`, stroke: bodyEdge, 'stroke-width': 1.6 }))
+      // 2) 줄무늬(검정 띠 3줄) — 배 타원 안쪽 폭(현(弦))에 맞춰 또렷이
+      for (const f of [-0.45, 0, 0.45]) {
+        const half = A * Math.sqrt(1 - f * f) * 0.9
+        const sy = aby + B * f
+        content.appendChild(mk('line', { x1: cx - half, y1: sy, x2: cx + half, y2: sy, stroke: stripeCol, 'stroke-width': r * 0.17, 'stroke-linecap': 'round' }))
+      }
+      // 3) 배 음영 + 등마루 광택(살짝 도톰한 등)
+      content.appendChild(mk('ellipse', { cx, cy: aby, rx: A, ry: B, fill: 'url(#bee-shade)' }))
+      content.appendChild(mk('ellipse', { cx, cy: aby - B * 0.45, rx: A * 0.4, ry: B * 0.22, fill: '#fff', opacity: 0.18 }))
+
+      // 4) 가슴(둥근 털북숭이 — circle.piece, 테스트/검증이 세는 요소). 진영색 어둑하게.
+      const thorax = mk('circle', { cx, cy: cy - r * 0.18, r: r * 0.3, fill: shade(base, -0.42), stroke: bodyEdge, 'stroke-width': 1.2 })
+      thorax.classList.add('piece')
+      if (lastKeys.has(key)) thorax.classList.add('pop')
+      content.appendChild(thorax)
+
+      // 5) 날개 2장(등 위로 또렷한 흰 날개, 뒤·바깥으로 펼침). 가운데 줄무늬는 가려지지 않아 또렷.
       for (const dir of [-1, 1]) {
-        const wx = cx + dir * r * 0.5
-        const wy = acy - r * 0.22
-        const wing = mk('ellipse', { cx: wx, cy: wy, rx: r * 0.3, ry: r * 0.18, fill: '#ffffff', opacity: 0.9, stroke: '#cbb98a', 'stroke-width': 1 })
-        wing.setAttribute('transform', `rotate(${dir * 36} ${wx} ${wy})`)
+        const wx = cx + dir * r * 0.32
+        const wy = cy + r * 0.02
+        const wing = mk('ellipse', { cx: wx, cy: wy, rx: r * 0.5, ry: r * 0.21, fill: '#ffffff', opacity: 0.82, stroke: '#cdbd8e', 'stroke-width': 1 })
+        wing.setAttribute('transform', `rotate(${dir * 62} ${wx} ${wy})`)
         content.appendChild(wing)
+        const vein = mk('line', { x1: wx - r * 0.4, y1: wy, x2: wx + r * 0.4, y2: wy, stroke: '#b8a878', 'stroke-width': 0.8, opacity: 0.7 })
+        vein.setAttribute('transform', `rotate(${dir * 62} ${wx} ${wy})`)
+        content.appendChild(vein)
       }
 
-      // 배(둥근 몸통, .piece — 테스트/검증이 세는 요소). 진영색.
-      const belly = mk('circle', { cx, cy: acy, r: R, fill: `url(#bee-${owner})`, stroke: bodyEdge, 'stroke-width': 1.6 })
-      belly.classList.add('piece')
-      if (lastKeys.has(key)) belly.classList.add('pop')
-      content.appendChild(belly)
-      // 줄무늬(검정 띠 2줄), 배 안쪽에 들어오도록 폭 보수적으로
-      for (const [dy, half] of [
-        [-0.16, 0.56],
-        [0.2, 0.5],
-      ] as const) {
-        content.appendChild(
-          mk('line', { x1: cx - R * half, y1: acy + R * dy, x2: cx + R * half, y2: acy + R * dy, stroke: '#241603', 'stroke-width': r * 0.16, 'stroke-linecap': 'round' }),
-        )
-      }
-      // 돔 음영(오른쪽 아래 어둑) + 왼쪽 위 광택 → 솟은 돔
-      content.appendChild(mk('circle', { cx, cy: acy, r: R, fill: 'url(#bee-shade)' }))
-      content.appendChild(mk('ellipse', { cx: cx - r * 0.22, cy: acy - r * 0.22, rx: r * 0.2, ry: r * 0.12, fill: '#fff', opacity: 0.35 }))
-
-      // 머리(위, 검정 둥근 머리 — 크게, 귀엽게)
-      content.appendChild(mk('ellipse', { cx, cy: cy - r * 0.42, rx: r * 0.42, ry: r * 0.36, fill: '#231507' }))
-      // 더듬이 2개(작은 곡선 + 끝 동그라미)
+      // 6) 머리(앞쪽, 검은 머리 — 작게)
+      content.appendChild(mk('ellipse', { cx, cy: cy - r * 0.55, rx: r * 0.26, ry: r * 0.24, fill: '#2a1a08' }))
+      // 더듬이 2개(짧고 가늘게, 앞으로)
       for (const dir of [-1, 1]) {
-        const ax = cx + dir * r * 0.14
-        content.appendChild(mk('path', { d: `M ${ax} ${cy - r * 0.62} Q ${cx + dir * r * 0.34} ${cy - r * 0.92} ${cx + dir * r * 0.4} ${cy - r * 0.78}`, fill: 'none', stroke: '#231507', 'stroke-width': r * 0.06, 'stroke-linecap': 'round' }))
-        content.appendChild(mk('circle', { cx: cx + dir * r * 0.4, cy: cy - r * 0.78, r: r * 0.06, fill: '#231507' }))
+        const ax = cx + dir * r * 0.08
+        content.appendChild(mk('path', { d: `M ${ax} ${cy - r * 0.72} Q ${cx + dir * r * 0.22} ${cy - r * 0.96} ${cx + dir * r * 0.2} ${cy - r * 0.92}`, fill: 'none', stroke: '#1c1208', 'stroke-width': r * 0.05, 'stroke-linecap': 'round' }))
+        content.appendChild(mk('circle', { cx: cx + dir * r * 0.2, cy: cy - r * 0.92, r: r * 0.045, fill: '#1c1208' }))
       }
-      // 큰 흰 눈 2개 + 검은 눈동자 + 하이라이트(귀여움의 핵심)
+      // 작은 눈 2개(검은 머리 위, 또렷하지만 작게 — 귀여움보다 벌답게)
       for (const dir of [-1, 1]) {
-        const ex = cx + dir * r * 0.17
-        const ey = cy - r * 0.44
-        content.appendChild(mk('ellipse', { cx: ex, cy: ey, rx: r * 0.14, ry: r * 0.18, fill: '#ffffff' }))
-        content.appendChild(mk('circle', { cx: ex + dir * r * 0.02, cy: ey + r * 0.05, r: r * 0.075, fill: '#1a1206' }))
-        content.appendChild(mk('circle', { cx: ex + dir * r * 0.02 - r * 0.025, cy: ey + r * 0.02, r: r * 0.028, fill: '#ffffff' }))
+        const ex = cx + dir * r * 0.13
+        const ey = cy - r * 0.58
+        content.appendChild(mk('ellipse', { cx: ex, cy: ey, rx: r * 0.055, ry: r * 0.08, fill: '#000' }))
+        content.appendChild(mk('circle', { cx: ex - dir * r * 0.015, cy: ey - r * 0.02, r: r * 0.022, fill: '#fff', opacity: 0.8 }))
       }
 
       // 직전 수: 벌 둘레 파란 링
       if (key === lastPieceKey) {
-        content.appendChild(mk('circle', { cx, cy: acy - r * 0.06, r: r * 0.95, fill: 'none', stroke: '#2563eb', 'stroke-width': 3 }))
+        content.appendChild(mk('circle', { cx, cy: cy + r * 0.12, r: r * 1.02, fill: 'none', stroke: '#2563eb', 'stroke-width': 3 }))
       }
       // 여왕벌 왕관(머리 위)
       if (piece.kind === 'queen') {
-        const crown = mk('text', { x: cx, y: cy - r * 0.78, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': r * 0.62, fill: '#ffe07a', stroke: '#7a5410', 'stroke-width': 0.5 })
+        const crown = mk('text', { x: cx, y: cy - r * 0.95, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': r * 0.6, fill: '#ffe07a', stroke: '#7a5410', 'stroke-width': 0.5 })
         crown.textContent = '♛'
         content.appendChild(crown)
       }

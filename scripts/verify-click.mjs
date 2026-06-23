@@ -10,6 +10,9 @@ const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 
 await page.goto(URL, { waitUntil: 'networkidle' })
+// 튜토리얼 오버레이가 첫 클릭을 가로채지 않게 스킵(known_issues 2026-06-22)
+await page.evaluate(() => localStorage.setItem('be-the-bee/tutorial-seen', '1'))
+await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board polygon')
 
 // 셀 중심 픽셀을 실제로 클릭(겹친 요소가 있어도 최상단 핸들러가 onHexClick 처리).
