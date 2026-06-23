@@ -118,44 +118,36 @@
           return m
         }
 
+        // 말 = 고동색 원판(disc) 위에 칠한 벌. "원판까지가 말" 하나(실물 토큰 그대로).
         function token(base) {
           const g = new THREE.Group()
-          const Y = 0.33 // 몸통 중심 높이(배 바닥이 타일에 살짝 박힘 = 엎드린 느낌)
-          // 배: 마디 5개를 +z(머리)→-z(꼬리)로 쌓아 노랑(진영)·검정 교대 = 또렷한 줄무늬
+          // 원판(고동색) — 타일 위에 얹힘
+          const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.64, 0.14, 40), mat('#6e3328', 0.6))
+          disc.position.y = 0.29
+          disc.castShadow = disc.receiveShadow = true
+          g.add(disc)
+          const Y = 0.46 // 벌 몸 중심 높이(원판 위)
+          // 벌 몸: 마디 5개 +z(머리)→-z(꼬리) = 노랑·검정·흰띠·노랑·어두운꼬리(레퍼런스 줄무늬)
           const seg = [
-            [base, [0.4, 0.14, 0.17], 0.02],
-            ['#241603', [0.38, 0.13, 0.13], -0.16],
-            [base, [0.33, 0.13, 0.12], -0.3],
-            ['#241603', [0.26, 0.12, 0.11], -0.42],
-            [base, [0.16, 0.11, 0.1], -0.52],
+            [base, [0.34, 0.13, 0.15], 0.04],
+            ['#241603', [0.33, 0.12, 0.1], -0.1],
+            ['#eeeae0', [0.34, 0.13, 0.14], -0.22], // 넓은 흰 띠
+            [base, [0.28, 0.12, 0.11], -0.36],
+            ['#241603', [0.18, 0.11, 0.1], -0.47], // 어두운 꼬리
           ]
           for (const [c, s, z] of seg) g.add(blob(c, s, [0, Y, z], { rough: 0.45 }))
           // 가슴(둥근 털북숭이, 어둑한 갈색)
-          g.add(blob('#5b3e1e', [0.34, 0.15, 0.22], [0, Y + 0.01, 0.26], { rough: 0.78 }))
+          g.add(blob('#5b3e1e', [0.3, 0.14, 0.2], [0, Y + 0.01, 0.22], { rough: 0.78 }))
           // 머리(앞, 검정 — 작게)
-          g.add(blob('#241606', [0.24, 0.13, 0.2], [0, Y, 0.5], { rough: 0.5 }))
-          // 작은 눈 2개
-          for (const dir of [-1, 1]) g.add(blob('#000', [0.06, 0.06, 0.05], [dir * 0.12, Y + 0.06, 0.56], { rough: 0.2, shadow: false }))
-          // 더듬이 2개(가는 막대 + 끝 점, 앞으로)
-          for (const dir of [-1, 1]) {
-            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.26, 8), mat('#1c1208', 0.6))
-            ant.position.set(dir * 0.1, Y + 0.12, 0.66)
-            ant.rotation.set(-0.6, 0, dir * 0.4)
-            g.add(ant)
-            g.add(blob('#1c1208', [0.03, 0.03, 0.03], [dir * 0.16, Y + 0.2, 0.74], { shadow: false }))
-          }
-          // 날개 2장(등 위로 또렷한 납작 흰 날개, 뒤·바깥으로 펼침 → 가운데 줄무늬는 안 가림)
-          for (const dir of [-1, 1]) {
-            const w = blob('#ffffff', [0.5, 0.04, 0.26], [dir * 0.22, Y + 0.15, 0.04], { rough: 0.3, opacity: 0.6, shadow: false })
-            w.rotation.y = dir * 0.5
-            g.add(w)
-          }
+          g.add(blob('#19110a', [0.22, 0.12, 0.18], [0, Y, 0.44], { rough: 0.5 }))
+          // 흰 눈 2개(작은 점)
+          for (const dir of [-1, 1]) g.add(blob('#fff', [0.05, 0.05, 0.04], [dir * 0.11, Y + 0.05, 0.5], { rough: 0.2, shadow: false }))
           return g
         }
 
         // 작은 클러스터 배치(가운데 노랑, 둘레 노랑/갈색 교대) — 게임 화면과 닮게
         const TILE = { yellow: 0xf0c531, brown: 0x97581d }
-        const BODY = { yellow: '#f4c12a', brown: '#a8702c' } // 진영색 벌 몸통(SVG 게임 말과 동일 방향)
+        const BODY = { yellow: '#f4b40a', brown: '#e8771a' } // 진영색 벌 몸(노랑 / 주황 — SVG 게임 말과 동일)
         const layout = [
           [0, 0, 'yellow'],
           [1.6, 0, 'brown'],
@@ -170,7 +162,7 @@
           t.position.set(x, 0, z)
           scene.add(t)
           const tk = token(BODY[side])
-          tk.position.set(x, 0, z) // 벌이 타일에 반쯤 박히게(token 내부에서 y 위치 잡음)
+          tk.position.set(x, 0, z) // 원판+벌(token 내부에서 타일 위 y 위치 잡음)
           scene.add(tk)
         }
 
