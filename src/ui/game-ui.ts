@@ -1212,9 +1212,9 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 6) 말 = 실물 토큰: 고동색 원판(disc) 위에 칠한 벌이 얹힌 형태. "원판까지가 말" 하나다.
-    //    벌: 검은 머리(흰 눈 2개) → 노란 몸에 검정 줄무늬 + 넓은 흰 띠 → 어두운 꼬리(레퍼런스 사진 그대로).
-    //    진영색 = 벌 몸 바탕(노랑 진영=노랑벌 / 갈색 진영=호박색벌). 원판은 둘 다 고동색.
+    // 6) 말 = 실물 토큰: 원판(disc) 위에 칠한 벌. "원판까지가 말" 하나(실물 보드게임 그대로).
+    //    진영 = 원판 색(노란 원판 / 갈색 원판). 벌은 양쪽 다 같은 노란 벌.
+    //    벌: 검은 머리(흰 눈 2개 + 짧은 더듬이) + 노란 몸에 검정 줄무늬 + 접힌 흰 날개(둥근) + 어두운 꼬리.
     //    원판(circle.piece)이 테스트/검증이 세는 요소다(벌 몸은 ellipse라 셀 수 없음).
     const mk = (tag: string, attrs: Record<string, string | number>): SVGElement => {
       const e = document.createElementNS(SVGNS, tag)
@@ -1228,47 +1228,60 @@ export function mountGame(root: HTMLElement): void {
       const p = hexToPixel(hexFromKey(key))
       const r = HEX_SIZE * 0.52
       const owner = piece.owner
-      // 진영 구분 = 벌 몸 색. 둘 다 고동색 원판 위에서 또렷한 색으로(원판은 갈색 타일과 대비돼야
-      // 해서 둘 다 고동색 → 진영은 벌 색으로만 구분). 노랑=레퍼런스 노란 벌, 갈색=주황빛 벌.
-      const base = owner === 'yellow' ? '#f4b40a' : '#e8771a'
-      const bodyEdge = shade(base, -0.5) // 몸 외곽선
       const cx = p.x
       const cy = p.y
-      const stripeCol = theme.piece[owner].stripe // 줄무늬·꼬리 = 진영별 어두운 색
+      // 진영 = 원판 색(노란 원판 / 갈색 원판, 실물 보드게임 그대로). 벌은 양쪽 다 같은 노란 벌.
+      const discTop = owner === 'yellow' ? '#d8a92b' : '#743f30'
+      const discSide = owner === 'yellow' ? '#9a7715' : '#3c1d14'
+      const discStroke = owner === 'yellow' ? '#856312' : '#4a241a'
+      const beeBody = '#f6c016' // 벌 몸 = 항상 노랑(두 진영 공통)
+      const beeEdge = shade(beeBody, -0.45)
+      const darkCol = '#241200' // 줄무늬·꼬리·머리·더듬이
       const discR = r * 1.08 // 원판 반지름(타일 안에 들어오고 인접 말과 안 겹치게)
 
-      // 0) 원판 그림자 + 옆면(두께) — 타일색에 묻히지 않고 살짝 떠 보이게
+      // 0) 원판 그림자 + 옆면(두께) — 같은 색 타일 위에서도 살짝 떠 보이게
       content.appendChild(mk('ellipse', { cx, cy: cy + r * 0.2, rx: discR * 1.02, ry: discR * 0.95, fill: '#000', opacity: 0.2 }))
-      content.appendChild(mk('circle', { cx, cy: cy + r * 0.08, r: discR, fill: '#3d1d15' }))
-      // 1) 원판 윗면(고동색) — circle.piece(테스트/검증이 세는 요소)
-      const disc = mk('circle', { cx, cy, r: discR, fill: '#6e3328', stroke: '#85473a', 'stroke-width': 1.4 })
+      content.appendChild(mk('circle', { cx, cy: cy + r * 0.08, r: discR, fill: discSide }))
+      // 1) 원판 윗면(진영색) — circle.piece(테스트/검증이 세는 요소)
+      const disc = mk('circle', { cx, cy, r: discR, fill: discTop, stroke: discStroke, 'stroke-width': 1.4 })
       disc.classList.add('piece')
       if (lastKeys.has(key)) disc.classList.add('pop')
       content.appendChild(disc)
-      content.appendChild(mk('ellipse', { cx: cx - discR * 0.26, cy: cy - discR * 0.3, rx: discR * 0.55, ry: discR * 0.4, fill: '#fff', opacity: 0.07 })) // 윗면 은은한 광택
+      content.appendChild(mk('ellipse', { cx: cx - discR * 0.26, cy: cy - discR * 0.3, rx: discR * 0.55, ry: discR * 0.4, fill: '#fff', opacity: 0.08 })) // 윗면 광택
 
-      // 2) 벌(원판 위): 노란 몸 + 검정 줄무늬 + 넓은 흰 띠 + 어두운 꼬리 + 검은 머리(흰 눈 2개)
-      const bcy = cy + r * 0.14 // 몸 중심(머리 자리 확보)
-      const A = r * 0.52 // 몸 가로 반지름
-      const B = r * 0.74 // 몸 세로 반지름(길쭉)
-      // 몸(진영색 도톰한 돔) — 진영색이 머리 아래·줄무늬 사이·꼬리 위로 또렷이 보이게 크게
-      content.appendChild(mk('ellipse', { cx, cy: bcy, rx: A, ry: B, fill: base, stroke: bodyEdge, 'stroke-width': 1.2 }))
-      // 줄무늬·띠(몸 타원 폭에 맞춰 현(弦)으로): 검정 줄 → 바로 아래 넓은 흰(은색) 띠
-      const band = (f: number, w: number, col: string): void => {
+      // 2) 벌(원판 위, 두 진영 공통): 검은 머리(흰 눈 2개) + 노란 몸 + 검정 줄무늬 + 접힌 흰 날개 + 어두운 꼬리
+      const bcy = cy + r * 0.14
+      const A = r * 0.5 // 몸 가로 반지름
+      const B = r * 0.72 // 몸 세로 반지름(길쭉)
+      // 몸(노란 돔)
+      content.appendChild(mk('ellipse', { cx, cy: bcy, rx: A, ry: B, fill: beeBody, stroke: beeEdge, 'stroke-width': 1.2 }))
+      // 검정 줄무늬(머리 아래 1줄 + 배 아래쪽 2줄) — 몸 폭에 맞춘 현(弦), 날개 위·아래로 또렷이
+      const band = (f: number): void => {
         const half = A * Math.sqrt(1 - f * f) * 0.95
-        content.appendChild(mk('line', { x1: cx - half, y1: bcy + B * f, x2: cx + half, y2: bcy + B * f, stroke: col, 'stroke-width': w, 'stroke-linecap': 'round' }))
+        content.appendChild(mk('line', { x1: cx - half, y1: bcy + B * f, x2: cx + half, y2: bcy + B * f, stroke: darkCol, 'stroke-width': r * 0.1, 'stroke-linecap': 'round' }))
       }
-      band(-0.2, r * 0.11, stripeCol)
-      band(0.08, r * 0.3, '#efece2')
+      band(-0.42)
+      band(0.4)
+      band(0.62)
       // 어두운 꼬리 끝
-      content.appendChild(mk('ellipse', { cx, cy: bcy + B * 0.74, rx: A * 0.6, ry: B * 0.2, fill: stripeCol }))
-      // 몸 음영 + 광택(돔)
+      content.appendChild(mk('ellipse', { cx, cy: bcy + B * 0.8, rx: A * 0.5, ry: B * 0.16, fill: darkCol }))
+      // 몸 음영(돔)
       content.appendChild(mk('ellipse', { cx, cy: bcy, rx: A, ry: B, fill: 'url(#bee-shade)' }))
-      content.appendChild(mk('ellipse', { cx: cx - r * 0.16, cy: bcy - r * 0.26, rx: A * 0.4, ry: B * 0.2, fill: '#fff', opacity: 0.28 }))
+      // 접힌 흰 날개 2장(둥근 모양, 등 가운데 위 — 일자 선 아님. 아래 줄무늬는 안 가린다)
+      for (const dir of [-1, 1]) {
+        const wing = mk('ellipse', { cx: cx + dir * r * 0.11, cy: cy + r * 0.16, rx: r * 0.16, ry: r * 0.26, fill: '#f3f0e7', stroke: '#d6cbad', 'stroke-width': 0.8 })
+        wing.setAttribute('transform', `rotate(${dir * 11} ${cx + dir * r * 0.11} ${cy + r * 0.16})`)
+        content.appendChild(wing)
+      }
       // 머리(검정, 위) — 몸보다 좁아 노란 어깨가 보이게
-      content.appendChild(mk('ellipse', { cx, cy: cy - r * 0.5, rx: r * 0.32, ry: r * 0.27, fill: '#19110a' }))
+      content.appendChild(mk('ellipse', { cx, cy: cy - r * 0.52, rx: r * 0.3, ry: r * 0.26, fill: darkCol }))
       // 흰 눈 2개(작은 점)
-      for (const dir of [-1, 1]) content.appendChild(mk('circle', { cx: cx + dir * r * 0.14, cy: cy - r * 0.54, r: r * 0.06, fill: '#fff' }))
+      for (const dir of [-1, 1]) content.appendChild(mk('circle', { cx: cx + dir * r * 0.13, cy: cy - r * 0.56, r: r * 0.06, fill: '#fff' }))
+      // 더듬이 2개(뽀짝하게 짧게 + 끝 동그라미) — 벌 포인트는 살리되 징그럽지 않게
+      for (const dir of [-1, 1]) {
+        content.appendChild(mk('path', { d: `M ${cx + dir * r * 0.08} ${cy - r * 0.72} Q ${cx + dir * r * 0.2} ${cy - r * 0.86} ${cx + dir * r * 0.17} ${cy - r * 0.91}`, fill: 'none', stroke: darkCol, 'stroke-width': r * 0.055, 'stroke-linecap': 'round' }))
+        content.appendChild(mk('circle', { cx: cx + dir * r * 0.17, cy: cy - r * 0.91, r: r * 0.055, fill: darkCol }))
+      }
 
       // 직전 수: 원판 둘레 파란 링
       if (key === lastPieceKey) {
