@@ -10,7 +10,9 @@ import { hexFromKey, type Hex } from '../engine/hex'
 import { detectHives } from '../engine/hive'
 
 const TILE_COLOR: Record<Player, number> = { yellow: 0xf0c531, brown: 0x97581d }
-const DISC_COLOR: Record<Player, number> = { yellow: 0xd2a230, brown: 0x542514 }
+// 원판색: 타일색과 같은 꿀빛 팔레트로(노란 원판이 타일보다 너무 어둡지 않게). 갈색은 통일.
+const DISC_COLOR: Record<Player, number> = { yellow: 0xe8be3e, brown: 0x6f3529 }
+const HIVE_BORDER = 0xf59e0b // 완성된 벌집 테두리(2D hiveGlow 와 같은 금색)
 const SIZE = 1 // 3D 헥스 크기(중심→꼭짓점)
 const TILE_TOP = 0.22 // 타일 윗면 y
 const PIECE_K = 0.33 // 핸드오프 말(원판 r2)을 타일에 맞게 축소
@@ -170,7 +172,8 @@ function buildPiece(owner: Player, queen: boolean): THREE.Group {
 }
 
 // ---- 말(실사 꿀벌) = three-demo-real 포팅. 그룹 원점 = 타일 접촉면(y=0), 원판 바닥 y≈0.22. ----
-const DISC_REAL: Record<Player, number> = { yellow: 0xd2a230, brown: 0x6f3529 }
+// 색: 칙칙함·"징그러움" 완화 — 머리를 가슴처럼 노랗게(실제 벌도 머리가 노랑), 전반적으로 더 밝게.
+const REAL_BODY = 0xc88f2e // 가슴·머리 공통 황금색(밝게)
 function limb3(a: [number, number, number], b: [number, number, number], radius: number, color: number): THREE.Mesh {
   const va = new THREE.Vector3(...a)
   const vb = new THREE.Vector3(...b)
@@ -186,11 +189,11 @@ function abdomenTexture(): THREE.Texture {
   c.width = 64
   c.height = 256
   const x = c.getContext('2d')!
-  x.fillStyle = '#e3a52c'
+  x.fillStyle = '#f3b836' // 밝은 호박색(칙칙함 완화)
   x.fillRect(0, 0, 64, 256)
   x.fillStyle = '#3a2410'
   for (const y of [10, 70, 130, 190]) x.fillRect(0, y, 64, 26)
-  x.fillStyle = '#241608'
+  x.fillStyle = '#2a1a0a'
   x.fillRect(0, 232, 64, 24)
   const t = new THREE.CanvasTexture(c)
   t.anisotropy = 4
@@ -211,7 +214,7 @@ function abdomenProfile(): THREE.Vector2[] {
 }
 function buildRealBee(owner: Player, queen: boolean): THREE.Group {
   const g = new THREE.Group()
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.14, 44), new THREE.MeshStandardMaterial({ color: DISC_REAL[owner], roughness: 0.6 }))
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.14, 44), new THREE.MeshStandardMaterial({ color: DISC_COLOR[owner], roughness: 0.6 }))
   disc.position.y = 0.29
   disc.castShadow = disc.receiveShadow = true
   g.add(disc)
@@ -223,20 +226,22 @@ function buildRealBee(owner: Player, queen: boolean): THREE.Group {
   abdomen.position.set(0, Y, -0.82)
   abdomen.castShadow = true
   beeGrp.add(abdomen)
-  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.27, 28, 22), new THREE.MeshStandardMaterial({ color: 0x9a6a2a, roughness: 0.92 }))
+  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.27, 28, 22), new THREE.MeshStandardMaterial({ color: REAL_BODY, roughness: 0.85 }))
   thorax.scale.set(1.05, 0.92, 1.0)
   thorax.position.set(0, Y + 0.03, 0.12)
   thorax.castShadow = true
   beeGrp.add(thorax)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 26, 20), new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.6 }))
+  // 머리도 가슴처럼 노랗게(검고 큰 머리가 징그러움의 원인) — 살짝 작게도.
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.165, 26, 20), new THREE.MeshStandardMaterial({ color: REAL_BODY, roughness: 0.6 }))
   head.scale.set(1.05, 0.95, 0.9)
   head.position.set(0, Y + 0.01, 0.5)
   head.castShadow = true
   beeGrp.add(head)
+  // 작은 검은 눈(노란 머리 위에서 또렷, 큰 검정 머리 인상 제거)
   for (const dir of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 14), new THREE.MeshStandardMaterial({ color: 0x4a3618, roughness: 0.25 }))
-    eye.scale.set(0.7, 1.05, 0.85)
-    eye.position.set(dir * 0.14, Y + 0.04, 0.5)
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 12), new THREE.MeshStandardMaterial({ color: 0x1c140a, roughness: 0.3 }))
+    eye.scale.set(0.9, 1.1, 0.8)
+    eye.position.set(dir * 0.11, Y + 0.05, 0.6)
     beeGrp.add(eye)
   }
   for (const dir of [-1, 1]) {
@@ -274,10 +279,9 @@ function buildRealBee(owner: Player, queen: boolean): THREE.Group {
   return g
 }
 
-function hexTile(owner: Player, isHive: boolean): THREE.Mesh {
-  const m = isHive
-    ? new THREE.MeshStandardMaterial({ color: TILE_COLOR[owner], roughness: 0.6, emissive: 0xf59e0b, emissiveIntensity: 0.35 })
-    : new THREE.MeshStandardMaterial({ color: TILE_COLOR[owner], roughness: 0.7, metalness: 0.04 })
+function hexTile(owner: Player): THREE.Mesh {
+  // 벌집이어도 타일 기본(꿀빛)색 유지 — 벌집 표시는 update 의 금색 테두리로(2D 와 동일).
+  const m = new THREE.MeshStandardMaterial({ color: TILE_COLOR[owner], roughness: 0.7, metalness: 0.04 })
   // 회전 없음 = pointy-top: CylinderGeometry(6) 기본 꼭짓점이 ±z 라 엔진 layout 과 맞물린다.
   const tile = new THREE.Mesh(new THREE.CylinderGeometry(SIZE * 0.98, SIZE * 0.98, TILE_TOP, 6), m)
   tile.position.y = TILE_TOP / 2
@@ -342,6 +346,10 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   const ringGeo = new THREE.TorusGeometry(SIZE * 0.84, 0.05, 10, 6)
   ringGeo.rotateX(Math.PI / 2)
   ringGeo.rotateY(Math.PI / 6)
+  // 완성된 벌집 테두리(타일 모서리에 두르는 금색 육각 링 — 2D 의 hiveGlow 테두리에 대응)
+  const hiveBorderGeo = new THREE.TorusGeometry(SIZE * 0.92, 0.055, 8, 6)
+  hiveBorderGeo.rotateX(Math.PI / 2)
+  hiveBorderGeo.rotateY(Math.PI / 6)
   const hoverRing = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x16a34a, emissiveIntensity: 0.7 }))
   hoverRing.visible = false
   scene.add(hoverRing)
@@ -446,16 +454,23 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
       const cell = state.board[k]!
       const hex = hexFromKey(k)
       const { x, z } = at(hex)
-      const tile = hexTile(cell.tile.owner, hiveCells.has(k))
+      const tile = hexTile(cell.tile.owner)
       tile.position.set(x, 0, z)
       boardGroup.add(tile)
       clickable.push({ mesh: tile, hex })
+      // 완성된 벌집 타일: 금색 육각 테두리(2D 와 동일하게 색 대신 테두리로 표시)
+      if (hiveCells.has(k)) {
+        const border = new THREE.Mesh(hiveBorderGeo.clone(), new THREE.MeshStandardMaterial({ color: HIVE_BORDER, emissive: HIVE_BORDER, emissiveIntensity: 0.55 }))
+        border.position.set(x, TILE_TOP + 0.02, z)
+        boardGroup.add(border)
+      }
       if (cell.piece) {
         const queen = cell.piece.kind === 'queen'
         if (style === 'realistic') {
-          // 실사 벌: 그룹 원점=타일 접촉면(자체 원판 바닥 y≈0.22). 살짝(-0.06) 박아 안착.
+          // 실사 벌: 그룹 원점=타일 접촉면. 좀 크다는 의견 → 0.85 축소(원판 바닥 ≈ TILE_TOP-0.06).
           const tk = buildRealBee(cell.piece.owner, queen)
-          tk.position.set(x, -0.06, z)
+          tk.scale.setScalar(0.85)
+          tk.position.set(x, -0.03, z)
           boardGroup.add(tk)
         } else {
           // 일반(스타일 토큰): 원판 r2 → PIECE_K 축소, 원판 바닥을 타일 윗면에 닿게 + 살짝 박음.
