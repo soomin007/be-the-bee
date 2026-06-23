@@ -94,6 +94,17 @@ commit + push origin main** (사용자 지시 없어도 자동). 작은 단위�
 - `main`에 직접 push (이 프로젝트는 branch/PR 안 씀).
 - destructive 작업(force push, reset --hard 등)은 먼저 확인.
 
+### 동시 세션 루틴 (여러 세션 병행 시)
+사용자는 여러 터미널(PowerShell)에서 **여러 세션을 동시에** 돌릴 수 있다. 각 세션은 자기 작업
+파일에만 손대고, 다른 세션 작업을 절대 휩쓸지 않는다.
+- **`git add -A`/`git add .` 금지.** 다른 세션의 진행 중 변경까지 스테이징·커밋한다. 내가 바꾼
+  파일만 **경로로 명시 스테이징**한다(`git add <내 파일> ...`).
+- 커밋 전 `git status` 확인: **내가 안 바꾼 파일이 modified로 떠 있으면 다른 세션 작업**이다.
+  그 파일은 스테이징·수정·`reset`·`checkout`·revert 하지 않는다(읽기는 OK, 편집은 금지).
+- push 거부(non-fast-forward) 시: `git pull --rebase --autostash origin main` 후 다시 push.
+- 공유 문서(`session_logs/`·`backlog.md`·`known_issues.md`)는 **끝에 append**만 한다 — 동시
+  편집 시 rebase 가 분리된 append 를 합쳐준다. 같은 줄을 동시에 고치지 않는다.
+
 ### 오류 기록 루틴 (반복 방지)
 세션 중 버그·설계 함정·작업 실수를 발견하면 `docs/design/known_issues.md`에
 "증상 → 원인 → 재발 방지책"으로 기록한다. 게임 버그뿐 아니라 프로세스 실수(도구
