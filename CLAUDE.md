@@ -117,6 +117,9 @@ commit + push origin main** (사용자 지시 없어도 자동). 작은 단위�
 - push 거부(non-fast-forward) 시: `git pull --rebase --autostash origin main` 후 다시 push.
 - 공유 문서(`session_logs/`·`backlog.md`·`known_issues.md`)는 **끝에 append**만 한다 — 동시
   편집 시 rebase 가 분리된 append 를 합쳐준다. 같은 줄을 동시에 고치지 않는다.
+- **공유 dev 서버 주의**: `pkill -f vite`(포트 무관 모든 vite 종료)는 다른 세션의 dev 서버까지
+  죽인다 → 사용자가 보던 화면이 끊긴다. 블랭킷 kill 금지. 내 서버만 정리하려면 그 PID 만 끄고,
+  꼭 필요하면 사용자에게 알린 뒤 한다. 서버가 죽었으면 다시 띄워 사용자 화면을 복구한다.
 
 ### 오류 기록 루틴 (반복 방지)
 세션 중 버그·설계 함정·작업 실수를 발견하면 `docs/design/known_issues.md`에
