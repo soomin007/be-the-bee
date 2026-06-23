@@ -9,10 +9,10 @@ import type { GameState, Player } from '../engine/types'
 import { hexFromKey, type Hex } from '../engine/hex'
 import { detectHives } from '../engine/hive'
 
-const TILE_COLOR: Record<Player, number> = { yellow: 0xf0c531, brown: 0x97581d }
-// 원판색: 타일색과 같은 꿀빛 팔레트로(노란 원판이 타일보다 너무 어둡지 않게). 갈색은 통일.
-const DISC_COLOR: Record<Player, number> = { yellow: 0xe8be3e, brown: 0x6f3529 }
-const HIVE_BORDER = 0xf59e0b // 완성된 벌집 테두리(2D hiveGlow 와 같은 금색)
+const TILE_COLOR: Record<Player, number> = { yellow: 0xf0c531, brown: 0x97581d } // = 2D themes.ts tile.mid(honey)
+// 원판색 = 2D themes.ts piece.body(honey) 와 동일 값 → 2D/3D 말 색 통일.
+const DISC_COLOR: Record<Player, number> = { yellow: 0xe0a106, brown: 0x8a5418 }
+const HIVE_BORDER = 0xf97316 // 완성된 벌집 테두리 = 2D hiveGlow(honey)
 const SIZE = 1 // 3D 헥스 크기(중심→꼭짓점)
 const TILE_TOP = 0.22 // 타일 윗면 y
 const PIECE_K = 0.33 // 핸드오프 말(원판 r2)을 타일에 맞게 축소
@@ -183,8 +183,8 @@ function realAbdomenTexture(): THREE.Texture {
   cv.width = 96
   cv.height = 512
   const x = cv.getContext('2d')!
-  const amber = '#b3791f'
-  const dark = '#241606'
+  const amber = '#f2b80a' // 선명한 호박색(칙칙하지 않게, 2D 벌 몸통 톤)
+  const dark = '#1c0f02' // 거의 검정 줄무늬 → 고대비
   const yToV = (v: number): number => (1 - v) * 512
   x.fillStyle = amber
   x.fillRect(0, 0, 96, 512)
@@ -194,10 +194,10 @@ function realAbdomenTexture(): THREE.Texture {
     const h = yB - yT
     const fuzz = 10
     const gg = x.createLinearGradient(0, yT - fuzz, 0, yB + fuzz)
-    gg.addColorStop(0, 'rgba(36,22,6,0)')
+    gg.addColorStop(0, 'rgba(28,15,2,0)')
     gg.addColorStop(fuzz / (h + 2 * fuzz), dark)
     gg.addColorStop(1 - fuzz / (h + 2 * fuzz), dark)
-    gg.addColorStop(1, 'rgba(36,22,6,0)')
+    gg.addColorStop(1, 'rgba(28,15,2,0)')
     x.fillStyle = gg
     x.fillRect(0, yT - fuzz, 96, h + 2 * fuzz)
   }
@@ -260,8 +260,8 @@ function buildRealBee(owner: Player, queen: boolean): THREE.Group {
   rim.position.y = 0.3
   g.add(rim)
 
-  const golden = new THREE.MeshStandardMaterial({ color: 0x7d5419, roughness: 1 })
-  const goldenHead = new THREE.MeshStandardMaterial({ color: 0x744d18, roughness: 1 })
+  const golden = new THREE.MeshStandardMaterial({ color: 0xe6a019, roughness: 1 }) // 선명한 꿀빛 가슴(칙칙X)
+  const goldenHead = new THREE.MeshStandardMaterial({ color: 0xedaa22, roughness: 1 }) // 머리도 밝은 금색
   const darkLeg = new THREE.MeshStandardMaterial({ color: 0x241810, roughness: 0.45, metalness: 0.15 })
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0d0a06, roughness: 0.2 })
 
