@@ -404,6 +404,23 @@ export function mountGame(root: HTMLElement): void {
       window.prompt('아래 코드를 복사하세요', code)
     }
   }
+  // "공유하기": 가능하면 기기 공유 시트(메신저/SNS 등)로 바로 보낸다. 없으면 클립보드 복사로 폴백.
+  // 결과 모달에서 저장/불러오기 단계 없이 한 번에 기보를 전달하기 위함.
+  function shareGameCode(code: string): void {
+    const nav = navigator as Navigator & { share?: (data: { title?: string; text?: string }) => Promise<void> }
+    if (typeof nav.share === 'function') {
+      // 공유 텍스트 = BTB1 코드 그대로(받는 쪽 "코드로 가져오기"가 인식). 호출은 클릭 제스처 안에서.
+      nav.share({ title: 'Be the Bee 기보', text: code }).then(
+        () => {
+          notice = '기보를 공유했어요.'
+          render()
+        },
+        () => shareCode(code), // 취소/미지원 → 클립보드 복사로 폴백
+      )
+      return
+    }
+    shareCode(code)
+  }
   // 스냅샷으로 현재 판을 통째로 교체(복기/연출 정리 포함). 모드는 settings 가 단일 소스.
   function applySnapshot(s: GameSnapshot): void {
     state = s.state
@@ -1397,6 +1414,7 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-sub">${sub}</div>
           <div class="modal-actions">
             <button data-act="new">다시 하기</button>
+            <button class="modal-share" data-act="shareGame" title="저장 없이 이 판 기보를 바로 공유">📤 공유하기</button>
             <button data-act="replayEnter">복기 보기</button>
             <button data-act="closeModal">닫기</button>
           </div>
@@ -1965,6 +1983,10 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'exportCurrent':
         shareCode(encodeSnapshot(snapshot()))
+        break
+      case 'shareGame':
+        // 결과 모달의 "공유하기" — 저장/불러오기 없이 현재 판 기보를 바로 공유(시트→복사 폴백).
+        shareGameCode(encodeSnapshot(snapshot()))
         break
       case 'importGame': {
         const code = window.prompt('기보 코드를 붙여넣으세요 (BTB1:... )')

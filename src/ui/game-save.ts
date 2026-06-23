@@ -208,7 +208,10 @@ function replay(moves: Move[], infinite: boolean, mode: string, savedAt: number)
 export function decodeSnapshot(text: string): GameSnapshot | null {
   const t = text.trim()
   if (!t) return null
-  const body = t.startsWith(SHARE_PREFIX) ? t.slice(SHARE_PREFIX.length) : t
+  // 공유 메시지에 인사말 등 다른 문구가 섞여 와도 BTB1: 코드만 뽑아낸다.
+  // (base64 본문에는 공백이 없으므로 접두사 뒤 첫 공백/개행에서 끊는다.)
+  const at = t.indexOf(SHARE_PREFIX)
+  const body = at >= 0 ? (t.slice(at + SHARE_PREFIX.length).split(/\s/)[0] ?? '') : t
   let obj: unknown
   try {
     obj = JSON.parse(fromB64(body)) // base64 우선

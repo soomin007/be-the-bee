@@ -898,6 +898,7 @@ svg.board.panning {
 
 .modal-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
   justify-content: center;
 }
@@ -914,6 +915,13 @@ svg.board.panning {
 .modal-actions button:first-child {
   background: #fde68a;
   border-color: #eab308;
+  font-weight: 700;
+}
+
+/* 결과 모달 "공유하기" — 새 기능이라 눈에 띄게(꿀빛 민트 강조) */
+.modal-actions button.modal-share {
+  background: #d1fae5;
+  border-color: #34d399;
   font-weight: 700;
 }
 

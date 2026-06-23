@@ -56,4 +56,13 @@ describe('공유 코드 라운드트립', () => {
     expect(decodeSnapshot('BTB1:!!!not-base64!!!')).toBeNull()
     expect(decodeSnapshot('BTB1:' + btoa('{"v":1,"mv":"t 0 0"}'))).toBeNull() // 불완전 토큰 → 재생 실패
   })
+
+  it('메신저에 인사말과 섞여 와도 BTB1: 코드만 뽑아 복원한다', () => {
+    const snap = playSnapshot(10)
+    const code = encodeSnapshot(snap)
+    const pasted = `재밌었어요!\n${code}\n분석 부탁해요 🙏`
+    const back = decodeSnapshot(pasted)
+    expect(back).not.toBeNull()
+    expect(back!.state.board).toEqual(snap.state.board)
+  })
 })
