@@ -303,7 +303,7 @@
           if (pieceOwner) {
             const tk = buildPiece(pieceOwner, !!queen)
             tk.scale.setScalar(PIECE_K)
-            tk.position.set(x, TILE_TOP + 0.3 * PIECE_K, z) // 원판 바닥(−0.3*K)을 타일 윗면에
+            tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.06, z) // 원판 바닥을 타일 윗면에 닿게 + 살짝 박아 안착
             board.add(tk)
           }
         }

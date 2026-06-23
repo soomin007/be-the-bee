@@ -316,7 +316,8 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
       if (cell.piece) {
         const tk = buildPiece(cell.piece.owner, cell.piece.kind === 'queen')
         tk.scale.setScalar(PIECE_K)
-        tk.position.set(x, TILE_TOP + 0.3 * PIECE_K, z)
+        // 원판 바닥을 타일 윗면에 닿게(+0.3*K) 두되, 살짝(-0.06) 박아 넣어 떠 보이지 않고 눌러 놓은 느낌.
+        tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.06, z)
         boardGroup.add(tk)
       }
     }
