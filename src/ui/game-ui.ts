@@ -1258,9 +1258,10 @@ export function mountGame(root: HTMLElement): void {
       const discRim = isGold ? '#ecc659' : '#9a5847'
       const isQueen = piece.kind === 'queen'
 
-      // 말 그룹: 스펙 (100,100) → 셀 중심, 반지름 80 → DISC_R
+      // 말 그룹: 스펙 좌표 → 셀 좌표로 매핑. 세로 기준은 원판 윗면(100)이 아니라 **바닥면(109)**을
+      // 셀 중심에 둔다 — 원판 두께(기둥)를 감안해 "타일에 실제로 놓인" 느낌(윗면은 살짝 위로 솟음).
       const g = document.createElementNS(SVGNS, 'g')
-      g.setAttribute('transform', `translate(${p.x - 100 * s} ${p.y - 100 * s}) scale(${s})`)
+      g.setAttribute('transform', `translate(${p.x - 100 * s} ${p.y - 109 * s}) scale(${s})`)
       g.style.pointerEvents = 'none'
       content.appendChild(g)
       const add = (tag: string, attrs: Record<string, string | number>, parent: SVGElement = g): SVGElement => {
