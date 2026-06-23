@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Be the Bee — 3D 벌(스타일 토큰 버전)</title>
+    <title>Be the Bee — 3D 보드 미리보기(읽기 전용)</title>
     <style>
       html,
       body {
@@ -56,7 +56,8 @@
         padding: 24px;
       }
     </style>
-    <!-- 번들 없이 브라우저가 직접 three.js 를 CDN 에서 불러온다(이 데모는 public/ 정적 파일이라 Vite 가 손대지 않음). -->
+    <!-- 1단계(읽기 전용 3D 보드 평가). 게임 엔진/게임 UI 와 분리된 정적 데모 — game-ui.ts 안 건드림.
+         실제 게임처럼 연결된 헥스 보드(타일+말)를 three.js 로 렌더만 한다(입력·오버레이 일부는 다음 단계). -->
     <script type="importmap">
       {
         "imports": {
@@ -67,8 +68,8 @@
     </script>
   </head>
   <body>
-    <div id="nav"><a href="three-demo.html" class="on">① 스타일 토큰</a><a href="three-demo-real.html">② 현실 벌</a><a href="board3d-demo.html">③ 보드 미리보기</a></div>
-    <div id="hint">드래그로 돌려보세요 · 휠로 확대 · 자동 회전 중 — 스타일 토큰(Claude Design 핸드오프)</div>
+    <div id="nav"><a href="three-demo.html">① 스타일 토큰</a><a href="three-demo-real.html">② 현실 벌</a><a href="board3d-demo.html" class="on">③ 보드 미리보기</a></div>
+    <div id="hint">드래그로 회전 · 휠로 확대 — 3D 보드 읽기 전용 미리보기(입력·오버레이 일부는 다음 단계)</div>
     <div id="err">three.js 를 CDN 에서 불러오지 못했어요. 인터넷 연결을 확인하세요.</div>
     <script type="module">
       try {
@@ -76,8 +77,8 @@
         const { OrbitControls } = await import('three/addons/controls/OrbitControls.js')
 
         const scene = new THREE.Scene()
-        const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100)
-        camera.position.set(2.2, 4.6, 5.4) // 위에서 내려다보는 각(탑다운 벌이 잘 보이게)
+        const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200)
+        camera.position.set(2.5, 9, 9.5)
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
         renderer.setSize(innerWidth, innerHeight)
@@ -86,46 +87,49 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap
         document.body.appendChild(renderer.domElement)
 
-        // 조명 — 게임의 SVG 와 같은 "왼쪽 위" 광원 + 부드러운 채움광
-        scene.add(new THREE.AmbientLight(0xfff4d8, 0.85))
+        scene.add(new THREE.AmbientLight(0xfff4d8, 0.8))
         const key = new THREE.DirectionalLight(0xfff1c0, 1.25)
-        key.position.set(-4, 7, 4)
+        key.position.set(-6, 12, 6)
         key.castShadow = true
-        key.shadow.mapSize.set(1024, 1024)
+        key.shadow.mapSize.set(2048, 2048)
+        key.shadow.camera.near = 1
+        key.shadow.camera.far = 40
+        key.shadow.camera.left = -10
+        key.shadow.camera.right = 10
+        key.shadow.camera.top = 10
+        key.shadow.camera.bottom = -10
         scene.add(key)
-        const fill = new THREE.DirectionalLight(0xffffff, 0.35)
-        fill.position.set(5, 3, 2)
+        const fill = new THREE.DirectionalLight(0xffffff, 0.32)
+        fill.position.set(7, 4, -5)
         scene.add(fill)
 
-        // 바닥(은은한 꿀색 그림자 받이)
-        const ground = new THREE.Mesh(
-          new THREE.CircleGeometry(9, 48),
-          new THREE.ShadowMaterial({ opacity: 0.18 }),
-        )
+        const ground = new THREE.Mesh(new THREE.CircleGeometry(22, 48), new THREE.ShadowMaterial({ opacity: 0.16 }))
         ground.rotation.x = -Math.PI / 2
         ground.position.y = -0.001
         ground.receiveShadow = true
         scene.add(ground)
 
-        const mat = (c, rough = 0.55) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.05 })
+        const mat = (c, rough = 0.6) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: 0.04 })
 
-        // 두께 있는 육각 타일
-        function hexTile(color) {
-          const g = new THREE.Group()
-          const tile = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 0.92, 0.22, 6), mat(color, 0.7))
+        // ---- 헥스 타일(pointy-top, 엔진 layout.ts 와 동일 배치) ----
+        const TILE = { yellow: 0xf0c531, brown: 0x97581d }
+        const TILE_SIZE = 1.0 // 헥스 외접원 반지름(엔진 HEX_SIZE 대응)
+        function hexTile(owner, isHive) {
+          const m = isHive
+            ? new THREE.MeshStandardMaterial({ color: TILE[owner], roughness: 0.6, emissive: 0xf59e0b, emissiveIntensity: 0.35 })
+            : mat(TILE[owner], 0.7)
+          const tile = new THREE.Mesh(new THREE.CylinderGeometry(TILE_SIZE, TILE_SIZE, 0.4, 6), m)
+          tile.rotation.y = Math.PI / 6 // 꼭짓점이 위(±z) = pointy-top
+          tile.position.y = 0.2
           tile.castShadow = tile.receiveShadow = true
-          tile.position.y = 0.11
-          g.add(tile)
-          return g
+          return tile
+        }
+        // q,r → 3D(XZ): 엔진 hexToPixel(pointy-top)와 동일 식, y→z
+        function hexToXZ(q, r) {
+          return { x: TILE_SIZE * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r), z: TILE_SIZE * (1.5 * r) }
         }
 
-        // 말 = 원판 위의 벌. Claude Design 핸드오프(be-the-bee-handoff-v2-3d) 3D 스펙 이식:
-        //   SVG 벌의 회전체(구) + 표면 캔버스 텍스처(노랑 + 검정 2줄 + 검정 꼬리) + 머리·평면 눈 스택·
-        //   더듬이·반투명 날개. 진영 = 원판 색(gold/brown). 핸드오프 네이티브 스케일(원판 r=2)로 빌드 후 축소.
-
-        const TILE = { yellow: 0xf0c531, brown: 0x97581d }
-
-        // 몸통 줄무늬 텍스처(핸드오프 makeBodyTexture): 64×512, 노랑 바탕 + 검정 띠 2개 + 통검정 꼬리.
+        // ---- 말(원판+벌) = Claude Design 핸드오프 3D(스타일 토큰), three-demo.html 과 동일 ----
         function makeBodyTexture() {
           const w = 64
           const h = 512
@@ -136,9 +140,9 @@
           x.fillStyle = '#f4b70e'
           x.fillRect(0, 0, w, h)
           const black = '#1d150b'
-          const yToV = (v) => (1 - v) * h // v=1(머리극)=캔버스 위, v=0(꼬리)=아래
+          const yToV = (v) => (1 - v) * h
           x.fillStyle = black
-          x.fillRect(0, yToV(0.28), w, h - yToV(0.28)) // 통검정 꼬리(아래 ~28%)
+          x.fillRect(0, yToV(0.28), w, h - yToV(0.28))
           const band = (v, th) => {
             x.fillStyle = black
             x.fillRect(0, yToV(v) - th / 2, w, th)
@@ -153,12 +157,9 @@
           } catch (e) {}
           return t
         }
-
-        // 핸드오프 buildPiece 이식: 원판 + 벌(회전체) 한 세트(네이티브 스케일, 원판 반지름 2).
         function buildPiece(side, queen) {
           const discColor = side === 'yellow' ? 0xd2a230 : 0x542514
           const g = new THREE.Group()
-          // 원판(두께 크게 — 벌이 ~30% 매몰) + 가장자리 토러스 림
           const disc = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 0.6, 72), new THREE.MeshStandardMaterial({ color: discColor, roughness: 0.82 }))
           disc.castShadow = disc.receiveShadow = true
           g.add(disc)
@@ -166,29 +167,20 @@
           rim.rotation.x = Math.PI / 2
           rim.position.y = 0.3
           g.add(rim)
-
           const black = new THREE.MeshStandardMaterial({ color: 0x1d150b, roughness: 0.55 })
-          const R = 0.8
-          const L = 1.15
           const bee = new THREE.Group()
           bee.position.y = 0.62
-
-          // 몸통 = 구의 회전체(장축 z, 머리 +z/꼬리 −z) + 줄무늬 텍스처(릴리프 없음)
           const bodyGeo = new THREE.SphereGeometry(1, 64, 48)
-          bodyGeo.rotateX(Math.PI / 2) // UV 극을 z축에 맞춤
+          bodyGeo.rotateX(Math.PI / 2)
           const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({ map: makeBodyTexture(), roughness: 0.5 }))
-          body.scale.set(R, R, L)
+          body.scale.set(0.8, 0.8, 1.15)
           body.castShadow = true
           bee.add(body)
-
-          // 머리(검정 구)
           const head = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 30), black)
           head.scale.set(0.55, 0.55, 0.5)
           head.position.set(0, 0.24, 0.98)
           head.castShadow = true
           bee.add(head)
-
-          // 눈: 머리 앞면에 얹는 평면 원반 스택(검은 테두리/흰자/큰 동공/하이라이트), 세로로 살짝 긴 타원
           const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, emissive: 0x444444, side: THREE.DoubleSide })
           const eyeDark = new THREE.MeshStandardMaterial({ color: 0x15100a, side: THREE.DoubleSide })
           const zAxis = new THREE.Vector3(0, 0, 1)
@@ -218,8 +210,6 @@
             eye.add(hi)
             bee.add(eye)
           }
-
-          // 더듬이(줄기 + 끝 공, 실제 방향으로 정렬)
           const up = new THREE.Vector3(0, 1, 0)
           for (const s of [-1, 1]) {
             const base = new THREE.Vector3(s * 0.14, 0.62, 1.06)
@@ -233,8 +223,6 @@
             knob.position.copy(base.clone().addScaledVector(dir, len))
             bee.add(knob)
           }
-
-          // 날개: 뿌리는 머리·어깨(+z)에 모이고 꼬리(−z)로 퍼지는 납작 반투명 타원체
           const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.42, roughness: 0.2, side: THREE.DoubleSide, depthWrite: false })
           for (const s of [-1, 1]) {
             const wing = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), wingMat)
@@ -245,10 +233,7 @@
             wing.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tip.clone().sub(root).normalize())
             bee.add(wing)
           }
-
           g.add(bee)
-
-          // 여왕벌: 머리 위 금색 띠 + 뿔 6개 + 원판 빨간 링
           if (queen) {
             const gold = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.32, metalness: 0.55 })
             const band = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.29, 0.16, 16), gold)
@@ -268,34 +253,64 @@
           return g
         }
 
-        // 핸드오프 piece(원판 반지름 2)를 타일(반지름 0.92)에 맞게 축소·배치. 원판 바닥을 타일 윗면에.
-        const PIECE_K = 0.33 // 2 * 0.33 ≈ 0.66 ≤ 타일
-        const layout = [
-          [0, 0, 'yellow', false],
-          [1.6, 0, 'brown', false],
-          [-1.6, 0, 'brown', true],
-          [0.8, 1.4, 'yellow', false],
-          [-0.8, 1.4, 'yellow', true],
-          [0.8, -1.4, 'brown', false],
-          [-0.8, -1.4, 'yellow', false],
+        // ---- 샘플 보드(실전 중반 모양): 노랑 5타일 벌집 줄 + 양 진영 말 + 여왕벌 1 ----
+        // [q, r, tileOwner, pieceOwner|null, queen?]
+        const CELLS = [
+          [0, 0, 'yellow', 'yellow'],
+          [1, 0, 'yellow', null],
+          [2, 0, 'yellow', 'brown'],
+          [3, 0, 'yellow', null],
+          [4, 0, 'yellow', 'yellow'],
+          [0, 1, 'brown', 'brown'],
+          [1, 1, 'brown', null],
+          [2, 1, 'yellow', 'yellow', true],
+          [3, 1, 'brown', null],
+          [0, -1, 'yellow', null],
+          [1, -1, 'brown', 'brown'],
+          [2, -1, 'yellow', 'yellow'],
+          [3, -1, 'brown', null],
+          [-1, 0, 'brown', null],
+          [-1, 1, 'yellow', null],
+          [4, 1, 'brown', 'brown'],
         ]
-        for (const [x, z, side, queen] of layout) {
-          const t = hexTile(TILE[side])
-          t.position.set(x, 0, z)
-          scene.add(t)
-          const tk = buildPiece(side, queen)
-          tk.scale.setScalar(PIECE_K)
-          tk.position.set(x, 0.22 + 0.3 * PIECE_K, z) // 원판 바닥(−0.3*K)을 타일 윗면(0.22)에
-          scene.add(tk)
+        const HIVE = new Set(['0,0', '1,0', '2,0', '3,0', '4,0']) // 노랑 5목 = 벌집(글로우)
+
+        // 보드 중심을 원점으로(카메라 단순화)
+        let cx = 0
+        let cz = 0
+        for (const [q, r] of CELLS) {
+          const p = hexToXZ(q, r)
+          cx += p.x
+          cz += p.z
         }
+        cx /= CELLS.length
+        cz /= CELLS.length
+
+        const board = new THREE.Group()
+        const PIECE_K = 0.33
+        for (const [q, r, tileOwner, pieceOwner, queen] of CELLS) {
+          const p = hexToXZ(q, r)
+          const x = p.x - cx
+          const z = p.z - cz
+          const tile = hexTile(tileOwner, HIVE.has(`${q},${r}`))
+          tile.position.set(x, 0, z)
+          board.add(tile)
+          if (pieceOwner) {
+            const tk = buildPiece(pieceOwner, !!queen)
+            tk.scale.setScalar(PIECE_K)
+            tk.position.set(x, 0.4 + 0.3 * PIECE_K, z) // 원판 바닥(−0.3*K)을 타일 윗면(0.4)에
+            board.add(tk)
+          }
+        }
+        scene.add(board)
 
         const controls = new OrbitControls(camera, renderer.domElement)
         controls.target.set(0, 0.4, 0)
         controls.enableDamping = true
         controls.autoRotate = true
-        controls.autoRotateSpeed = 1.4
-        controls.minDistance = 3
-        controls.maxDistance = 14
+        controls.autoRotateSpeed = 0.7
+        controls.minDistance = 5
+        controls.maxDistance = 30
 
         addEventListener('resize', () => {
           camera.aspect = innerWidth / innerHeight
