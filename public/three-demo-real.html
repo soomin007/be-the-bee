@@ -213,7 +213,7 @@
             }
           }
 
-          // 날개 2쌍(반투명, 가슴에서 등 위로 뒤·바깥. 앞날개 크고 뒷날개 작게)
+          // 날개 2쌍(반투명) — 뿌리는 가슴(앞, z>0)에 모이고 꼬리(-z)로 갈수록 바깥으로 퍼진다
           const wingMat = new THREE.MeshStandardMaterial({
             color: '#ffffff',
             roughness: 0.15,
@@ -222,17 +222,19 @@
             opacity: 0.3,
             side: THREE.DoubleSide,
           })
+          const wing = (root, tip, halfW) => {
+            const a = new THREE.Vector3(...root)
+            const b = new THREE.Vector3(...tip)
+            const dir = new THREE.Vector3().subVectors(b, a)
+            const m = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), wingMat)
+            m.scale.set(halfW, 0.012, dir.length() / 2)
+            m.position.copy(a).add(b).multiplyScalar(0.5)
+            m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize())
+            return m
+          }
           for (const dir of [-1, 1]) {
-            const fore = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), wingMat)
-            fore.scale.set(0.17, 0.015, 0.46)
-            fore.position.set(dir * 0.26, Y + 0.22, -0.22)
-            fore.rotation.set(0.12, dir * 0.42, 0)
-            g.add(fore)
-            const hind = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), wingMat)
-            hind.scale.set(0.12, 0.015, 0.3)
-            hind.position.set(dir * 0.24, Y + 0.19, -0.36)
-            hind.rotation.set(0.1, dir * 0.55, 0)
-            g.add(hind)
+            g.add(wing([dir * 0.05, Y + 0.26, 0.14], [dir * 0.44, Y + 0.18, -0.5], 0.17)) // 앞날개(큼)
+            g.add(wing([dir * 0.05, Y + 0.22, 0.09], [dir * 0.34, Y + 0.15, -0.52], 0.12)) // 뒷날개(작음)
           }
           return g
         }

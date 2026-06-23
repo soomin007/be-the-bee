@@ -168,28 +168,28 @@
           disc.position.y = 0.29
           disc.castShadow = disc.receiveShadow = true
           g.add(disc)
-          const Y = 0.47
-          // 몸통 = 회전체 1개(Lathe) + 표면 줄무늬 텍스처. 눕혀서 길쭉·납작하게 원판 위에.
+          const Y = 0.44
+          // 몸통 = 회전체 1개(Lathe) + 표면 줄무늬 텍스처. 도톰한 돔으로 솟게(입체감), 아래는 원판에 묻힘.
           const body = new THREE.Mesh(
             new THREE.LatheGeometry(bodyProfile(), 48),
             new THREE.MeshStandardMaterial({ map: bodyTexture(), roughness: 0.5, metalness: 0.02 }),
           )
           body.castShadow = true
           body.rotation.x = Math.PI / 2 // 길이축(원래 +y)을 +z(머리)로 눕힘
-          body.scale.set(1.2, 1.45, 0.42) // (폭 x · 길이 z · 높이 y(더 납작))
-          body.position.set(0, Y, -0.74) // 길이 가운데를 원판 중심에
+          body.scale.set(1.15, 1.42, 0.82) // (폭 x · 길이 z · 높이 y) — 높이를 키워 돔처럼 솟게
+          body.position.set(0, Y, -0.72) // 길이 가운데를 원판 중심에(아래 절반은 원판에 묻힘)
           g.add(body)
-          // 머리 = 회전체 1개(구), 어둑한 검정, 앞(+z) — 작게
-          const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 28, 20), mat('#241606', 0.6))
-          head.scale.set(1, 0.78, 0.92)
-          head.position.set(0, Y + 0.01, 0.6)
+          // 머리 = 회전체 1개(구), 어둑한 검정, 앞(+z) — 살짝 솟은 돔
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 20), mat('#241606', 0.55))
+          head.scale.set(1, 0.92, 0.95)
+          head.position.set(0, Y + 0.05, 0.58)
           head.castShadow = true
           g.add(head)
-          // 흰 눈 2개(머리 표면에 색칠한 느낌 = 납작 원판 decal)
+          // 흰 눈 2개(머리 윗면에 색칠한 느낌 = 납작 원판 decal, 표면 위로 또렷이 — 파묻히지 않게)
           for (const dir of [-1, 1]) {
-            const eye = new THREE.Mesh(new THREE.CircleGeometry(0.045, 16), mat('#ffffff', 0.3))
-            eye.position.set(dir * 0.075, Y + 0.11, 0.66)
-            eye.rotation.x = -0.7
+            const eye = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16), mat('#ffffff', 0.35))
+            eye.position.set(dir * 0.08, Y + 0.24, 0.66)
+            eye.rotation.x = -1.15 // 거의 위를 보게(카메라 쪽)
             g.add(eye)
           }
           return g
