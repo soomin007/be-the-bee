@@ -438,6 +438,25 @@ export function mountGame(root: HTMLElement): void {
               <stop offset="48%" stop-color="#2a1c00" stop-opacity="0" />
               <stop offset="100%" stop-color="#2a1c00" stop-opacity="0.3" />
             </radialGradient>
+            <!-- 말(벌+원판) 에셋: design_handoff_bee_pieces 스펙. 진영=원판색, 벌 공통. -->
+            <radialGradient id="disc-gold" cx="36%" cy="30%" r="80%">
+              <stop offset="0%" stop-color="#dcb65e" />
+              <stop offset="60%" stop-color="#d2a230" />
+              <stop offset="100%" stop-color="#977523" />
+            </radialGradient>
+            <radialGradient id="disc-brown" cx="36%" cy="30%" r="80%">
+              <stop offset="0%" stop-color="#8f6158" />
+              <stop offset="60%" stop-color="#6f3529" />
+              <stop offset="100%" stop-color="#50261e" />
+            </radialGradient>
+            <radialGradient id="bee-body" cx="38%" cy="26%" r="78%">
+              <stop offset="0%" stop-color="#ffd456" />
+              <stop offset="52%" stop-color="#f4b70e" />
+              <stop offset="100%" stop-color="#c8870a" />
+            </radialGradient>
+            <clipPath id="beeBodyClip" clipPathUnits="userSpaceOnUse">
+              <ellipse cx="100" cy="111" rx="32" ry="46" />
+            </clipPath>
           </defs>
           <g class="content"></g>
           <g class="fx" pointer-events="none"></g>
@@ -1212,86 +1231,84 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 6) 말 = 실물 토큰: 원판(disc) 위에 칠한 벌. "원판까지가 말" 하나(실물 보드게임 그대로).
-    //    진영 = 원판 색(노란 원판 / 갈색 원판). 벌은 양쪽 다 같은 노란 벌.
-    //    벌: 검은 머리(흰 눈 2개 + 짧은 더듬이) + 노란 몸에 검정 줄무늬 + 접힌 흰 날개(둥근) + 어두운 꼬리.
-    //    원판(circle.piece)이 테스트/검증이 세는 요소다(벌 몸은 ellipse라 셀 수 없음).
+    // 6) 말 = 실물 토큰(벌 + 원판). design_handoff_bee_pieces 스펙(hifi)을 그대로 이식.
+    //    스펙 좌표계: viewBox 0~200, 원판 중심 (100,100)·반지름 80. 각 말을 그룹 transform 으로
+    //    게임 좌표(셀 중심 cx,cy · 반지름 DISC_R)에 매핑한다. 진영 = 원판 색(gold/brown), 벌 공통.
+    //    원판 윗면 circle 에 .piece(테스트/검증이 세는 요소) + .pop. 줄무늬·꼬리는 몸통 타원에 클립.
+    const DISC_R = HEX_SIZE * 0.6 // 게임 px 원판 반지름(스펙 80 → 이 값)
     const mk = (tag: string, attrs: Record<string, string | number>): SVGElement => {
       const e = document.createElementNS(SVGNS, tag)
       for (const k in attrs) e.setAttribute(k, String(attrs[k]))
-      e.style.pointerEvents = 'none'
       return e
+    }
+    // 셀 좌표 해시 → 결정적 tilt(±18°). 실물처럼 살짝 흩뿌린 느낌(랜덤 아님 → 재렌더 안정).
+    const tiltFor = (k: string): number => {
+      let h = 0
+      for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) | 0
+      return (Math.abs(h) % 37) - 18
     }
     for (const key of Object.keys(viewState.board)) {
       const piece = viewState.board[key]!.piece
       if (!piece) continue
       const p = hexToPixel(hexFromKey(key))
-      const r = HEX_SIZE * 0.52
-      const owner = piece.owner
-      const cx = p.x
-      const cy = p.y
-      // 진영 = 원판 색(노란 원판 / 갈색 원판, 실물 보드게임 그대로). 벌은 양쪽 다 같은 노란 벌.
-      const discTop = owner === 'yellow' ? '#d8a92b' : '#743f30'
-      const discSide = owner === 'yellow' ? '#9a7715' : '#3c1d14'
-      const discStroke = owner === 'yellow' ? '#856312' : '#4a241a'
-      const beeBody = '#f6c016' // 벌 몸 = 항상 노랑(두 진영 공통)
-      const beeEdge = shade(beeBody, -0.45)
-      const darkCol = '#241200' // 줄무늬·꼬리·머리·더듬이
-      const discR = r * 1.08 // 원판 반지름(타일 안에 들어오고 인접 말과 안 겹치게)
+      const s = DISC_R / 80 // 스펙(반지름 80) → 게임 px 스케일
+      const isGold = piece.owner === 'yellow'
+      const discGrad = isGold ? 'disc-gold' : 'disc-brown'
+      const discSide = isGold ? '#967216' : '#3f1f17'
+      const discRim = isGold ? '#ecc659' : '#9a5847'
+      const isQueen = piece.kind === 'queen'
 
-      // 0) 원판 그림자 + 옆면(두께) — 같은 색 타일 위에서도 살짝 떠 보이게
-      content.appendChild(mk('ellipse', { cx, cy: cy + r * 0.2, rx: discR * 1.02, ry: discR * 0.95, fill: '#000', opacity: 0.2 }))
-      content.appendChild(mk('circle', { cx, cy: cy + r * 0.08, r: discR, fill: discSide }))
-      // 1) 원판 윗면(진영색) — circle.piece(테스트/검증이 세는 요소)
-      const disc = mk('circle', { cx, cy, r: discR, fill: discTop, stroke: discStroke, 'stroke-width': 1.4 })
+      // 말 그룹: 스펙 (100,100) → 셀 중심, 반지름 80 → DISC_R
+      const g = document.createElementNS(SVGNS, 'g')
+      g.setAttribute('transform', `translate(${p.x - 100 * s} ${p.y - 100 * s}) scale(${s})`)
+      g.style.pointerEvents = 'none'
+      content.appendChild(g)
+      const add = (tag: string, attrs: Record<string, string | number>, parent: SVGElement = g): SVGElement => {
+        const e = mk(tag, attrs)
+        parent.appendChild(e)
+        return e
+      }
+
+      // --- 원판(회전 안 함) ---
+      add('ellipse', { cx: 100, cy: 122, rx: 80, ry: 68, fill: '#000000', opacity: 0.16 }) // 바닥 그림자
+      add('circle', { cx: 100, cy: 109, r: 80, fill: discSide }) // 옆면(두께)
+      const disc = add('circle', { cx: 100, cy: 100, r: 80, fill: `url(#${discGrad})` }) // 윗면 = circle.piece
       disc.classList.add('piece')
       if (lastKeys.has(key)) disc.classList.add('pop')
-      content.appendChild(disc)
-      content.appendChild(mk('ellipse', { cx: cx - discR * 0.26, cy: cy - discR * 0.3, rx: discR * 0.55, ry: discR * 0.4, fill: '#fff', opacity: 0.08 })) // 윗면 광택
+      add('circle', { cx: 100, cy: 100, r: 79, fill: 'none', stroke: discRim, 'stroke-width': 2.2, opacity: 0.5 }) // 안쪽 림
+      add('ellipse', { cx: 74, cy: 72, rx: 44, ry: 31, fill: '#ffffff', opacity: 0.06 }) // 좌상단 광택
+      if (isQueen) add('circle', { cx: 100, cy: 100, r: 71, fill: 'none', stroke: '#cf2a1c', 'stroke-width': 2.8 }) // 여왕벌 빨간 링
+      if (key === lastPieceKey) add('circle', { cx: 100, cy: 100, r: 84, fill: 'none', stroke: '#2563eb', 'stroke-width': 3.4 }) // 직전 수 파란 링
 
-      // 2) 벌(원판 위, 두 진영 공통): 검은 머리(흰 눈 2개) + 노란 몸 + 검정 줄무늬 + 접힌 흰 날개 + 어두운 꼬리
-      const bcy = cy + r * 0.14
-      const A = r * 0.5 // 몸 가로 반지름
-      const B = r * 0.72 // 몸 세로 반지름(길쭉)
-      // 몸(노란 돔)
-      content.appendChild(mk('ellipse', { cx, cy: bcy, rx: A, ry: B, fill: beeBody, stroke: beeEdge, 'stroke-width': 1.2 }))
-      // 검정 줄무늬(머리 아래 1줄 + 배 아래쪽 2줄) — 몸 폭에 맞춘 현(弦), 날개 위·아래로 또렷이
-      const band = (f: number): void => {
-        const half = A * Math.sqrt(1 - f * f) * 0.95
-        content.appendChild(mk('line', { x1: cx - half, y1: bcy + B * f, x2: cx + half, y2: bcy + B * f, stroke: darkCol, 'stroke-width': r * 0.1, 'stroke-linecap': 'round' }))
-      }
-      band(-0.42)
-      band(0.4)
-      band(0.62)
-      // 어두운 꼬리 끝
-      content.appendChild(mk('ellipse', { cx, cy: bcy + B * 0.8, rx: A * 0.5, ry: B * 0.16, fill: darkCol }))
-      // 몸 음영(돔)
-      content.appendChild(mk('ellipse', { cx, cy: bcy, rx: A, ry: B, fill: 'url(#bee-shade)' }))
-      // 접힌 흰 날개 2장(둥근 모양, 등 가운데 위 — 일자 선 아님. 아래 줄무늬는 안 가린다)
-      for (const dir of [-1, 1]) {
-        const wing = mk('ellipse', { cx: cx + dir * r * 0.11, cy: cy + r * 0.16, rx: r * 0.16, ry: r * 0.26, fill: '#f3f0e7', stroke: '#d6cbad', 'stroke-width': 0.8 })
-        wing.setAttribute('transform', `rotate(${dir * 11} ${cx + dir * r * 0.11} ${cy + r * 0.16})`)
-        content.appendChild(wing)
-      }
-      // 머리(검정, 위) — 몸보다 좁아 노란 어깨가 보이게
-      content.appendChild(mk('ellipse', { cx, cy: cy - r * 0.52, rx: r * 0.3, ry: r * 0.26, fill: darkCol }))
-      // 흰 눈 2개(작은 점)
-      for (const dir of [-1, 1]) content.appendChild(mk('circle', { cx: cx + dir * r * 0.13, cy: cy - r * 0.56, r: r * 0.06, fill: '#fff' }))
-      // 더듬이 2개(뽀짝하게 짧게 + 끝 동그라미) — 벌 포인트는 살리되 징그럽지 않게
-      for (const dir of [-1, 1]) {
-        content.appendChild(mk('path', { d: `M ${cx + dir * r * 0.08} ${cy - r * 0.72} Q ${cx + dir * r * 0.2} ${cy - r * 0.86} ${cx + dir * r * 0.17} ${cy - r * 0.91}`, fill: 'none', stroke: darkCol, 'stroke-width': r * 0.055, 'stroke-linecap': 'round' }))
-        content.appendChild(mk('circle', { cx: cx + dir * r * 0.17, cy: cy - r * 0.91, r: r * 0.055, fill: darkCol }))
-      }
-
-      // 직전 수: 원판 둘레 파란 링
-      if (key === lastPieceKey) {
-        content.appendChild(mk('circle', { cx, cy, r: discR + 2, fill: 'none', stroke: '#2563eb', 'stroke-width': 3 }))
-      }
-      // 여왕벌 왕관(머리 위)
-      if (piece.kind === 'queen') {
-        const crown = mk('text', { x: cx, y: cy - r * 0.9, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': r * 0.56, fill: '#ffe07a', stroke: '#7a5410', 'stroke-width': 0.5 })
+      // --- 벌(그룹, tilt 적용) ---
+      const bee = document.createElementNS(SVGNS, 'g')
+      bee.setAttribute('transform', `rotate(${tiltFor(key)} 100 100)`)
+      bee.style.pointerEvents = 'none'
+      g.appendChild(bee)
+      add('path', { d: 'M94 53 Q88 44 84 41', fill: 'none', stroke: '#15100a', 'stroke-width': 3.6, 'stroke-linecap': 'round' }, bee)
+      add('path', { d: 'M106 53 Q112 44 116 41', fill: 'none', stroke: '#15100a', 'stroke-width': 3.6, 'stroke-linecap': 'round' }, bee)
+      add('circle', { cx: 83, cy: 40, r: 3.4, fill: '#15100a' }, bee)
+      add('circle', { cx: 117, cy: 40, r: 3.4, fill: '#15100a' }, bee)
+      add('ellipse', { cx: 100, cy: 111, rx: 32, ry: 46, fill: 'url(#bee-body)', stroke: '#9a6406', 'stroke-width': 1.6 }, bee) // 몸통
+      const clip = mk('g', {}) as SVGGElement
+      clip.setAttribute('clip-path', 'url(#beeBodyClip)')
+      bee.appendChild(clip)
+      add('path', { d: 'M26 100 Q100 109 174 100', fill: 'none', stroke: '#1d150b', 'stroke-width': 11 }, clip) // 줄무늬1
+      add('path', { d: 'M28 119 Q100 128 172 119', fill: 'none', stroke: '#1d150b', 'stroke-width': 11 }, clip) // 줄무늬2
+      add('path', { d: 'M56 162 L56 129 Q100 138 144 129 L144 162 Z', fill: '#1d150b' }, clip) // 꼬리
+      add('ellipse', { cx: 86, cy: 92, rx: 10, ry: 15, fill: '#ffffff', opacity: 0.42 }, bee) // 몸통 광택
+      add('ellipse', { cx: 73, cy: 105, rx: 29, ry: 12, fill: '#fbfaf6', opacity: 0.82, stroke: '#d8c79a', 'stroke-width': 1.4, transform: 'rotate(-40 73 105)' }, bee) // 왼 날개
+      add('ellipse', { cx: 127, cy: 105, rx: 29, ry: 12, fill: '#fbfaf6', opacity: 0.82, stroke: '#d8c79a', 'stroke-width': 1.4, transform: 'rotate(40 127 105)' }, bee) // 오른 날개
+      add('path', { d: 'M95 88 Q75 101 53 120', fill: 'none', stroke: '#cdb988', 'stroke-width': 1, opacity: 0.6 }, bee) // 날개맥
+      add('path', { d: 'M105 88 Q125 101 147 120', fill: 'none', stroke: '#cdb988', 'stroke-width': 1, opacity: 0.6 }, bee)
+      add('ellipse', { cx: 100, cy: 65, rx: 20.5, ry: 17.5, fill: '#15100a' }, bee) // 머리
+      add('ellipse', { cx: 93, cy: 58, rx: 7, ry: 5, fill: '#ffffff', opacity: 0.14 }, bee) // 머리 광택
+      add('circle', { cx: 91, cy: 59, r: 3.9, fill: '#ffffff' }, bee) // 눈
+      add('circle', { cx: 109, cy: 59, r: 3.9, fill: '#ffffff' }, bee)
+      if (isQueen) {
+        const crown = mk('text', { x: 100, y: 44, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 30, fill: '#ffe07a', stroke: '#7a5410', 'stroke-width': 0.6 })
         crown.textContent = '♛'
-        content.appendChild(crown)
+        bee.appendChild(crown)
       }
     }
 
