@@ -350,39 +350,134 @@ svg.board.panning {
   color: #b8860b;
 }
 
-.settings-grid > button,
-.menu-wrap > button {
+/* 버튼 안 라인 아이콘 공통 (마크업에 ${ICON.xxx} 삽입) */
+.settings-grid button svg,
+.menu-wrap button svg,
+.sound-ctl svg,
+.help-tut svg,
+.help-row svg {
+  width: 18px;
+  height: 18px;
+  color: #c2982f;
+  flex: none;
+}
+/* 패널 제목의 벌 아이콘 */
+.panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.panel h2 svg {
+  width: 26px;
+  height: 26px;
+  color: #c2982f;
+  flex: none;
+}
+
+/* 액션 = 카드형 버튼 (새 게임·공유·저장·보관함·복기·무르기·리셋) */
+.settings-grid > button {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   width: 100%;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #c9b88f;
-  background: #fff;
-  border-radius: 8px;
+  padding: 0.55rem 0.5rem;
+  border: 1px solid #ecdfbe;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffdf7, #fdf5e4);
+  box-shadow: 0 1px 2px rgba(120, 90, 20, 0.07);
+  font-size: 0.84rem;
+  color: #5c4f33;
   cursor: pointer;
-  font-size: 0.88rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
 }
-
-.settings-grid > button:hover,
-.menu-wrap > button:hover {
-  background: #f5efdf;
+.settings-grid > button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(150, 110, 30, 0.16);
+  border-color: #d9c89a;
 }
-
-.settings-grid > button.active,
-.menu-wrap > button.active,
-.menu-wrap > button.open {
-  background: #fde68a;
-  border-color: #eab308;
+.settings-grid > button:active {
+  transform: translateY(0);
 }
-
 .settings-grid button:disabled {
   opacity: 0.45;
   cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+.settings-grid button:disabled:hover {
+  box-shadow: none;
+  transform: none;
+  border-color: #ecdfbe;
 }
 
-.settings-grid button:disabled:hover {
-  background: #fff;
+/* 토글 = 필 스위치 (data-act 가 toggle* 인 on/off 버튼. 위치 토글 toggleActionPos 는 제외).
+   라벨+스위치가 편하게 들어가도록 한 줄 전체 폭을 쓴다(좁은 2열에서 라벨이 접히지 않게). */
+.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"]) {
+  grid-column: 1 / -1;
+}
+.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"])::after {
+  content: "";
+  margin-left: auto; /* 아이콘·라벨은 왼쪽, 스위치는 오른쪽 끝으로 */
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background-color: #ece0c2;
+  background-image: radial-gradient(circle at center, #fff 0 7.5px, transparent 8px);
+  background-repeat: no-repeat;
+  background-size: 22px 22px;
+  background-position: 8px center;
+  border: 1px solid #d9c89a;
+  box-shadow: inset 0 1px 2px rgba(120, 90, 20, 0.18);
+  transition: background-position 0.18s, background-color 0.18s, border-color 0.18s;
+}
+.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"]).active {
+  background: linear-gradient(180deg, #fffdf7, #fdf5e4);
+  border-color: #ecdfbe;
+}
+.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"]).active::after {
+  background-color: #e0a92a;
+  background-position: calc(100% - 8px) center;
+  border-color: #c2982f;
+}
+
+/* 드롭다운 = 셀렉트 필드 (모드·난이도 메뉴 버튼) */
+.menu-wrap > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #d9c89a;
+  border-radius: 10px;
+  background: #fffdf7;
+  font-size: 0.88rem;
+  color: #5c4f33;
+  cursor: pointer;
+}
+.menu-wrap > button:hover {
+  background: #fbf3df;
+}
+.menu-wrap > button.open {
+  border-color: #c2982f;
+  box-shadow: 0 0 0 2px rgba(194, 152, 47, 0.18);
+}
+
+/* 그룹 구분: 모드/행동/설정 묶음 사이 라벨 + 얇은 구분선 */
+.settings-divider {
+  grid-column: 1 / -1;
+  height: 1px;
+  margin: 0.15rem 0;
+  background: linear-gradient(90deg, transparent, #e6dcc3 18%, #e6dcc3 82%, transparent);
+}
+.settings-group-label {
+  grid-column: 1 / -1;
+  margin: 0.1rem 0 -0.1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #9a7a3a;
 }
 
 .menu-wrap {
@@ -461,11 +556,17 @@ svg.board.panning {
 .sc-row select {
   flex: 1;
   min-width: 0;
-  padding: 0.4rem;
-  border: 1px solid #c9b88f;
-  border-radius: 8px;
-  background: #fff;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.45rem 1.8rem 0.45rem 0.6rem;
+  border: 1px solid #d9c89a;
+  border-radius: 10px;
+  background: #fffdf7
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23c2982f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 5l4 4 4-4'/%3E%3C/svg%3E")
+    no-repeat right 0.55rem center;
   font-size: 0.85rem;
+  color: #5c4f33;
+  cursor: pointer;
 }
 
 .sc-slider {
@@ -499,7 +600,7 @@ svg.board.panning {
 .sc-slider input[type='range'] {
   flex: 1;
   min-width: 0;
-  accent-color: #eab308;
+  accent-color: #e0a92a;
 }
 
 .sc-slider .sc-val {
@@ -562,11 +663,17 @@ svg.board.panning {
 .persona-row select {
   flex: 1;
   min-width: 0;
-  padding: 0.35rem 0.3rem;
-  border: 1px solid #c9b88f;
-  border-radius: 8px;
-  background: #fff;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.4rem 1.7rem 0.4rem 0.5rem;
+  border: 1px solid #d9c89a;
+  border-radius: 10px;
+  background: #fffdf7
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23c2982f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 5l4 4 4-4'/%3E%3C/svg%3E")
+    no-repeat right 0.5rem center;
   font-size: 0.82rem;
+  color: #5c4f33;
+  cursor: pointer;
 }
 
 .persona-desc {
@@ -634,7 +741,7 @@ svg.board.panning {
 
 .help-row {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 0.5rem;
   font-size: 0.82rem;
   line-height: 1.55;
@@ -648,7 +755,10 @@ svg.board.panning {
 .help-ico {
   flex: none;
   width: 1.2rem;
-  text-align: center;
+  height: 1.27rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .help-row b {
@@ -657,6 +767,10 @@ svg.board.panning {
 
 .help-tut {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   margin-bottom: 0.6rem;
   padding: 0.5rem 0.7rem;
   border: 1px solid #eab308;
@@ -666,6 +780,9 @@ svg.board.panning {
   font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
+}
+.help-tut svg {
+  color: #92660a;
 }
 
 .help-tut:hover {

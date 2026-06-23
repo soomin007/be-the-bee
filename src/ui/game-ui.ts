@@ -1725,21 +1725,21 @@ export function mountGame(root: HTMLElement): void {
         <div class="menu-wrap">
           <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
         </div>
-        <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드${settings.queen ? ' ✓' : ''}</button>
-        <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">무한 모드${settings.infiniteTiles ? ' ✓' : ''}</button>
+        <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드</button>
+        <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">무한 모드</button>
         <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="new">새 게임</button>
-        <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">📤 공유하기</button>
-        <button data-act="saveGame" title="지금 판을 보관함에 저장">💾 저장</button>
-        <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">📂 보관함</button>
+        <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">${ICON.share} 공유하기</button>
+        <button data-act="saveGame" title="지금 판을 보관함에 저장">${ICON.save} 저장</button>
+        <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">${ICON.saves} 보관함</button>
       </div>`
     const viewGrid = `
       <div class="settings-grid">
-        <button data-act="cycleTheme" title="${settings.board3d ? '3D 벌 스타일 전환(일반/실사)' : theme.desc}">${settings.board3d ? `🐝 벌: ${settings.board3dStyle === 'realistic' ? '실사' : '일반'}` : `🎨 테마: ${theme.label}`}</button>
-        <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D로 표시(실험)">🧊 3D 보드${settings.board3d ? ' ✓' : ''}</button>
+        <button data-act="cycleTheme" title="${settings.board3d ? '3D 벌 스타일 전환(일반/실사)' : theme.desc}">${settings.board3d ? `${ICON.bee} 벌: ${settings.board3dStyle === 'realistic' ? '실사' : '일반'}` : `${ICON.theme} 테마: ${theme.label}`}</button>
+        <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D로 표시(실험)">${ICON.cube3d} 3D 보드</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
-        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
+        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수</button>
         <button data-act="resetView" title="${settings.board3d ? '3D 카메라(시점·줌)를 처음 위치로' : '보드 확대·이동을 처음 상태로'}">카메라 리셋</button>
       </div>`
     const settingsSummary =
@@ -1788,16 +1788,16 @@ export function mountGame(root: HTMLElement): void {
     const soundCtl = `
       <div class="sound-ctl">
         <div class="sc-row">
-          <button data-act="toggleMusic" class="${sound.musicOn() ? 'active' : ''}">🎵 ${sound.musicOn() ? '정지' : '재생'}</button>
+          <button data-act="toggleMusic" class="${sound.musicOn() ? 'active' : ''}">${ICON.music} ${sound.musicOn() ? '정지' : '재생'}</button>
           <select data-ctl="bgmTrack" aria-label="배경음악 선택">${trackOpts}</select>
         </div>
         <div class="sc-slider">
-          <button class="mute" data-act="muteBgm" title="음소거">${settings.bgmVolume > 0 ? '🔊' : '🔇'}</button>
+          <button class="mute" data-act="muteBgm" title="음소거">${settings.bgmVolume > 0 ? ICON.soundOn : ICON.soundOff}</button>
           <span class="sc-label">BGM</span>
           <input type="range" data-ctl="bgmVol" min="0" max="100" step="10" value="${Math.round(settings.bgmVolume * 100)}">
         </div>
         <div class="sc-slider">
-          <button class="mute" data-act="muteSfx" title="음소거">${settings.sfxVolume > 0 ? '🔊' : '🔇'}</button>
+          <button class="mute" data-act="muteSfx" title="음소거">${settings.sfxVolume > 0 ? ICON.soundOn : ICON.soundOff}</button>
           <span class="sc-label">효과음</span>
           <input type="range" data-ctl="sfxVol" min="0" max="100" step="10" value="${Math.round(settings.sfxVolume * 100)}">
         </div>
@@ -1812,14 +1812,14 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     }
     const helpRows = `
-      <button class="help-tut" data-act="tutorial" title="게임 방법을 처음부터 다시 봐요">📖 튜토리얼 다시 보기</button>
-      <div class="help-row"><span class="help-ico">🏆</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
-      <div class="help-row"><span class="help-ico">🍯</span><span>타일은 기존 타일에 <b>붙여서</b> 놓기</span></div>
-      <div class="help-row"><span class="help-ico">🖱️</span><span>휠 = 확대 · 드래그 = 이동</span></div>
-      <div class="help-row"><span class="help-ico">⌨️</span><span>화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치</span></div>`
+      <button class="help-tut" data-act="tutorial" title="게임 방법을 처음부터 다시 봐요">${ICON.tutorial} 튜토리얼 다시 보기</button>
+      <div class="help-row"><span class="help-ico">${ICON.trophy}</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
+      <div class="help-row"><span class="help-ico">${ICON.honey}</span><span>타일은 기존 타일에 <b>붙여서</b> 놓기</span></div>
+      <div class="help-row"><span class="help-ico">${ICON.mouse}</span><span>휠 = 확대 · 드래그 = 이동</span></div>
+      <div class="help-row"><span class="help-ico">${ICON.keyboard}</span><span>화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치</span></div>`
 
     panel.innerHTML = `
-      <h2>🐝 Be the Bee</h2>
+      <h2>${ICON.bee} Be the Bee</h2>
       <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
         <div class="status-header">${header}</div>
         <div class="instruction">${instruction}</div>
