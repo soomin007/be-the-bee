@@ -76,7 +76,7 @@ const sideOf = () =>
     return { abAbove: ab < sv, bnAbove: bn < sv } // svg 기준 위/아래
   })
 const s1 = await sideOf()
-await page.locator('button[data-act="sec:view"]').click() // 화면·설정 섹션 펼치기
+// 화면·설정 섹션은 기본으로 펼쳐져 있으므로 바로 행동 버튼 위치 토글
 await page.locator('button[data-act="toggleActionPos"]').click()
 await page.waitForTimeout(80)
 const s2 = await sideOf()

@@ -40,6 +40,7 @@ import {
   type GameSnapshot,
 } from './game-save'
 import { maybeShowTutorial, openTutorial } from './tutorial'
+import { ICON } from './icons'
 import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 
 const SVGNS = 'http://www.w3.org/2000/svg'
@@ -166,7 +167,8 @@ interface RoomSettings {
 type SectionKey = 'game' | 'view' | 'ai' | 'sound' | 'help'
 const SECTION_KEYS: SectionKey[] = ['game', 'view', 'ai', 'sound', 'help']
 function defaultSectionsOpen(): Record<string, boolean> {
-  return { game: true, view: false, ai: true, sound: false, help: false }
+  // 첫 접속(기본 설정)에는 모든 섹션을 펼친 상태로 보여준다. (사용자가 접으면 그 선택을 저장)
+  return { game: true, view: true, ai: true, sound: true, help: true }
 }
 // 저장된 섹션 펼침 상태를 기본값과 병합(알려진 키의 boolean 만 채택).
 function mergeSectionsOpen(raw: unknown, d: Record<string, boolean>): Record<string, boolean> {
@@ -1789,7 +1791,7 @@ export function mountGame(root: HTMLElement): void {
     const section = (key: SectionKey, label: string, content: string): string => {
       const isOpen = !!settings.sectionsOpen[key]
       return `<div class="acc ${isOpen ? 'open' : ''}">
-        <button class="acc-head" data-act="sec:${key}">${label}<span class="acc-caret">${isOpen ? '▾' : '▸'}</span></button>
+        <button class="acc-head" data-act="sec:${key}">${ICON[key] ?? ''}<span class="acc-label">${label}</span><span class="acc-caret">${isOpen ? '▾' : '▸'}</span></button>
         <div class="acc-body">${content}</div>
       </div>`
     }
@@ -1814,11 +1816,11 @@ export function mountGame(root: HTMLElement): void {
       </div>
       <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       ${settingsSummary}
-      ${section('game', '🎮 게임', gameGrid)}
-      ${section('view', '👁 화면 · 설정', viewGrid)}
-      ${settings.mode !== 'hotseat' ? section('ai', settings.mode === 'watch' ? '🤖 관전 설정' : '🤖 AI 설정', aiCtl) : ''}
-      ${section('sound', '🔊 사운드', soundCtl)}
-      ${section('help', '❓ 도움말', helpRows)}
+      ${section('game', '게임', gameGrid)}
+      ${section('view', '화면 · 설정', viewGrid)}
+      ${settings.mode !== 'hotseat' ? section('ai', settings.mode === 'watch' ? '관전 설정' : 'AI 설정', aiCtl) : ''}
+      ${section('sound', '사운드', soundCtl)}
+      ${section('help', '도움말', helpRows)}
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {

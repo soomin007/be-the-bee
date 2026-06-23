@@ -178,7 +178,29 @@ svg.board.panning {
   padding: 1.25rem;
   border-right: 1px solid #e6dcc3;
   background: #fffdf7;
-  overflow: auto;
+  /* 스크롤바를 항상 표시 → 섹션을 펼쳐 길어져도 폭이 안 변해 박스/글자 배치가 흔들리지 않는다. */
+  overflow-y: scroll;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #d2b059 #f1e4c5; /* Firefox: thumb track */
+}
+/* WebKit/Chromium 테마 스크롤바(꿀빛) */
+.panel::-webkit-scrollbar {
+  width: 11px;
+}
+.panel::-webkit-scrollbar-track {
+  background: #f1e4c5;
+  border-radius: 8px;
+  margin: 4px 0;
+}
+.panel::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #e6c873, #c69a2f);
+  border: 2px solid #f1e4c5;
+  border-radius: 8px;
+}
+.panel::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #eccf80, #b88a26);
 }
 
 .panel h2 {
@@ -254,39 +276,53 @@ svg.board.panning {
   margin-bottom: 0.5rem;
 }
 
-/* 설정 아코디언 — 기능별 섹션 펼치기/접기 */
+/* 설정 아코디언 — 기능별 섹션 펼치기/접기. 꿀빛 그라데이션 헤더 + 자체 아이콘 + 미세 그림자. */
 .acc {
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.6rem;
+  border-radius: 12px;
+  box-shadow: 0 1px 5px rgba(120, 80, 0, 0.09);
 }
 .acc-head {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.55rem 0.8rem;
+  gap: 0.55rem;
+  padding: 0.62rem 0.85rem;
   border: 1px solid #e6dcc3;
-  border-radius: 10px;
-  background: #fbf3df;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fdf6e4 0%, #f5e8cd 100%);
   cursor: pointer;
-  font-size: 0.95rem;
+  font-size: 0.98rem;
   font-weight: 700;
   color: #6b5524;
 }
 .acc-head:hover {
-  background: #f5ead0;
+  background: linear-gradient(180deg, #fdf0d6 0%, #f0deb8 100%);
 }
 .acc.open .acc-head {
-  border-radius: 10px 10px 0 0;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(180deg, #fbecc6 0%, #f2dcae 100%);
+}
+.acc-head .ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: #c2982f;
+}
+.acc-label {
+  flex: 1;
+  text-align: left;
 }
 .acc-caret {
   color: #b8860b;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  flex: none;
 }
 .acc-body {
-  padding: 0.7rem;
+  padding: 0.8rem;
   border: 1px solid #e6dcc3;
   border-top: none;
-  border-radius: 0 0 10px 10px;
+  border-radius: 0 0 12px 12px;
   background: #fffdf7;
 }
 .acc:not(.open) .acc-body {
