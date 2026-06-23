@@ -75,6 +75,28 @@ svg.board {
 .board-wrap.ab-top .board-notes {
   order: 1; /* 행동 버튼이 위 → 메시지는 아래 */
 }
+
+/* 3D 보드(실험): board-wrap 을 채우는 절대배치 캔버스 호스트. mode-3d 면 SVG 대신 표시. */
+.board-wrap {
+  position: relative;
+}
+.board3d-host {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.board-wrap.mode-3d > svg.board {
+  display: none;
+}
+.board-wrap.mode-3d .board3d-host {
+  display: block;
+}
+/* 3D 모드에서 행동 바·인게임 메시지는 3D 캔버스 위로(클릭 가능) */
+.board-wrap.mode-3d .action-bar,
+.board-wrap.mode-3d .board-notes {
+  position: relative;
+  z-index: 1;
+}
 .board-notes:empty {
   display: none;
 }

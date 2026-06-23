@@ -21,9 +21,17 @@ export interface Board3DOptions {
   autoRotate?: boolean
 }
 
+/** 게임 오버레이 힌트(SVG 보드와 동일). 좌표는 엔진 Hex. */
+export interface BoardHints {
+  frontier?: readonly Hex[] // 타일 놓을 수 있는 빈 칸(초록 고스트 헥스, 클릭 가능)
+  pieceTargets?: readonly Hex[] // 말 놓을 수 있는 타일(초록 링)
+  provisional?: readonly Hex[] // 드래프트 진행 중 잠정 타일(고스트, 클릭 가능)
+  lastPiece?: Hex | null // 직전에 놓인 말(파란 링)
+}
+
 export interface Board3D {
-  /** 엔진 상태로 보드를 다시 그린다(타일/말/벌집 글로우). */
-  update(state: GameState): void
+  /** 엔진 상태(+선택 힌트)로 보드를 다시 그린다(타일/말/벌집 글로우/오버레이). */
+  update(state: GameState, hints?: BoardHints): void
   /** 리소스 해제 + 캔버스 제거. */
   dispose(): void
 }
@@ -210,7 +218,8 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
 
   const boardGroup = new THREE.Group()
   scene.add(boardGroup)
-  const tiles: { mesh: THREE.Mesh; hex: Hex }[] = []
+  // 클릭 가능한 칸(보드 타일 + 프론티어/잠정 고스트). 레이캐스팅 대상.
+  const clickable: { mesh: THREE.Mesh; hex: Hex }[] = []
 
   // 호버/선택 링(게임 색: 초록=둘 수 있음, 파랑=직전/선택)
   const ringGeo = new THREE.TorusGeometry(SIZE * 0.84, 0.05, 10, 6)
@@ -235,8 +244,8 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
     ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1
     ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1
     raycaster.setFromCamera(ndc, camera)
-    const hit = raycaster.intersectObjects(tiles.map((t) => t.mesh), false)[0]
-    return hit ? tiles.find((t) => t.mesh === hit.object) ?? null : null
+    const hit = raycaster.intersectObjects(clickable.map((t) => t.mesh), false)[0]
+    return hit ? clickable.find((t) => t.mesh === hit.object) ?? null : null
   }
   const onMove = (ev: PointerEvent): void => {
     const t = pickTile(ev.clientX, ev.clientY)
@@ -286,40 +295,77 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   }
   loop()
 
-  function update(state: GameState): void {
+  function ringAt(x: number, z: number, color: number, y: number): THREE.Mesh {
+    const ring = new THREE.Mesh(ringGeo.clone(), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 }))
+    ring.rotation.x = Math.PI / 2
+    ring.position.set(x, y, z)
+    return ring
+  }
+  function update(state: GameState, hints: BoardHints = {}): void {
     for (const child of [...boardGroup.children]) disposeObject(child)
     boardGroup.clear()
-    tiles.length = 0
+    clickable.length = 0
     const keys = Object.keys(state.board)
-    if (keys.length === 0) return
     const hiveCells = new Set<string>()
     for (const hv of detectHives(state.board)) for (const c of hv.cells) hiveCells.add(c)
+    // 보드 중심(센트로이드)으로 정렬 — 빈 보드면 원점.
     let cx = 0
     let cz = 0
-    const placed = keys.map((k) => {
-      const hex = hexFromKey(k)
-      const p = hexToXZ(hex)
+    for (const k of keys) {
+      const p = hexToXZ(hexFromKey(k))
       cx += p.x
       cz += p.z
-      return { k, hex, p }
-    })
-    cx /= keys.length
-    cz /= keys.length
-    for (const { k, hex, p } of placed) {
+    }
+    if (keys.length > 0) {
+      cx /= keys.length
+      cz /= keys.length
+    }
+    const at = (h: Hex): { x: number; z: number } => {
+      const p = hexToXZ(h)
+      return { x: p.x - cx, z: p.z - cz }
+    }
+    // 타일 + 말
+    for (const k of keys) {
       const cell = state.board[k]!
-      const x = p.x - cx
-      const z = p.z - cz
+      const hex = hexFromKey(k)
+      const { x, z } = at(hex)
       const tile = hexTile(cell.tile.owner, hiveCells.has(k))
       tile.position.set(x, 0, z)
       boardGroup.add(tile)
-      tiles.push({ mesh: tile, hex })
+      clickable.push({ mesh: tile, hex })
       if (cell.piece) {
         const tk = buildPiece(cell.piece.owner, cell.piece.kind === 'queen')
         tk.scale.setScalar(PIECE_K)
-        // 원판 바닥을 타일 윗면에 닿게(+0.3*K) 두되, 살짝(-0.06) 박아 넣어 떠 보이지 않고 눌러 놓은 느낌.
+        // 원판 바닥을 타일 윗면에 닿게(+0.3*K) 두되, 살짝(-0.06) 박아 넣어 떠 보이지 않게.
         tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.06, z)
         boardGroup.add(tk)
       }
+    }
+    // 프론티어(타일 놓을 빈 칸) — 초록 고스트 헥스, 클릭 가능
+    for (const h of hints.frontier ?? []) {
+      const { x, z } = at(h)
+      const g = new THREE.Mesh(new THREE.CylinderGeometry(SIZE * 0.9, SIZE * 0.9, 0.06, 6), new THREE.MeshStandardMaterial({ color: 0x16a34a, transparent: true, opacity: 0.3, emissive: 0x16a34a, emissiveIntensity: 0.25 }))
+      g.position.set(x, 0.03, z)
+      boardGroup.add(g)
+      clickable.push({ mesh: g, hex: h })
+    }
+    // 잠정 타일(드래프트) — 옅은 고스트 헥스, 클릭 가능
+    for (const h of hints.provisional ?? []) {
+      const { x, z } = at(h)
+      const g = new THREE.Mesh(new THREE.CylinderGeometry(SIZE * 0.92, SIZE * 0.92, 0.18, 6), new THREE.MeshStandardMaterial({ color: 0xeac56a, transparent: true, opacity: 0.5 }))
+      g.position.set(x, 0.09, z)
+      boardGroup.add(g)
+      clickable.push({ mesh: g, hex: h })
+    }
+    // 말 놓을 수 있는 타일 — 초록 링(시각)
+    for (const h of hints.pieceTargets ?? []) {
+      const { x, z } = at(h)
+      boardGroup.add(ringAt(x, z, 0x16a34a, TILE_TOP + 0.04))
+    }
+    // 직전 말 — 파란 링(시각)
+    if (hints.lastPiece) {
+      const { x, z } = at(hints.lastPiece)
+      boardGroup.add(ringAt(x, z, 0x2563eb, TILE_TOP + 0.05))
     }
   }
 

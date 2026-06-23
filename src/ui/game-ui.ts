@@ -40,6 +40,7 @@ import {
   type GameSnapshot,
 } from './game-save'
 import { maybeShowTutorial, openTutorial } from './tutorial'
+import type { Board3D, BoardHints } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -153,6 +154,7 @@ interface RoomSettings {
   sfxVolume: number // 0~1 (0 = 효과음 끔)
   watchDelay: number // 관전 모드 수 간격(ms)
   actionBarPos: ActionBarPos // 인게임 행동 바(턴 안내+①②) 위치
+  board3d: boolean // 보드를 3D(three.js)로 표시(실험). 기본 꺼짐 → 2D SVG.
   themeId: string // 컬러 테마(themes.ts COLOR_THEMES 의 id)
   personaYellow: Persona // 관전 시 노랑 AI 성향
   personaBrown: Persona // 갈색 AI 성향(vsAi 상대 + 관전 갈색)
@@ -186,6 +188,7 @@ function defaultSettings(): RoomSettings {
     sfxVolume: 0.6,
     watchDelay: 700,
     actionBarPos: 'top',
+    board3d: false,
     themeId: DEFAULT_THEME_ID,
     personaYellow: 'aggressive', // 관전 기본 대진을 대비되게(공격 vs 균형)
     personaBrown: 'balanced',
@@ -244,6 +247,7 @@ function loadSettings(): RoomSettings {
       actionBarPos: ACTION_BAR_POSITIONS.includes(s.actionBarPos as ActionBarPos)
         ? (s.actionBarPos as ActionBarPos)
         : d.actionBarPos,
+      board3d: typeof s.board3d === 'boolean' ? s.board3d : d.board3d,
       themeId: COLOR_THEMES.some((t) => t.id === s.themeId) ? (s.themeId as string) : d.themeId,
       personaYellow: PERSONAS.includes(s.personaYellow as Persona) ? (s.personaYellow as Persona) : d.personaYellow,
       personaBrown: PERSONAS.includes(s.personaBrown as Persona) ? (s.personaBrown as Persona) : d.personaBrown,
@@ -507,6 +511,32 @@ export function mountGame(root: HTMLElement): void {
   const actionBar = root.querySelector('.action-bar') as HTMLElement
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
+
+  // 3D 보드(실험): board-wrap 안에 three.js 캔버스 호스트. settings.board3d 면 SVG 대신 표시한다.
+  // 렌더러는 처음 3D 로 그릴 때 지연 생성(three.js 비용 회피). 클릭은 SVG 와 동일한 onHexClick 으로.
+  const board3dHost = document.createElement('div')
+  board3dHost.className = 'board3d-host'
+  boardWrap.appendChild(board3dHost)
+  let board3dApi: Board3D | null = null
+  let board3dLoading = false
+  // three.js(약 600KB)는 3D 를 처음 켤 때만 동적 import(코드 스플릿) → 2D 기본 번들은 가볍게 유지.
+  function ensureBoard3D(): void {
+    if (board3dApi || board3dLoading) return
+    board3dLoading = true
+    import('./board3d')
+      .then(({ createBoard3D }) => {
+        board3dApi = createBoard3D(board3dHost, { onCellClick: onHexClick })
+        board3dLoading = false
+        render() // 로드 완료 후 3D 로 다시 그린다
+      })
+      .catch(() => {
+        board3dLoading = false
+      })
+  }
+  function applyBoard3D(): void {
+    boardWrap.classList.toggle('mode-3d', settings.board3d)
+  }
+  applyBoard3D()
 
   // 행동 바(턴 안내+①②)를 보드 위/아래로, CSS order 로만 전환(DOM 순서는 유지).
   function applyActionBarPos(): void {
@@ -1370,6 +1400,26 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
+    // 3D 보드 모드: 같은 상태 + 힌트를 three.js 렌더러로(SVG 는 CSS 로 숨김). 클릭은 동일한 onHexClick.
+    if (settings.board3d) {
+      if (!board3dApi) {
+        ensureBoard3D() // 첫 3D: three.js 동적 로드(완료 후 render 재호출). 이번 프레임은 건너뜀.
+      } else {
+        const pieceTargets: Hex[] = []
+        if (pieceStage) {
+          for (const key of Object.keys(board2)) {
+            const ph = hexFromKey(key)
+            if (validatePiecePlacement(board2, player, state.supplies[player], { at: ph, kind: pieceKind }).ok) pieceTargets.push(ph)
+          }
+        }
+        const provisional: Hex[] = []
+        if (provisionalFirst) provisional.push(provisionalFirst)
+        if (provisionalTile) provisional.push(provisionalTile)
+        const hints: BoardHints = { frontier, pieceTargets, provisional, lastPiece: lpc }
+        board3dApi.update(viewState, hints)
+      }
+    }
+
     renderPanel()
     renderActionBar()
     renderBoardNotes()
@@ -1663,6 +1713,7 @@ export function mountGame(root: HTMLElement): void {
     const viewGrid = `
       <div class="settings-grid">
         <button data-act="cycleTheme" title="${theme.desc}">🎨 테마: ${theme.label}</button>
+        <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D로 표시(실험)">🧊 3D 보드${settings.board3d ? ' ✓' : ''}</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수${settings.hints ? ' ✓' : ''}</button>
         <button data-act="resetView" title="보드 확대·이동을 처음 상태로">처음 위치로</button>
@@ -1979,6 +2030,10 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'toggleHints':
         settings.hints = !settings.hints
+        break
+      case 'toggle3d':
+        settings.board3d = !settings.board3d
+        applyBoard3D()
         break
       case 'toggleQueen':
         if (settings.queen) {
