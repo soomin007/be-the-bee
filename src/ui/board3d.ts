@@ -175,112 +175,232 @@ function buildPiece(owner: Player, queen: boolean): THREE.Group {
   return g
 }
 
-// ---- 말(실사 꿀벌) = three-demo-real 포팅. 그룹 원점 = 타일 접촉면(y=0), 원판 바닥 y≈0.22. ----
-// 색: 칙칙함·"징그러움" 완화 — 머리를 가슴처럼 노랗게(실제 벌도 머리가 노랑), 전반적으로 더 밝게.
-const REAL_BODY = 0xc88f2e // 가슴·머리 공통 황금색(밝게)
-function limb3(a: [number, number, number], b: [number, number, number], radius: number, color: number): THREE.Mesh {
-  const va = new THREE.Vector3(...a)
-  const vb = new THREE.Vector3(...b)
-  const dir = new THREE.Vector3().subVectors(vb, va)
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.8, dir.length(), 8), new THREE.MeshStandardMaterial({ color, roughness: 0.5 }))
-  m.position.copy(va).add(vb).multiplyScalar(0.5)
-  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize())
-  m.castShadow = true
-  return m
-}
-function abdomenTexture(): THREE.Texture {
-  const c = document.createElement('canvas')
-  c.width = 64
-  c.height = 256
-  const x = c.getContext('2d')!
-  x.fillStyle = '#f2b80a' // 진한 노랑(고대비)
-  x.fillRect(0, 0, 64, 256)
-  x.fillStyle = '#160d04' // 검정 줄무늬(거의 검정 — 노랑과 고대비)
-  for (const y of [10, 70, 130, 190]) x.fillRect(0, y, 64, 28)
-  x.fillRect(0, 232, 64, 24)
-  const t = new THREE.CanvasTexture(c)
+// ---- 말(실사 꿀벌) = Claude Design 핸드오프 'Be the Bee 3D 말 (실사)' 이식.
+//   핸드오프 스케일(원판 r2, 그룹 원점 = 원판 중심) → 스타일 토큰(buildPiece)과 같은 규약.
+//   털 가슴(변형 구) + 줄무늬 배(텍스처) + 큰 겹눈 + 팔꿈치 더듬이 + 다리 6 + 맥 있는 날개 2쌍.
+function realAbdomenTexture(): THREE.Texture {
+  const cv = document.createElement('canvas')
+  cv.width = 96
+  cv.height = 512
+  const x = cv.getContext('2d')!
+  const amber = '#b3791f'
+  const dark = '#241606'
+  const yToV = (v: number): number => (1 - v) * 512
+  x.fillStyle = amber
+  x.fillRect(0, 0, 96, 512)
+  const band = (vTop: number, vBot: number): void => {
+    const yT = yToV(vTop)
+    const yB = yToV(vBot)
+    const h = yB - yT
+    const fuzz = 10
+    const gg = x.createLinearGradient(0, yT - fuzz, 0, yB + fuzz)
+    gg.addColorStop(0, 'rgba(36,22,6,0)')
+    gg.addColorStop(fuzz / (h + 2 * fuzz), dark)
+    gg.addColorStop(1 - fuzz / (h + 2 * fuzz), dark)
+    gg.addColorStop(1, 'rgba(36,22,6,0)')
+    x.fillStyle = gg
+    x.fillRect(0, yT - fuzz, 96, h + 2 * fuzz)
+  }
+  band(0.86, 0.74)
+  band(0.66, 0.52)
+  band(0.44, 0.28)
+  x.fillStyle = dark
+  x.fillRect(0, yToV(0.2), 96, 512 - yToV(0.2))
+  const t = new THREE.CanvasTexture(cv)
   t.anisotropy = 4
   t.colorSpace = THREE.SRGBColorSpace
   return t
 }
-function abdomenProfile(): THREE.Vector2[] {
-  return [
-    [0.02, 0.0],
-    [0.1, 0.05],
-    [0.2, 0.15],
-    [0.29, 0.33],
-    [0.33, 0.54],
-    [0.33, 0.74],
-    [0.28, 0.9],
-    [0.18, 1.0],
-  ].map(([x, y]) => new THREE.Vector2(x, y))
+function realWingTexture(): THREE.Texture {
+  const cv = document.createElement('canvas')
+  cv.width = 256
+  cv.height = 160
+  const x = cv.getContext('2d')!
+  x.clearRect(0, 0, 256, 160)
+  x.fillStyle = 'rgba(214,184,130,0.22)'
+  x.beginPath()
+  x.ellipse(128, 80, 126, 78, 0, 0, Math.PI * 2)
+  x.fill()
+  x.strokeStyle = 'rgba(120,80,40,0.6)'
+  x.lineWidth = 3
+  x.beginPath()
+  x.ellipse(128, 80, 122, 74, 0, Math.PI * 1.05, Math.PI * 1.95)
+  x.stroke()
+  x.strokeStyle = 'rgba(110,72,36,0.5)'
+  x.lineWidth = 1.4
+  for (const ty of [30, 60, 80, 100, 130]) {
+    x.beginPath()
+    x.moveTo(18, 80)
+    x.quadraticCurveTo(130, (80 + ty) / 2, 238, ty)
+    x.stroke()
+  }
+  x.lineWidth = 1
+  x.beginPath()
+  x.moveTo(150, 45)
+  x.lineTo(158, 120)
+  x.stroke()
+  x.beginPath()
+  x.moveTo(95, 50)
+  x.lineTo(100, 116)
+  x.stroke()
+  const t = new THREE.CanvasTexture(cv)
+  t.anisotropy = 4
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
 }
 function buildRealBee(owner: Player, queen: boolean): THREE.Group {
+  const discColor = DISC_COLOR[owner]
+  const ax = new THREE.Vector3(0, 1, 0)
   const g = new THREE.Group()
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.14, 44), new THREE.MeshStandardMaterial({ color: DISC_COLOR[owner], roughness: 0.6 }))
-  disc.position.y = 0.29
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 0.6, 72), new THREE.MeshStandardMaterial({ color: discColor, roughness: 0.82 }))
   disc.castShadow = disc.receiveShadow = true
   g.add(disc)
-  const beeGrp = new THREE.Group()
-  const Y = 0.64
-  const abdomen = new THREE.Mesh(new THREE.LatheGeometry(abdomenProfile(), 40), new THREE.MeshStandardMaterial({ map: abdomenTexture(), roughness: 0.5 }))
-  abdomen.rotation.x = Math.PI / 2
-  abdomen.scale.set(1.0, 0.95, 0.78)
-  abdomen.position.set(0, Y, -0.82)
-  abdomen.castShadow = true
-  beeGrp.add(abdomen)
-  const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.27, 28, 22), new THREE.MeshStandardMaterial({ color: REAL_BODY, roughness: 0.85 }))
-  thorax.scale.set(1.05, 0.92, 1.0)
-  thorax.position.set(0, Y + 0.03, 0.12)
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.93, 0.09, 14, 80), new THREE.MeshStandardMaterial({ color: discColor, roughness: 0.7 }))
+  rim.rotation.x = Math.PI / 2
+  rim.position.y = 0.3
+  g.add(rim)
+
+  const golden = new THREE.MeshStandardMaterial({ color: 0x7d5419, roughness: 1 })
+  const goldenHead = new THREE.MeshStandardMaterial({ color: 0x744d18, roughness: 1 })
+  const darkLeg = new THREE.MeshStandardMaterial({ color: 0x241810, roughness: 0.45, metalness: 0.15 })
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0d0a06, roughness: 0.2 })
+
+  const bee = new THREE.Group()
+  bee.position.y = 0.72 // 다리로 서서 발이 원판 윗면에 닿음
+
+  // 가슴(thorax) — 표면을 살짝 울퉁불퉁(털 느낌)
+  const thoraxGeo = new THREE.SphereGeometry(1, 40, 32)
+  {
+    const p = thoraxGeo.attributes.position!
+    for (let i = 0; i < p.count; i++) {
+      const vx = p.getX(i)
+      const vy = p.getY(i)
+      const vz = p.getZ(i)
+      const n = 1 + 0.05 * Math.sin(vx * 9) * Math.cos(vz * 8) + 0.04 * Math.sin(vy * 11)
+      p.setXYZ(i, vx * n, vy * n, vz * n)
+    }
+    thoraxGeo.computeVertexNormals()
+  }
+  const thorax = new THREE.Mesh(thoraxGeo, golden)
+  thorax.scale.set(0.62, 0.6, 0.66)
+  thorax.position.set(0, 0.2, 0.42)
   thorax.castShadow = true
-  beeGrp.add(thorax)
-  // 머리도 가슴처럼 노랗게(검고 큰 머리가 징그러움의 원인) — 살짝 작게도.
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.165, 26, 20), new THREE.MeshStandardMaterial({ color: REAL_BODY, roughness: 0.6 }))
-  head.scale.set(1.05, 0.95, 0.9)
-  head.position.set(0, Y + 0.01, 0.5)
+  bee.add(thorax)
+
+  // 허리(waist)
+  const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.22, 16), golden)
+  waist.rotation.x = Math.PI / 2
+  waist.position.set(0, 0.16, -0.05)
+  bee.add(waist)
+
+  // 배(abdomen) — 뒤로 가늘어지는 줄무늬 배
+  const abGeo = new THREE.SphereGeometry(1, 56, 40)
+  abGeo.rotateX(Math.PI / 2)
+  {
+    const p = abGeo.attributes.position!
+    for (let i = 0; i < p.count; i++) {
+      const zn = p.getZ(i)
+      const f = zn < 0 ? Math.max(0.25, 1 + 0.55 * zn) : 1 - 0.12 * zn
+      p.setX(i, p.getX(i) * f)
+      p.setY(i, p.getY(i) * f)
+      if (zn < 0) p.setZ(i, zn * 1.2)
+    }
+    abGeo.computeVertexNormals()
+  }
+  const abdomen = new THREE.Mesh(abGeo, new THREE.MeshStandardMaterial({ map: realAbdomenTexture(), roughness: 0.5 }))
+  abdomen.scale.set(0.56, 0.54, 0.95)
+  abdomen.position.set(0, 0.14, -0.78)
+  abdomen.castShadow = true
+  bee.add(abdomen)
+
+  // 머리(head)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 26), goldenHead)
+  head.scale.set(0.42, 0.44, 0.38)
+  head.position.set(0, 0.22, 1.12)
   head.castShadow = true
-  beeGrp.add(head)
-  // 검은 겹눈 — 머리 옆쪽(더듬이와 겹치지 않게)
-  for (const dir of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 12), new THREE.MeshStandardMaterial({ color: 0x140e06, roughness: 0.25 }))
-    eye.scale.set(0.82, 1.15, 0.8)
-    eye.position.set(dir * 0.14, Y + 0.05, 0.5)
-    beeGrp.add(eye)
+  bee.add(head)
+
+  // 겹눈(compound eyes)
+  for (const s of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 22), eyeMat)
+    eye.scale.set(0.2, 0.3, 0.26)
+    eye.position.set(s * 0.34, 0.26, 1.16)
+    bee.add(eye)
   }
-  // 더듬이 — 얼굴 앞-중앙(눈이 아니라)에서 나와 앞·위로 길게 굽음(팔꿈치형). 눈에서 분리.
-  for (const dir of [-1, 1]) {
-    const base: [number, number, number] = [dir * 0.04, Y - 0.01, 0.64]
-    const elbow: [number, number, number] = [dir * 0.09, Y + 0.13, 0.73]
-    const tip: [number, number, number] = [dir * 0.07, Y + 0.31, 0.75]
-    beeGrp.add(limb3(base, elbow, 0.013, 0x1c140a))
-    beeGrp.add(limb3(elbow, tip, 0.011, 0x1c140a))
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), new THREE.MeshStandardMaterial({ color: 0x1c140a, roughness: 0.5 }))
-    knob.position.set(tip[0], tip[1], tip[2])
-    beeGrp.add(knob)
+
+  // 더듬이(elbowed antennae) — 얼굴 앞에서 나와 굽음
+  for (const s of [-1, 1]) {
+    const base = new THREE.Vector3(s * 0.12, 0.3, 1.44)
+    const d1 = new THREE.Vector3(s * 0.3, 0.22, 1).normalize()
+    const l1 = 0.26
+    const elbow = base.clone().addScaledVector(d1, l1)
+    const seg1 = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, l1, 10), darkLeg)
+    seg1.position.copy(base.clone().addScaledVector(d1, l1 / 2))
+    seg1.quaternion.setFromUnitVectors(ax, d1)
+    bee.add(seg1)
+    const d2 = new THREE.Vector3(s * 0.14, -0.18, 0.97).normalize()
+    const l2 = 0.34
+    const seg2 = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, l2, 10), darkLeg)
+    seg2.position.copy(elbow.clone().addScaledVector(d2, l2 / 2))
+    seg2.quaternion.setFromUnitVectors(ax, d2)
+    bee.add(seg2)
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 12), darkLeg)
+    tip.position.copy(elbow.clone().addScaledVector(d2, l2))
+    bee.add(tip)
   }
-  const legY = Y - 0.14
-  for (const dir of [-1, 1]) {
-    for (const [zin, zout] of [[0.24, 0.46], [0.08, 0.12], [-0.06, -0.28]]) {
-      beeGrp.add(limb3([dir * 0.15, legY, zin!], [dir * 0.5, 0.36, zout!], 0.016, 0x1c140a))
+
+  // 다리 6개(hip→knee→foot)
+  const segLeg = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number): void => {
+    const d = b.clone().sub(a)
+    const len = d.length()
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, len, 8), darkLeg)
+    m.position.copy(a.clone().add(b).multiplyScalar(0.5))
+    m.quaternion.setFromUnitVectors(ax, d.normalize())
+    bee.add(m)
+  }
+  ;[0.62, 0.2, -0.2].forEach((lz, idx) => {
+    for (const s of [-1, 1]) {
+      const hip = new THREE.Vector3(s * 0.4, -0.02, lz)
+      const out = 0.4 + idx * 0.04
+      const knee = new THREE.Vector3(s * (0.4 + out), -0.24, lz + (idx === 0 ? 0.16 : idx === 2 ? -0.16 : 0))
+      const foot = new THREE.Vector3(knee.x + s * 0.08, -0.42, knee.z + (idx === 0 ? 0.26 : idx === 2 ? -0.26 : 0))
+      segLeg(hip, knee, 0.03, 0.04)
+      segLeg(knee, foot, 0.02, 0.025)
+    }
+  })
+
+  // 날개(2쌍, 맥 있는 반투명 막) — 가슴 위에서 뒤로 펼침
+  const wingMat = new THREE.MeshStandardMaterial({ map: realWingTexture(), color: 0xf0e2c4, transparent: true, opacity: 0.78, roughness: 0.3, side: THREE.DoubleSide, depthWrite: false })
+  const addWing = (root: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number }, length: number, halfW: number): void => {
+    for (const s of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.CircleGeometry(1, 40), wingMat)
+      wing.geometry.translate(1, 0, 0) // 뿌리를 원점에, 막은 +x 로 뻗음
+      wing.scale.set(length, halfW, 1)
+      wing.position.set(s * root.x, root.y, root.z)
+      const d = new THREE.Vector3(s * dir.x, dir.y, dir.z).normalize()
+      wing.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), d)
+      bee.add(wing)
     }
   }
-  const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, roughness: 0.15, side: THREE.DoubleSide, depthWrite: false })
-  for (const dir of [-1, 1]) {
-    const root = new THREE.Vector3(dir * 0.05, Y + 0.26, 0.14)
-    const tip = new THREE.Vector3(dir * 0.44, Y + 0.18, -0.5)
-    const wing = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), wingMat)
-    wing.scale.set(0.17, 0.012, new THREE.Vector3().subVectors(tip, root).length() / 2)
-    wing.position.copy(root.clone().add(tip).multiplyScalar(0.5))
-    wing.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tip.clone().sub(root).normalize())
-    beeGrp.add(wing)
-  }
-  g.add(beeGrp)
-  beeGrp.scale.setScalar(0.85)
-  beeGrp.position.y = 0.36 * (1 - 0.85)
+  addWing({ x: 0.12, y: 0.82, z: 0.32 }, { x: 0.34, y: 0.12, z: -0.93 }, 1.05, 0.36) // 앞날개(큼)
+  addWing({ x: 0.14, y: 0.78, z: 0.2 }, { x: 0.46, y: 0.05, z: -0.89 }, 0.7, 0.26) // 뒷날개(작음)
+
+  g.add(bee)
+
   if (queen) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.03, 12, 60), new THREE.MeshStandardMaterial({ color: 0xcf2a1c, roughness: 0.5 }))
+    const gmat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.32, metalness: 0.55 })
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.16, 18), gmat)
+    band.position.set(0, 0.62, 1.12)
+    bee.add(band)
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 8), gmat)
+      sp.position.set(Math.sin(a) * 0.17, 0.74, 1.12 + Math.cos(a) * 0.17)
+      bee.add(sp)
+    }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.78, 0.05, 12, 90), new THREE.MeshStandardMaterial({ color: 0xcf2a1c, roughness: 0.5 }))
     ring.rotation.x = Math.PI / 2
-    ring.position.y = 0.37
+    ring.position.y = 0.32
     g.add(ring)
   }
   return g
@@ -496,19 +616,11 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
       }
       if (cell.piece) {
         const queen = cell.piece.kind === 'queen'
-        if (style === 'realistic') {
-          // 실사 벌: 그룹 원점=타일 접촉면. 좀 크다는 의견 → 0.85 축소(원판 바닥 ≈ TILE_TOP-0.06).
-          const tk = buildRealBee(cell.piece.owner, queen)
-          tk.scale.setScalar(0.85)
-          tk.position.set(x, -0.05, z)
-          boardGroup.add(tk)
-        } else {
-          // 일반(스타일 토큰): 원판 r2 → PIECE_K 축소, 원판 바닥을 타일 윗면에 닿게 + 살짝 박음.
-          const tk = buildPiece(cell.piece.owner, queen)
-          tk.scale.setScalar(PIECE_K)
-          tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.08, z)
-          boardGroup.add(tk)
-        }
+        // 실사·일반 둘 다 핸드오프 스케일(원판 r2, 그룹 원점=원판 중심) → 같은 축소·배치.
+        const tk = style === 'realistic' ? buildRealBee(cell.piece.owner, queen) : buildPiece(cell.piece.owner, queen)
+        tk.scale.setScalar(PIECE_K)
+        tk.position.set(x, TILE_TOP + 0.3 * PIECE_K - 0.08, z)
+        boardGroup.add(tk)
       }
     }
     // 프론티어(타일 놓을 빈 칸) — 초록 고스트 헥스, 클릭 가능
