@@ -107,5 +107,37 @@ function lighten(hex, amt){
 - `BeePiece.dc.html` — 파라미터화된 원본 컴포넌트(템플릿 + 로직). 좌표/색 단일 출처.
 - `Be the Bee 게임 말.dc.html` — 4종을 배치한 쇼케이스(부모가 prop 넘기는 예시).
 - `support.js` — 위 .dc.html을 브라우저에서 바로 열기 위한 런타임(참고용, 제품엔 불필요).
+- `Be the Bee 3D 말.dc.html` — **three.js 3D 버전**(아래 별도 명세).
 
 > matte로 내보내려면 광택 두 ellipse(`cx74 cy72…`, `cx86 cy92…`)의 opacity를 0으로 두거나 제거하세요.
+
+---
+
+# 부록: 3D 버전 (`Be the Bee 3D 말.dc.html`)
+
+위 2D SVG 말을 **three.js 메시**로 옮긴 3D 뷰어입니다. 같은 비례(SVG의 회전체)와 색을 따릅니다.
+
+## 의존성 & 컨트롤
+- **three.js r0.149.0** UMD 빌드 하나만 사용(`unpkg.com/three@0.149.0/build/three.min.js`). OrbitControls 등 추가 모듈 없음.
+- 카메라 회전/줌은 **자체 구현**(포인터 드래그 → 구면좌표 `theta/phi`, 휠 → `radius`). 코드베이스에 OrbitControls가 이미 있으면 교체해도 됨.
+- `requestAnimationFrame` 루프에서 `autoRotate` 시 `theta` 증가.
+
+## 씬 구성
+- **원판**: `CylinderGeometry(2, 2, 0.6, 72)` + 가장자리 `TorusGeometry(1.93, 0.09)`(상단 y=0.3). 색은 2D와 동일하되 3D 조명 보정으로 갈색은 **`#542514`**(더 진하게), 노랑은 `#d2a230`.
+- **벌**: SVG 벌의 **회전체**. body `SphereGeometry(1)` → `scale(0.8, 0.8, 1.15)`(장축 = z, 머리 +z / 꼬리 −z). 그룹 y=0.62라 몸통이 원판에 **~30% 매몰**.
+- **줄무늬·꼬리**: 입체 없이 **캔버스 텍스처로 몸통에 칠함**(`makeBodyTexture()`). 64×512 캔버스, 노랑 `#f4b70e` 바탕에 검정 `#1d150b` — 두꺼운 띠 2개(v≈0.63, 0.45, 두께 48px) + 꼬리(v 0~0.28 솔리드). 구를 `rotateX(π/2)` 해 UV 극을 z축에 맞춤.
+- **머리**: `SphereGeometry` → `scale(0.55,0.55,0.5)`, 중심 (0, 0.24, 0.98).
+- **눈(평면)**: 머리 표면에 얹는 **평면 원반 스택**(릴리프 없음) — 검은 테두리 / 흰자 / 큰 검은 동공 / 작은 하이라이트. 그룹을 `scale(0.78,1,1)` 해 세로로 살짝 긴 타원. 표면 법선 방향으로 정렬(`setFromUnitVectors`).
+- **더듬이**: 줄기 `CylinderGeometry`를 실제 방향 벡터로 정렬(`quaternion.setFromUnitVectors`)하고, 끝 공을 그 끝점에 배치(분리 방지).
+- **날개**: 납작한 반투명 타원체(`SphereGeometry`→`scale(0.46,0.05,0.95)`, opacity 0.42). 뿌리는 머리쪽(+z)에 모이고 꼬리쪽(−z)으로 퍼지게 root→tip 벡터로 정렬.
+- **여왕벌**: 머리 위 금색 띠 + 뿔(테두리 안쪽 radius 0.17) + 원판 빨간 링 `#cf2a1c`.
+
+## Props (Tweaks)
+| prop | 타입 | 기본 | 설명 |
+|---|---|---|---|
+| `faction` | enum `brown`/`gold` | brown | 원판 색 |
+| `queen` | boolean | false | 왕관 + 빨간 링 |
+| `autoRotate` | boolean | true | 자동 회전 |
+
+> 주의: `data-props`의 `default`는 **에디터(Tweaks)용**이며 런타임 prop으로 자동 주입되지 않음 — 로직은 `this.props.x ?? 기본값`으로 폴백함.
+> 실제 엔진 통합 시엔 메시를 한 번 만들고 진영/여왕벌만 머티리얼·자식 토글로 바꾸는 방식을 권장(매 변경마다 `buildPiece()` 재생성은 뷰어용).
