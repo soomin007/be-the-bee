@@ -2,7 +2,7 @@
 // 이 판의 결정적 장면: 34수에서 AI가 상대 5목 리치를 안 막음(missBlock) → 35수 사람 승(win).
 import { describe, it, expect } from 'vitest'
 import { applyMove, createInitialState, hex, notePolarity, reviewMove } from '../src/engine/index'
-import type { GameState, Move } from '../src/engine/index'
+import type { Board, GameState, Move } from '../src/engine/index'
 
 const MV =
   't -1 0 0 0;t 1 -1 -1 0;t -1 1 1 -1;t 1 1 -1 1;t -2 2 1 0;2 1 -2 1 2;t 1 -3 1 -3;t -1 2 -1 2;t -1 3 -1 3;t -1 -1 -1 -1;t -1 -2 -1 -2;t 0 2 0 2;t 1 3 -2 2;t 2 0 1 1;t 0 3 2 0;t 3 0 3 0;2 -2 3 -3 3;t -2 1 -2 1;t 0 1 0 1;t 0 -1 0 -1;t -3 2 -3 2;t 2 -1 1 2;t 2 -3 2 -3;t 2 2 2 2;t 3 2 3 2;t 2 1 2 1;t 4 -1 4 -1;2 2 -2 -2 -1;t 0 -3 0 -3;t -1 -3 -1 -3;2 3 -3 4 -3;t 1 -4 1 -4;t 4 -2 3 -3;t -2 0 -2 0;t 4 0 4 -3'
@@ -44,9 +44,32 @@ describe('reviewMove — 실제 기보 분석', () => {
     expect(reviewMove(states[5]!, moves[5]!)).toBe('hive')
   })
 
-  it('4목(다음 한 수로 5목)을 만든 수는 threat — 33수 노랑이 4목 완성', () => {
-    // 33수로 (0,-3)~(3,-3) 4목 → 승리칸 (4,-3) 하나 = 단일 위협(threat).
-    const note = reviewMove(states[32]!, moves[32]!)
+  it('연속 4목(끝에 한 칸)은 사람도 바로 보이므로 코칭 생략 — 33수는 threat 아님', () => {
+    // 33수로 (0,-3)~(3,-3) 연속 4목, 승리칸 (4,-3)은 끝 → 너무 뻔해서 멘트 없음.
+    expect(reviewMove(states[32]!, moves[32]!)).not.toBe('threat')
+  })
+})
+
+describe('reviewMove — 떨어진 4목(gapped four)만 threat', () => {
+  const yp = (): Board[string] => ({ tile: { owner: 'yellow' }, piece: { owner: 'yellow', kind: 'normal' } })
+  const yt = (): Board[string] => ({ tile: { owner: 'yellow' } })
+  const base = (board: Board): GameState => ({
+    board,
+    turn: 'yellow',
+    supplies: {
+      yellow: { tiles: 20, pieces: 20, queenUsed: false },
+      brown: { tiles: 20, pieces: 20, queenUsed: false },
+    },
+    moveNumber: 6,
+    phase: 'playing',
+  })
+  // 한 축(q)에 노랑 말 0,1,3 + 빈 타일 2(가운데). 이번 수로 4에 타일+말 → 0,1,_,3,4.
+  // 승리칸은 가운데 2(양옆이 내 말 = 떨어진 4목) → threat.
+  const place4: Move = { type: 'tileAndPiece', tile: hex(4, 0), piece: { at: hex(4, 0), kind: 'normal' } }
+
+  it('가운데를 끼우는 떨어진 4목을 만들면 threat(칭찬)', () => {
+    const before = base({ '0,0': yp(), '1,0': yp(), '2,0': yt(), '3,0': yp() })
+    const note = reviewMove(before, place4)
     expect(note).toBe('threat')
     expect(notePolarity(note!)).toBe('good')
   })

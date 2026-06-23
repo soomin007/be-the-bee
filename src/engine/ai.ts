@@ -105,8 +105,9 @@ export function createAi(opts: AiOptions = {}): Ai {
 // 순수 분류만 한다(한국어 문구는 UI 가 매핑). 평범한 수는 null, 의미 있는 수에만 코드.
 //   잘한/결정적 수: win·fork·threat·block·corridor·hive
 //   실수(블런더):   missWin(이길 수 있었는데 안 둠)·missBlock(상대 위협을 안 막음)
-// threat = 다음 한 수로 5목을 노릴 수 있게 된 단일 위협. winningCells 는 떨어진 4목(X·XXX 등)의
-// 빈칸도 승리칸으로 잡으므로, threat 가 전문가 평가의 gapFour(떨어진 4목)까지 자연히 포함한다.
+// threat = "떨어진 4목"(X·XXX, XX·XX 등 가운데를 끼워 넣으면 5목)만. winningCells 가 그 빈칸을
+// 승리칸으로 잡아 전문가 평가의 gapFour 와 같은 범위를 본다. 연속 4목(끝에 한 칸)은 사람도 바로
+// 보이므로 제외(isGappedWin 으로 구분) — 멘트가 너무 자주 뜨지 않게.
 export type MoveNote = 'win' | 'fork' | 'threat' | 'block' | 'corridor' | 'hive' | 'missWin' | 'missBlock'
 
 /** 코드의 성향: 칭찬(good) / 지적(bad). UI 가 ✓/✗·색을 고를 때 쓴다. */
@@ -116,6 +117,20 @@ export function notePolarity(note: MoveNote): 'good' | 'bad' {
 
 function piecePlacedAt(m: Move): Hex | null {
   return m.type === 'twoTiles' ? null : m.piece.at
+}
+
+// 승리칸 w 가 "떨어진 4목"(가운데를 끼워 넣는 자리)인가: 어느 축에서 w 의 양옆 모두 내 말이고,
+// 합쳐 4목 이상이면 true. 연속 4목(끝에 한 칸)은 한쪽만 내 말이라 false. 사람도 바로 보이는
+// 연속 4목은 코칭에서 빼고(threat), 놓치기 쉬운 떨어진 4목만 알리기 위함이다.
+function isGappedWin(board: Board, w: Hex, player: Player): boolean {
+  for (const d of HEX_AXES) {
+    let fwd = 0
+    for (let c = hexAdd(w, d); pieceAt(board, c)?.owner === player; c = hexAdd(c, d)) fwd++
+    let bwd = 0
+    for (let c = hexSubtract(w, d); pieceAt(board, c)?.owner === player; c = hexSubtract(c, d)) bwd++
+    if (fwd >= 1 && bwd >= 1 && fwd + bwd >= LINE_LENGTH - 1) return true
+  }
+  return false
 }
 
 /**
@@ -158,8 +173,9 @@ export function reviewMove(before: GameState, move: Move): MoveNote | null {
     if (occupiedThreat || oppWinsAfter.length < oppWinsBefore.length) return 'block'
   }
 
-  // 6) 단일 위협(4목·떨어진 4목): 다음 한 수로 5목을 노릴 수 있게 됨 → 상대가 막아야 함
-  if (myWinsAfter.length === 1) return 'threat'
+  // 6) 단일 위협 — "떨어진 4목"만(X·XXX, XX·XX 등 가운데를 끼워 넣는 위협). 다음 한 수로 5목.
+  //    연속 4목(끝에 한 칸)은 사람도 바로 보이므로 생략(자주 떠서 잔소리가 되지 않게).
+  if (myWinsAfter.length === 1 && isGappedWin(after.board, myWinsAfter[0]!, mover)) return 'threat'
 
   // 7) 회랑 끊기/허리 끊기: 상대 색 타일이 이룬 3+ 타일선(곧 벌집 회랑) 위에 내 말을 올림
   if (at !== null) {
