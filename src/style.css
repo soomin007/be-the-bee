@@ -17,12 +17,17 @@ body {
 }
 
 #app {
-  height: 100vh;
+  height: 100vh; /* 폴백(구형) */
+  height: 100dvh; /* 모바일 주소창 높이만큼 화면이 잘리지 않게 */
 }
 
 .game {
   display: flex;
   height: 100vh;
+  height: 100dvh;
+  /* 노치·홈바·가로 노치 안전영역만큼 안쪽으로(미지원 기기는 env=0 → 영향 없음). viewport-fit=cover 와 세트. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
 .board-wrap {
@@ -1149,6 +1154,7 @@ svg.board.panning {
 }
 .saves-list {
   max-height: 46vh;
+  max-height: 46dvh;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -1308,6 +1314,7 @@ svg.board.panning {
   position: relative;
   width: min(92vw, 30rem);
   max-height: 92vh;
+  max-height: 92dvh;
   overflow: auto;
   background: linear-gradient(170deg, #fffdf7 0%, #fdf4df 100%);
   border: 2px solid #eab308;
@@ -1451,6 +1458,7 @@ svg.board.panning {
   .board-wrap {
     order: 1;
     height: 58vh;
+    height: 58dvh;
   }
   .buttons button {
     padding: 0.6rem 0.9rem;
