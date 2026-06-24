@@ -50,7 +50,11 @@ export function initMobileShell(ctx: MobileShellCtx): MobileShell {
   // 하단 안내 배너(상단 HUD 가 짧게 유지되도록 긴 안내문구를 여기로).
   const statusBanner = document.createElement('div')
   statusBanner.className = 'm-status'
-  for (const el of [gear, closeBtn, undoFab, newFab, statusBanner]) gameEl.appendChild(el)
+  // 톱니·닫기·빠른 FAB 는 화면 고정 오버레이(.game). 안내 배너는 board-wrap 흐름에 넣어 HUD 바로
+  // 아래에 자연스럽게 쌓이게 한다(고정 위치로 HUD 와 겹치던 문제 해결).
+  for (const el of [gear, closeBtn, undoFab, newFab]) gameEl.appendChild(el)
+  const boardWrap = root.querySelector('.board-wrap') as HTMLElement
+  boardWrap.appendChild(statusBanner)
 
   function applySettingsOpen(): void {
     gameEl.classList.toggle('msettings-open', settingsOpen)

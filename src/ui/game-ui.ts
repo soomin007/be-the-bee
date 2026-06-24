@@ -386,8 +386,13 @@ export function mountGame(root: HTMLElement): void {
   let waitPollTimer: number | null = null // 방장 대기 중 상대 입장 폴링(실시간을 놓쳐도 잡는 안전망)
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
-  // 팝업(결과 모달보다 우선): 여왕벌 설명/보관함 + 온라인 다이얼로그(진영 선택·나가기 확인).
-  let infoModal: 'queen' | 'saves' | 'leaveConfirm' | 'rematchAsk' | null = null
+  // 팝업(결과 모달보다 우선): 여왕벌 설명/보관함 + 온라인 다이얼로그(진영 선택·나가기 확인) + 무르기 동의.
+  let infoModal: 'queen' | 'saves' | 'leaveConfirm' | 'rematchAsk' | 'undoAsk' | null = null
+  // 데스크탑 설정창 접기(모바일은 톱니 시트라 무관).
+  let panelCollapsed = false
+  // 사람끼리: 각자 무르기 1회 + 상대 동의. undoUsed=진영별 사용 여부, undoAsk=되돌릴(요청한) 진영.
+  let undoUsed: Record<Player, boolean> = { yellow: false, brown: false }
+  let undoAsk: Player | null = null
   let onlineMsg: string | null = null // 온라인 알림 팝업(매칭 성공·상대 모드 변경·상대 나감). 확인 누르면 사라짐
   // 리치(한 수로 5목) 칸, render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
@@ -539,6 +544,7 @@ export function mountGame(root: HTMLElement): void {
         <div class="action-bar"></div>
         <div class="board-notes"></div>
       </div>
+      <button class="panel-reopen" data-act="togglePanel" title="설정 펼치기" aria-label="설정 펼치기">☰</button>
     </div>
     <div class="modal-layer"></div>
     <div class="credit">
@@ -555,6 +561,9 @@ export function mountGame(root: HTMLElement): void {
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const boardStatus = root.querySelector('.board-status') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
+  const gameEl = root.querySelector('.game') as HTMLElement // 데스크탑 설정창 접기 클래스 토글용
+  // 설정창 펼치기 버튼(셸 정적 요소라 직접 배선; onPanelAction 은 함수선언 hoist).
+  root.querySelector('.panel-reopen')?.addEventListener('click', () => onPanelAction('togglePanel'))
 
   // 3D 보드: board-wrap 안에 three.js 캔버스 호스트. settings.board3d 면 SVG 대신 표시한다.
   // 렌더러는 처음 3D 로 그릴 때 지연 생성(three.js 비용 회피). 클릭은 SVG 와 동일한 onHexClick 으로.
@@ -597,6 +606,33 @@ export function mountGame(root: HTMLElement): void {
     const playing = state.phase === 'playing'
     boardWrap.classList.toggle('turn-yellow', playing && state.turn === 'yellow')
     boardWrap.classList.toggle('turn-brown', playing && state.turn === 'brown')
+  }
+
+  // 데스크탑 설정창 접기(모바일은 톱니 시트라 무관 — mobile.css 가 가림).
+  function applyPanelCollapsed(): void {
+    gameEl.classList.toggle('panel-collapsed', panelCollapsed)
+  }
+
+  // 무르기 실제 수행(사람 차례까지 되돌림 — vs AI 는 AI 수+내 수 함께). 동의/직접 호출 공용.
+  function doUndo(): void {
+    if (history.length === 0) return
+    clearAiTimer()
+    stopReplayTimer()
+    clearFx()
+    replayIndex = null
+    do {
+      state = history[history.length - 1]!
+      history = history.slice(0, -1)
+      moveLog = moveLog.slice(0, -1)
+    } while (history.length > 0 && aiControls(state.turn))
+    message = ''
+    notice = ''
+    coachNote = null
+    lastMove = null
+    modalDismissed = false
+    openMenu = null
+    startTurn()
+    autoSaveNow()
   }
 
   // 컬러 테마 적용: 밀랍 그라데이션 stop 과 벌집 글로우 색을 현재 테마로 채운다.
@@ -769,6 +805,26 @@ export function mountGame(root: HTMLElement): void {
 
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return
+    // 입력창 포커스/팝업 중에는 단축키 무시(오발동 방지).
+    const ae = document.activeElement
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return
+    if (infoModal !== null) return
+
+    // 무르기(U)·새 게임(N) 단축키 — 행동 선택 단축키와 같은 결. 온라인은 자체 UI 라 제외.
+    if (!online) {
+      if (e.key === 'u' || e.key === 'U') {
+        if (!aiThinking) {
+          e.preventDefault()
+          onPanelAction('undo')
+        }
+        return
+      }
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault()
+        onPanelAction('new')
+        return
+      }
+    }
 
     // 인게임 행동 단축키 (사람 차례에만 — 온라인 상대 차례엔 잠금)
     if (state.phase === 'playing' && !inputLocked() && draft !== null) {
@@ -2000,6 +2056,10 @@ export function mountGame(root: HTMLElement): void {
       renderRematchAsk()
       return
     }
+    if (infoModal === 'undoAsk') {
+      renderUndoAsk()
+      return
+    }
     if (onlineMsg !== null) {
       renderOnlineMsg(onlineMsg)
       return
@@ -2131,6 +2191,25 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-actions">
             <button data-act="rematchYes">예, 한 판 더</button>
             <button data-act="rematchNo">아니오</button>
+          </div>
+        </div>
+      </div>`
+    wireModalButtons()
+  }
+
+  // 사람끼리 무르기 동의: 되돌릴 사람(undoAsk)의 요청을 상대(지금 차례)가 허락/거절.
+  function renderUndoAsk(): void {
+    const requester = undoAsk
+    const approver = state.turn // 지금 차례 = 동의자
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          ${BEE_SVG}
+          <div class="modal-title">↩ 무르기 요청</div>
+          <div class="modal-sub">${requester ? PLAYER_LABEL[requester] : ''}가 방금 둔 수를 무르고 싶어해요.<br>${PLAYER_LABEL[approver]}, 허락할까요? (사람끼리는 각자 한 번만)</div>
+          <div class="modal-actions">
+            <button data-act="undoGrant">허락</button>
+            <button data-act="undoDeny">거절</button>
           </div>
         </div>
       </div>`
@@ -2288,9 +2367,9 @@ export function mountGame(root: HTMLElement): void {
         </div>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드</button>
         <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">무한 모드</button>
-        <button data-act="undo" ${history.length > 0 && !aiThinking && !online ? '' : 'disabled'}>무르기</button>
+        <button data-act="undo" ${history.length > 0 && !aiThinking && !online && !(settings.mode === 'hotseat' && undoUsed[opponent(state.turn)]) ? '' : 'disabled'}>무르기<kbd>U</kbd></button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
-        <button data-act="new">새 게임</button>
+        <button data-act="new">새 게임<kbd>N</kbd></button>
         <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">${ICON.share} 공유하기</button>
         <button data-act="saveGame" title="지금 판을 보관함에 저장">${ICON.save} 저장</button>
         <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">${ICON.saves} 보관함</button>
@@ -2381,6 +2460,7 @@ export function mountGame(root: HTMLElement): void {
       <div class="help-row"><span class="help-ico">${ICON.keyboard}</span><span>화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치</span></div>`
 
     panel.innerHTML = `
+      <button class="panel-collapse-btn" data-act="togglePanel" title="설정창 접기" aria-label="설정창 접기">◀</button>
       <h2 class="app-title" title="Be the Bee">${ICON.bee} Be the Bee</h2>
       ${settingsSummary}
       ${section('game', '게임', gameGrid)}
@@ -2596,27 +2676,32 @@ export function mountGame(root: HTMLElement): void {
         startTurn()
         break
       case 'undo':
-        if (history.length > 0) {
-          clearAiTimer()
-          stopReplayTimer()
-          clearFx()
-          replayIndex = null
-          // 사람 차례가 될 때까지 되돌린다, vs AI 에선 AI 수와 내 수를 함께 무른다.
-          // (한 수만 무르면 AI 차례로 돌아가 AI 가 즉시 다시 둬 무효가 됨)
-          do {
-            state = history[history.length - 1]!
-            history = history.slice(0, -1)
-            moveLog = moveLog.slice(0, -1) // history 와 보조 맞춤
-          } while (history.length > 0 && aiControls(state.turn))
-          message = ''
-          notice = ''
-          coachNote = null
-          lastMove = null
-          modalDismissed = false
-          openMenu = null
-          startTurn()
-          autoSaveNow() // 무른 결과도 이어하기에 반영
+        if (history.length === 0) break
+        if (settings.mode === 'hotseat') {
+          // 사람끼리: 직전에 둔 사람(되돌릴 사람)이 요청자, 지금 차례가 동의자. 각자 1회 한정.
+          const requester = opponent(state.turn)
+          if (undoUsed[requester]) {
+            notice = `${PLAYER_LABEL[requester]}는 무르기를 이미 썼어요(사람끼리는 한 사람당 1회).`
+            break
+          }
+          undoAsk = requester
+          infoModal = 'undoAsk' // 상대 동의를 받는 모달
+          break
         }
+        doUndo()
+        break
+      case 'undoGrant':
+        if (undoAsk !== null) {
+          undoUsed[undoAsk] = true
+          undoAsk = null
+          infoModal = null
+          doUndo()
+        }
+        break
+      case 'undoDeny':
+        undoAsk = null
+        infoModal = null
+        notice = '무르기를 거절했어요.'
         break
       case 'closeModal':
         modalDismissed = true
@@ -2810,9 +2895,14 @@ export function mountGame(root: HTMLElement): void {
         coachNote = null
         lastMove = null
         modalDismissed = false
+        undoUsed = { yellow: false, brown: false } // 새 게임 → 무르기 사용권 초기화
         startTurn()
         autoSaveNow() // 새 게임도 이어하기 기준점으로 저장
         break
+      case 'togglePanel': // 데스크탑 설정창 접기/펼치기
+        panelCollapsed = !panelCollapsed
+        applyPanelCollapsed()
+        return
       default:
         return
     }
