@@ -27,6 +27,11 @@ jobs:
       - run: npm run check:engine
       - run: npm test
       - run: npm run build
+        # 온라인 대전: 빌드에 Supabase 공개 키 주입(없으면 온라인 기능만 꺼진 채 정상 빌드).
+        # 값은 GitHub 레포 Settings → Secrets and variables → Actions 에 등록한다(anon 키는 공개 안전).
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true
