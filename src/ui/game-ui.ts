@@ -44,6 +44,7 @@ import { maybeShowTutorial, openTutorial } from './tutorial'
 import { ICON } from './icons'
 import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 import { mpEnabled } from '../mp/supabase'
+import { initMobileShell } from './mobile-shell'
 import {
   createRoom,
   joinRoom,
@@ -538,8 +539,6 @@ export function mountGame(root: HTMLElement): void {
         <div class="action-bar"></div>
         <div class="board-notes"></div>
       </div>
-      <button class="msettings-fab" data-act="toggleMobileSettings" aria-label="설정" title="설정">⚙</button>
-      <button class="msettings-close" data-act="toggleMobileSettings" aria-label="설정 닫기" title="닫기">✕</button>
     </div>
     <div class="modal-layer"></div>
     <div class="credit">
@@ -556,11 +555,6 @@ export function mountGame(root: HTMLElement): void {
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const boardStatus = root.querySelector('.board-status') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
-  const gameEl = root.querySelector('.game') as HTMLElement
-  // 모바일 설정 시트 토글(톱니/닫기). 셸 정적 버튼이라 여기서 직접 배선(onPanelAction 은 함수선언 hoist).
-  for (const el of Array.from(root.querySelectorAll('[data-act="toggleMobileSettings"]'))) {
-    el.addEventListener('click', () => onPanelAction('toggleMobileSettings'))
-  }
 
   // 3D 보드: board-wrap 안에 three.js 캔버스 호스트. settings.board3d 면 SVG 대신 표시한다.
   // 렌더러는 처음 3D 로 그릴 때 지연 생성(three.js 비용 회피). 클릭은 SVG 와 동일한 onHexClick 으로.
@@ -594,12 +588,9 @@ export function mountGame(root: HTMLElement): void {
   }
   applyActionBarPos()
 
-  // 모바일 설정 시트: 톱니로 열고 닫는다(데스크탑은 패널이 항상 보여 무관). 클래스만 토글.
-  let mobileSettingsOpen = false
-  function applyMobileSettings(): void {
-    gameEl.classList.toggle('msettings-open', mobileSettingsOpen)
-  }
-  applyMobileSettings()
+  // 모바일 전용 화면 크롬(설정 시트·드릴다운·FAB·하단 안내)은 별도 모듈로 분리(mobile-shell.ts).
+  // 데스크탑(>720px)에선 mobile-shell 이 만든 요소가 mobile.css 로 숨겨지고 훅은 무동작.
+  const mobileShell = initMobileShell({ root, onAction: (a) => onPanelAction(a) })
 
   // 컬러 테마 적용: 밀랍 그라데이션 stop 과 벌집 글로우 색을 현재 테마로 채운다.
   // (테마 변경 시 다시 호출 → render() 가 나머지 인라인 색을 다시 그린다.)
@@ -1815,6 +1806,7 @@ export function mountGame(root: HTMLElement): void {
     renderActionBar()
     renderBoardNotes()
     renderModal()
+    mobileShell.afterRender() // 모바일: 아코디언 접힘·하단 안내 배너 재맞춤(데스크탑 무동작)
   }
 
   // 게임 상태(누구 차례·안내·자원·점수)를 설정 패널이 아니라 보드 화면 좌상단 오버레이에 띄운다.
@@ -2502,6 +2494,7 @@ export function mountGame(root: HTMLElement): void {
     // 설정 패널 섹션(아코디언) 펼치기/접기
     if (act.startsWith('sec:')) {
       const k = act.slice('sec:'.length)
+      if (mobileShell.handleSectionClick(k)) return // 모바일: 드릴다운(접힘·하나씩)이 처리
       settings.sectionsOpen[k] = !settings.sectionsOpen[k]
       persist()
       render()
@@ -2650,10 +2643,6 @@ export function mountGame(root: HTMLElement): void {
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
         applyActionBarPos()
         break
-      case 'toggleMobileSettings':
-        mobileSettingsOpen = !mobileSettingsOpen
-        applyMobileSettings()
-        return // 클래스만 토글 — 보드 재렌더 불필요
       case 'cycleTheme': {
         if (settings.board3d) break // 3D 모드는 색 테마 미적용(버튼도 비활성). 벌 스타일은 숨은 이스터에그.
         const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
