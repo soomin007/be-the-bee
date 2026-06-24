@@ -13,6 +13,7 @@ import {
   hexEquals,
   hexFromKey,
   hexKey,
+  hiveCountdowns,
   isTilePlaceable,
   notePolarity,
   opponent,
@@ -24,7 +25,7 @@ import {
   winningLine,
   withTile,
 } from '../engine/index'
-import type { Ai, Difficulty, GameState, Hex, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
+import type { Ai, Difficulty, GameState, Hex, HiveCountdown, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
@@ -352,6 +353,9 @@ export function mountGame(root: HTMLElement): void {
   // 리치(한 수로 5목) 칸, render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
+  // 벌집 초읽기(잠긴 벌집 위 안전한 5목까지 N수). render 가 채우고 boardNotes 가 읽는다.
+  let oppCountdown: HiveCountdown | null = null // 상대 벌집 초읽기 = 나에게 위험
+  let myCountdown: HiveCountdown | null = null // 내 벌집 초읽기 = 나에게 유리
 
   let cam: Camera = { cx: 0, cy: 0, w: HEX_SIZE * 26 }
   // 포인터(마우스/터치) 추적, 1개=팬, 2개=핀치 줌
@@ -373,7 +377,8 @@ export function mountGame(root: HTMLElement): void {
   let lastBgmVolume = settings.bgmVolume || 0.35 // 뮤트 복원용
   let lastSfxVolume = settings.sfxVolume || 0.6
   // 새 게임의 초기 상태(현재 설정의 무한 모드 반영).
-  const freshState = (): GameState => createInitialState({ infiniteTiles: settings.infiniteTiles })
+  const freshState = (): GameState =>
+    createInitialState({ infiniteTiles: settings.infiniteTiles, queenEnabled: settings.queen })
   // 진영별 AI 인스턴스(관전은 양쪽 다른 성향·시드 → 같은 모양으로만 끝나지 않게). vsAi 는 갈색만.
   let aiYellow: Ai | null = null
   let aiBrown: Ai | null = null
@@ -989,7 +994,7 @@ export function mountGame(root: HTMLElement): void {
     // 훈수 모드면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
     if (settings.hints && state.phase === 'playing') {
       const opp = opponent(state.turn)
-      if (winningCells(state.board, opp, state.supplies[opp]).length > 0) sound.alert()
+      if (winningCells(state.board, opp, state.supplies[opp], settings.queen).length > 0) sound.alert()
     }
     // 관전 대결이 끝나면 자동으로 멈춤, 새 게임이 저절로 또 돌지 않게.
     if (state.phase === 'finished' && settings.mode === 'watch') watchRunning = false
@@ -1245,14 +1250,33 @@ export function mountGame(root: HTMLElement): void {
     // 위험/승리 칸 힌트는 훈수 모드에서만(설명서엔 없는 보조, 방 설정으로 공통 적용)
     dangerCells = []
     winNowCells = []
+    oppCountdown = null
+    myCountdown = null
     if (settings.hints && state.phase === 'playing' && !replaying) {
       const opp = opponent(state.turn)
-      // 여왕벌 모드가 꺼져 있으면 queen 으로만 둘 수 있는 칸(잠긴 벌집)은 리치가 아니다.
-      // queenUsed 를 true 로 친 사본으로 호출해 "실제로 둘 수 있는 승리 칸"만 표시한다.
-      const effSupply = (p: Player): typeof state.supplies[Player] =>
-        settings.queen ? state.supplies[p] : { ...state.supplies[p], queenUsed: true }
-      dangerCells = winningCells(state.board, opp, effSupply(opp))
-      winNowCells = winningCells(state.board, state.turn, effSupply(state.turn))
+      // 분석은 그 판의 여왕벌 모드를 반영한다(queenEnabled). 표준 모드면 잠긴 상대 벌집 칸은 어느
+      // 쪽도 둘 수 없으니 리치가 아니다 — 엔진 winningCells 의 queenAllowed 가 직접 가른다.
+      dangerCells = winningCells(state.board, opp, state.supplies[opp], settings.queen)
+      winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn], settings.queen)
+      // 벌집 초읽기: 잠긴 벌집 위 "막을 수 없는 5목"까지 남은 수(리치보다 한발 이른 경고).
+      for (const cd of hiveCountdowns(state.board)) {
+        if (cd.owner === state.turn) myCountdown = cd
+        else oppCountdown = cd
+      }
+      // 상대 초읽기 줄을 보드에 점선 윤곽으로 강조 — 어디가 위험한지 한눈에.
+      if (oppCountdown) {
+        for (const k of oppCountdown.cells) {
+          content.appendChild(
+            makeHexPolygon(hexToPixel(hexFromKey(k)), {
+              fill: 'none',
+              stroke: '#b91c1c',
+              strokeWidth: 2.5,
+              dash: true,
+              interactive: false,
+            }),
+          )
+        }
+      }
       // 리치 칸은 "붕붕" 모션(buzz = 펄스 + 미세 진동)으로 더 눈에 띄게.
       for (const c of dangerCells) {
         content.appendChild(
@@ -1515,10 +1539,29 @@ export function mountGame(root: HTMLElement): void {
       }
     } else {
       if (state.phase === 'playing') {
+        const qn = settings.queen
         if (winNowCells.length > 0) {
           parts.push(`<div class="reach win">✨ 여기 두면 5목 완성, 승리!</div>`)
+        } else if (oppCountdown && oppCountdown.movesLeft === 1) {
+          // 상대 잠긴 벌집 위 1수 = 보통 말로는 못 막는다(리치와 달리 "막으세요"가 거짓이 됨).
+          parts.push(
+            `<div class="reach danger">⛔ 상대 벌집 5목이 코앞! ${
+              qn ? '여왕벌로만 막을 수 있어요.' : '벌집 위라 막을 수 없어요. 더 빨리 5목을 노리세요.'
+            }</div>`,
+          )
         } else if (dangerCells.length > 0) {
           parts.push(`<div class="reach danger">⚠️ 상대가 다음 한 수로 5목을 둘 수 있어요. 막으세요!</div>`)
+        } else if (oppCountdown) {
+          // 2~3수 남은 초읽기(리치보다 한발 이른 경고). 잠긴 벌집이라 사후 차단이 사실상 불가.
+          parts.push(
+            `<div class="reach danger">⏳ 상대 벌집 초읽기: ${oppCountdown.movesLeft}수 뒤 ${
+              qn ? '5목(여왕벌로 한 번만 막을 수 있어요)' : '막을 수 없는 5목'
+            }. 지금 줄을 끊거나 더 빨리 5목을 노리세요.</div>`,
+          )
+        }
+        // 내 벌집 초읽기는 유리 정보로 별도 표시(상대 위험과 동시에 떠도 됨).
+        if (myCountdown) {
+          parts.push(`<div class="reach win">🍯 내 벌집 초읽기: ${myCountdown.movesLeft}수 뒤 5목!</div>`)
         }
       }
       if (aiComment) parts.push(`<div class="ai-comment">🐝 전문가: ${aiComment}</div>`)
@@ -2082,9 +2125,10 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'toggleQueen':
         if (settings.queen) {
-          // 끄기는 즉시(설명 불필요)
+          // 끄기는 즉시(설명 불필요). 현재 판의 분석(리치/카운트다운)도 모드를 반영하도록 state 갱신.
           settings.queen = false
           if (pieceKind === 'queen') pieceKind = 'normal'
+          state = { ...state, queenEnabled: false }
         } else {
           // 켜기 전 설명 팝업, 확인해야 켜진다
           infoModal = 'queen'
@@ -2092,6 +2136,7 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'queenConfirm':
         settings.queen = true
+        state = { ...state, queenEnabled: true } // 현재 판에도 즉시 반영
         infoModal = null
         break
       case 'queenCancel':

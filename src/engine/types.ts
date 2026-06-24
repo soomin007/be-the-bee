@@ -86,6 +86,14 @@ export interface GameState {
    * 없고, 게임은 말 5목 승리 또는 양쪽 말 소진(점수)으로만 끝난다. undefined/false = 표준 모드.
    */
   readonly infiniteTiles?: boolean
+  /**
+   * 여왕벌 모드(확장 규칙, 숙련자용): 사람이 그 대국에서 먼저 켰을 때만 여왕벌을 쓸 수 있다.
+   * undefined/false = 표준 모드(여왕벌 없음). 이 플래그는 "분석"이 모드를 반영하게 하는 단일
+   * 진실이다: 꺼져 있으면 잠긴 상대 벌집 칸은 어느 쪽도 도달 불가(여왕벌만 무시 가능, §6)이므로
+   * 위협/리치 판정(winningCells)·AI 차단·코칭이 그 칸을 "둘 수 있는 승리 칸"으로 보지 않는다.
+   * (엔진은 여전히 여왕벌 수 자체는 검증 통과시킨다 — 제공/분석 여부만 이 모드로 가른다.)
+   */
+  readonly queenEnabled?: boolean
 }
 
 /** 상대 진영. */

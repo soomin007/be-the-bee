@@ -43,3 +43,51 @@ export function lockedTiles(board: Board): Map<string, Player> {
   }
   return locks
 }
+
+/** 벌집 안에서 안전한 말 5목까지 남은 "초읽기" 위협. */
+export interface HiveCountdown {
+  /** 그 벌집/줄의 주인(= 곧 승리할 쪽). */
+  readonly owner: Player
+  /** 안전한 5목까지 더 놓아야 할 owner 의 말 수(1 = 다음 한 수면 승리). */
+  readonly movesLeft: number
+  /** 그 5칸(hexKey, 축 정렬). 화면 강조용. */
+  readonly cells: readonly string[]
+}
+
+/**
+ * 잠긴 벌집 위에서 "막을 수 없는 말 5목"이 얼마나 임박했는지(엔드게임 초읽기).
+ * 벌집(같은 색 타일 5+ 연속, 이미 잠김)의 모든 5칸 창을 보고:
+ *  - 창 안에 상대 말이 있으면 그 줄은 5목이 막혀 제외(잠기기 전 선점당한 경우),
+ *  - 아니면 movesLeft = 5 − (창 안 owner 말 수). owner 말이 1개 이상인 창만 위협으로 본다.
+ * 진영별로 가장 임박한(movesLeft 최소) 위협 하나씩 반환한다. 표준 모드에선 상대가 그 빈칸에
+ * 보통 말을 못 놓으므로(§5), 이 카운트다운은 사실상 "확정 패배까지 남은 owner 턴 수"다.
+ * (여왕벌 모드면 상대가 여왕벌로 딱 한 칸 막을 수 있어 절대적 확정은 아니다 — 표시 측에서 안내.)
+ * 순수 함수, DOM 무관. UI 의 위험 카운트다운 표시·AI 평가 양쪽에서 재사용 가능.
+ */
+export function hiveCountdowns(board: Board): HiveCountdown[] {
+  const byOwner = new Map<Player, HiveCountdown>()
+  for (const hive of detectHives(board)) {
+    const owner = hive.owner
+    for (let i = 0; i + LINE_LENGTH <= hive.cells.length; i++) {
+      const window = hive.cells.slice(i, i + LINE_LENGTH)
+      let mine = 0
+      let blocked = false
+      for (const key of window) {
+        const piece = board[key]!.piece
+        if (piece === undefined) continue
+        if (piece.owner === owner) mine++
+        else {
+          blocked = true // 상대 말이 끼어 그 줄은 5목 불가
+          break
+        }
+      }
+      if (blocked || mine < 1) continue
+      const movesLeft = LINE_LENGTH - mine
+      const prev = byOwner.get(owner)
+      if (prev === undefined || movesLeft < prev.movesLeft) {
+        byOwner.set(owner, { owner, movesLeft, cells: window })
+      }
+    }
+  }
+  return Array.from(byOwner.values())
+}

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { hex, hexKey } from '../src/engine/hex'
 import type { Board, Player } from '../src/engine/types'
-import { detectHives, hiveScore, totalHiveScores, lockedTiles } from '../src/engine/hive'
+import { detectHives, hiveScore, totalHiveScores, lockedTiles, hiveCountdowns } from '../src/engine/hive'
 import { completingCells, detectWin, winningLine } from '../src/engine/victory'
 import { winningCells } from '../src/engine/moves'
 import type { PlayerSupply } from '../src/engine/types'
@@ -114,5 +114,52 @@ describe('완성 가능 칸 (리치/차단 공유)', () => {
     // 타일이 0개면 프론티어 끝은 도달 불가
     const noTiles = winningCells(board, 'brown', { tiles: 0, pieces: 30, queenUsed: false })
     expect(new Set(noTiles.map(hexKey)).has(hexKey(hex(4, 0)))).toBe(false)
+  })
+})
+
+describe('벌집 초읽기 (hiveCountdowns)', () => {
+  // 잠긴 노랑 벌집(타일 5개 일렬) 위에 노랑 말 N개 → movesLeft = 5 − N.
+  const hiveTiles = row(0, 4, 0).map((h) => [h, 'yellow'] as [ReturnType<typeof hex>, Player])
+
+  it('말 3개면 2수 뒤 5목(초읽기 2)', () => {
+    const board = build(
+      hiveTiles,
+      [0, 1, 2].map((q) => [hex(q, 0), 'yellow'] as [ReturnType<typeof hex>, Player]),
+    )
+    const cds = hiveCountdowns(board)
+    expect(cds).toHaveLength(1)
+    expect(cds[0]!.owner).toBe('yellow')
+    expect(cds[0]!.movesLeft).toBe(2)
+    expect(cds[0]!.cells).toHaveLength(5)
+  })
+
+  it('말 4개면 1수 뒤 5목(초읽기 1)', () => {
+    const board = build(
+      hiveTiles,
+      [0, 1, 2, 3].map((q) => [hex(q, 0), 'yellow'] as [ReturnType<typeof hex>, Player]),
+    )
+    expect(hiveCountdowns(board)[0]!.movesLeft).toBe(1)
+  })
+
+  it('상대 말이 줄 안에 끼면 그 줄은 막혀 카운트다운 없음(잠기기 전 선점)', () => {
+    const board = build(hiveTiles, [
+      [hex(0, 0), 'yellow'],
+      [hex(1, 0), 'yellow'],
+      [hex(2, 0), 'brown'], // 갈색이 선점
+      [hex(3, 0), 'yellow'],
+    ])
+    expect(hiveCountdowns(board)).toHaveLength(0)
+  })
+
+  it('벌집 위에 내 말이 하나도 없으면 위협 아님', () => {
+    expect(hiveCountdowns(build(hiveTiles))).toHaveLength(0)
+  })
+
+  it('벌집이 아직 안 잠겼으면(타일 4개) 카운트다운 없음', () => {
+    const board = build(
+      row(0, 3, 0).map((h) => [h, 'yellow'] as [ReturnType<typeof hex>, Player]),
+      [0, 1, 2].map((q) => [hex(q, 0), 'yellow'] as [ReturnType<typeof hex>, Player]),
+    )
+    expect(hiveCountdowns(board)).toHaveLength(0)
   })
 })

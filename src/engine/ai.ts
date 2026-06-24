@@ -151,18 +151,21 @@ export function reviewMove(before: GameState, move: Move): MoveNote | null {
   // 1) 승리(5목 완성)
   if (after.phase === 'finished' && after.result?.kind === 'win' && after.result.winner === mover) return 'win'
 
+  // 분석은 그 대국의 여왕벌 모드를 반영한다(표준 모드면 잠긴 상대 벌집 칸은 둘 수 없으니 위협 아님).
+  const qa = before.queenEnabled ?? false
+
   // 2) 놓친 승리: 이번에 바로 5목 낼 자리가 있었는데 다른 수를 둠
-  if (winningCells(before.board, mover, before.supplies[mover]).length > 0) return 'missWin'
+  if (winningCells(before.board, mover, before.supplies[mover], qa).length > 0) return 'missWin'
 
   const at = piecePlacedAt(move)
-  const oppWinsBefore = winningCells(before.board, opp, before.supplies[opp])
-  const oppWinsAfter = winningCells(after.board, opp, after.supplies[opp])
+  const oppWinsBefore = winningCells(before.board, opp, before.supplies[opp], qa)
+  const oppWinsAfter = winningCells(after.board, opp, after.supplies[opp], qa)
 
   // 3) 놓친 차단(블런더): 상대가 즉시 승리 칸을 가졌는데 막지 못해 그대로 남김
   if (oppWinsBefore.length > 0 && oppWinsAfter.length > 0) return 'missBlock'
 
   // 내가 이 수로 새로 만든 위협(승리칸 = 떨어진 4목의 빈칸 포함). 2단계 가드를 지나 항상 신규.
-  const myWinsAfter = winningCells(after.board, mover, after.supplies[mover])
+  const myWinsAfter = winningCells(after.board, mover, after.supplies[mover], qa)
 
   // 4) 포크(이중 위협): 승리칸 2개 이상 → 상대가 다 못 막음(4-3·4-4 콤보)
   if (myWinsAfter.length >= 2) return 'fork'
@@ -215,6 +218,7 @@ export interface Weights {
   tileDev: number // 내 타일선(벌집 진행) 보상(벌집형). 기본 0, 말 우선(known_issues)
   hiveDef: number // 임박한 벌집(열린 끝 길이-4 타일선) 견제. 반대칭(내 임박 - 상대 임박). 기본 0
   gapFour: number // 벌어진 4목(X·XXX 등, 한 수면 5목) 인식. 반대칭. 기본 0(전문가 난이도만 켬)
+  spreadThree: number // 벌어진 3목(5칸 창에 같은 말 3 + 빈칸 2, 연속 아님). 잠기기 전 줄 끊기 유도. 반대칭. 기본 0(전문가만)
 }
 
 const BASE_WEIGHTS: Weights = {
@@ -234,11 +238,16 @@ const BASE_WEIGHTS: Weights = {
   tileDev: 0,
   hiveDef: 0,
   gapFour: 0,
+  spreadThree: 0,
 }
 
-// 전문가 난이도 가중치 오버레이(성향 위에 덮어씀). gapped-four(벌어진 4목) 인식만 추가.
-// (hiveDef 류 타일-견제 항은 known_issues/A/B 대로 AI 를 약화시켜 제외. 강함은 탐색 깊이로.)
-const EXPERT_WEIGHTS: Partial<Weights> = { gapFour: 12000 }
+// 전문가 난이도 가중치 오버레이(성향 위에 덮어씀).
+//  - gapFour: 벌어진 4목(한 수면 5목) 인식.
+//  - spreadThree: 벌어진 3목(두 수면 5목) 인식 — 잠긴 벌집처럼 "사후 차단 불가"한 줄을 잠기기
+//    전에 끊게 한다(설명서 TIP#1 "허리 끊기"의 말 라인판). OPEN_3 아래로 낮춰 "타일 쫓기"
+//    함정(known_issues/A·B)을 피하고, 반대칭(공격<수비)이라 줄을 막는 쪽으로 기운다.
+// (hiveDef 류 타일-견제 항은 여전히 제외 — AI 를 약화시켰던 항. 강함은 탐색 깊이 + 말 라인 인식.)
+const EXPERT_WEIGHTS: Partial<Weights> = { gapFour: 12000, spreadThree: 1500 }
 
 // 성향별 오버라이드. 즉시 승리/차단(pickMove·useBlock)은 모든 성향 공통이라 자멸하진 않고,
 // 가치 판단(공격 vs 수비 vs 벌집)만 달라져 관전 대결에 특색이 생긴다.
@@ -459,6 +468,49 @@ function gappedFours(board: Board, phex: readonly Hex[], p: Player): number {
   return n
 }
 
+// 벌어진 3목(X_X_X, XX_X_, X_XX 등): 5칸 창에 같은 말 3개 + 빈칸 2개 + 상대 말 0, 그리고 3개가
+// 연속이 아닌 것(끝-끝 간격 ≥3). 두 수 더 채우면 5목 — gappedFour(4개)보다 한 발 이르다.
+// 연속 3목(XXX)은 sideStats 의 OPEN_3/CLOSED_3 가 이미 잡으므로 여기서 제외해 중복을 막는다.
+// findLines 는 연속 런만 봐서 이 "끊긴 3목"을 통째로 놓친다 → 전문가 평가가 직접 센다.
+// 잠긴 벌집처럼 사후 차단이 불가능한 줄은 이 단계에서 끊어야 한다(사전 예방).
+function spreadThrees(board: Board, phex: readonly Hex[], p: Player): number {
+  const seen = new Set<string>()
+  let n = 0
+  for (const h of phex) {
+    for (let a = 0; a < 3; a++) {
+      const dir = HEX_AXES[a]!
+      for (let pos = 0; pos < 5; pos++) {
+        const sq = h.q - dir.q * pos
+        const sr = h.r - dir.r * pos
+        const wkey = `${a}:${sq},${sr}`
+        if (seen.has(wkey)) continue
+        seen.add(wkey)
+        let pieces = 0
+        let empties = 0
+        let minPos = 5
+        let maxPos = -1
+        let ok = true
+        for (let i = 0; i < 5; i++) {
+          const cell = board[`${sq + dir.q * i},${sr + dir.r * i}`]
+          if (cell && cell.piece) {
+            if (cell.piece.owner === p) {
+              pieces++
+              if (i < minPos) minPos = i
+              if (i > maxPos) maxPos = i
+            } else {
+              ok = false
+              break
+            }
+          } else empties++
+        }
+        // 끝-끝 간격 ≥3 = 연속 아님(끊긴 3목). 연속(span 2)은 sideStats 가 이미 계산.
+        if (ok && pieces === 3 && empties === 2 && maxPos - minPos >= 3) n++
+      }
+    }
+  }
+  return n
+}
+
 function evaluate(board: Board, me: Player, w: Weights): number {
   const opp = opponent(me)
   // 보드를 단 한 번만 훑어 owner 맵(말/타일)·말 위치·선점 점수를 동시에 모은다.
@@ -514,6 +566,13 @@ function evaluate(board: Board, me: Player, w: Weights): number {
     const mg = gappedFours(board, phexMe, me)
     const og = gappedFours(board, phexOpp, opp)
     s += w.gapFour * (w.attackMul * mg - w.defenseMul * og)
+  }
+  // 전문가(spreadThree>0): 벌어진 3목(두 수면 5목)도 위협으로 인식(반대칭). 잠긴 벌집처럼 사후
+  // 차단이 불가능한 줄을 잠기기 전에 끊게 한다. gapFour 보다 작아 "사후 4목 차단"이 우선이다.
+  if (w.spreadThree !== 0) {
+    const ms = spreadThrees(board, phexMe, me)
+    const os = spreadThrees(board, phexOpp, opp)
+    s += w.spreadThree * (w.attackMul * ms - w.defenseMul * os)
   }
   s -= w.CENTER * centralityPenalty(phexMe)
   return s
@@ -691,7 +750,7 @@ function placementMove(state: GameState, cell: Hex, me: Player): Move | null {
 // 상대 즉시 승리 차단, 위협 셀(winningCells, 캡 무관)을 내 말로 점유. 평가 최고 차단을 고른다.
 function findBlock(state: GameState, me: Player, w: Weights): Move | null {
   const opp = opponent(me)
-  const threats = winningCells(state.board, opp, state.supplies[opp])
+  const threats = winningCells(state.board, opp, state.supplies[opp], state.queenEnabled ?? false)
   if (threats.length === 0) return null
   let best: Move | null = null
   let bestScore = -Infinity
@@ -808,7 +867,7 @@ function pickMove(state: GameState, cfg: Cfg, rng: () => number): Move {
   const supply = state.supplies[me]
 
   // 1) 즉시 승리, 후보 캡과 무관하게 winningCells 로 확실히 찾는다(붐벼도 자기 승리수를 안 놓침)
-  for (const cell of winningCells(board, me, supply)) {
+  for (const cell of winningCells(board, me, supply, state.queenEnabled ?? false)) {
     const m = placementMove(state, cell, me)
     if (m && isWinningMove(board, m, me)) return m
   }

@@ -167,7 +167,13 @@ export function applyMove(state: GameState, move: Move): GameState {
   }
   const supplies: Record<Player, PlayerSupply> = { ...state.supplies, [player]: newSupply }
   const moveNumber = state.moveNumber + 1
-  const base = { board, supplies, moveNumber, infiniteTiles: state.infiniteTiles }
+  const base = {
+    board,
+    supplies,
+    moveNumber,
+    infiniteTiles: state.infiniteTiles,
+    queenEnabled: state.queenEnabled,
+  }
 
   // 1) 승리(말 5목) 우선 판정 (§8.3)
   const winner = detectWin(board)
@@ -200,13 +206,26 @@ export function applyMove(state: GameState, move: Move): GameState {
  * player 가 "다음 한 수로" 실제 5목을 완성할 수 있는 셀(도달 가능성 포함).
  * 기존 타일이면 그 위에 말을 놓을 수 있어야 하고(잠금/여왕벌 고려),
  * 빈 프론티어면 타일이 남아 있어야 한다(한 수로 타일+말). 위협/리치 표시·AI 차단에 쓴다.
+ *
+ * queenAllowed: 여왕벌 모드 여부. false(표준 모드)면 잠긴 상대 벌집 칸처럼 "여왕벌로만" 둘 수
+ * 있는 칸은 실제로는 못 두므로 승리 칸에서 제외한다. 기본 true(하위호환). 호출 측은 그 대국의
+ * queenEnabled 를 넘긴다 — 이게 "분석이 모드를 반영"하게 하는 지점이다(예전 UI 의 queenUsed=true
+ * 사본 트릭을 대체). 표준 모드에서 잠긴 상대 벌집 위 위협은 어차피 막을 수 없으니, AI 는 그런
+ * 상황을 "사후 차단"이 아니라 "사전 예방"으로 다뤄야 한다(잠기기 전에 그 줄을 끊는다).
  */
-export function winningCells(board: Board, player: Player, supply: PlayerSupply): Hex[] {
+export function winningCells(
+  board: Board,
+  player: Player,
+  supply: PlayerSupply,
+  queenAllowed = true,
+): Hex[] {
   return completingCells(board, player).filter((c) => {
     if (cellAt(board, c) !== undefined) {
       return (
         validatePiecePlacement(board, player, supply, { at: c, kind: 'normal' }).ok ||
-        (!supply.queenUsed && validatePiecePlacement(board, player, supply, { at: c, kind: 'queen' }).ok)
+        (queenAllowed &&
+          !supply.queenUsed &&
+          validatePiecePlacement(board, player, supply, { at: c, kind: 'queen' }).ok)
       )
     }
     return supply.tiles >= 1 && isTilePlaceable(board, c)

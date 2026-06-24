@@ -171,6 +171,7 @@ interface CompactCode {
   v: 1
   mv: string // 세미콜론으로 이은 수 토큰들
   inf?: 0 | 1 // 무한 모드 여부
+  qn?: 0 | 1 // 여왕벌 모드 여부(확장 규칙). 분석/복기가 모드를 반영하도록 보존.
   mode?: string
   at?: number // savedAt
 }
@@ -181,6 +182,7 @@ export function encodeSnapshot(snap: GameSnapshot): string {
     v: 1,
     mv: snap.moveLog.map(encMove).join(';'),
     inf: snap.state.infiniteTiles === true ? 1 : 0,
+    qn: snap.state.queenEnabled === true ? 1 : 0,
     mode: snap.mode,
     at: snap.savedAt,
   }
@@ -188,9 +190,15 @@ export function encodeSnapshot(snap: GameSnapshot): string {
 }
 
 // 수 목록을 처음부터 재생해 전체 스냅샷(state/history/moveLog)을 복원.
-function replay(moves: Move[], infinite: boolean, mode: string, savedAt: number): GameSnapshot | null {
+function replay(
+  moves: Move[],
+  infinite: boolean,
+  queenEnabled: boolean,
+  mode: string,
+  savedAt: number,
+): GameSnapshot | null {
   try {
-    let state = createInitialState({ infiniteTiles: infinite })
+    let state = createInitialState({ infiniteTiles: infinite, queenEnabled })
     const history: GameState[] = []
     const moveLog: Move[] = []
     for (const m of moves) {
@@ -227,7 +235,13 @@ export function decodeSnapshot(text: string): GameSnapshot | null {
   if (c && typeof c.mv === 'string') {
     const moves = c.mv.length ? c.mv.split(';').map(decMove) : []
     if (moves.some((m) => m === null)) return null
-    return replay(moves as Move[], c.inf === 1, typeof c.mode === 'string' ? c.mode : 'vsAi', Number(c.at) || 0)
+    return replay(
+      moves as Move[],
+      c.inf === 1,
+      c.qn === 1,
+      typeof c.mode === 'string' ? c.mode : 'vsAi',
+      Number(c.at) || 0,
+    )
   }
   // 구버전: 전체 스냅샷이 통째로 들어온 코드
   return validSnap(obj)
