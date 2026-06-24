@@ -592,6 +592,13 @@ export function mountGame(root: HTMLElement): void {
   // 데스크탑(>720px)에선 mobile-shell 이 만든 요소가 mobile.css 로 숨겨지고 훅은 무동작.
   const mobileShell = initMobileShell({ root, onAction: (a) => onPanelAction(a) })
 
+  // 누구 차례인지 직관적으로 — 플레이 영역 테두리에 그 진영색 비네트(데스크탑·모바일 공통).
+  function applyTurnTint(): void {
+    const playing = state.phase === 'playing'
+    boardWrap.classList.toggle('turn-yellow', playing && state.turn === 'yellow')
+    boardWrap.classList.toggle('turn-brown', playing && state.turn === 'brown')
+  }
+
   // 컬러 테마 적용: 밀랍 그라데이션 stop 과 벌집 글로우 색을 현재 테마로 채운다.
   // (테마 변경 시 다시 호출 → render() 가 나머지 인라인 색을 다시 그린다.)
   function fillGradient(id: string, stops: readonly (readonly [string, string])[]): void {
@@ -1806,6 +1813,7 @@ export function mountGame(root: HTMLElement): void {
     renderActionBar()
     renderBoardNotes()
     renderModal()
+    applyTurnTint() // 차례 색 비네트(공통)
     mobileShell.afterRender() // 모바일: 아코디언 접힘·하단 안내 배너 재맞춤(데스크탑 무동작)
   }
 
@@ -1875,7 +1883,7 @@ export function mountGame(root: HTMLElement): void {
         ? `vs AI · ${DIFF_LABEL[settings.aiDifficulty]}`
         : settings.mode === 'watch'
           ? `AI 관전 · 노랑 ${DIFF_LABEL[settings.difficultyYellow]} / 갈색 ${DIFF_LABEL[settings.difficultyBrown]}`
-          : '사람 vs 사람'
+          : 'vs 사람'
     boardStatus.innerHTML = `
       ${onlineLine}
       ${oppLabel ? `<div class="opponent">🎮 ${oppLabel}</div>` : ''}

@@ -48,6 +48,24 @@ svg.board {
   outline: none;
 }
 
+/* 차례 비네트: 플레이 영역(board-wrap) 테두리에 그 진영색 inset glow → 누구 차례인지 직관적.
+   클릭 통과(pointer-events:none), 가운데는 투명해 보드는 안 가린다. 데스크탑·모바일 공통. */
+.board-wrap.turn-yellow::after,
+.board-wrap.turn-brown::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  transition: box-shadow 0.3s ease;
+}
+.board-wrap.turn-yellow::after {
+  box-shadow: inset 0 0 48px 7px rgba(245, 176, 28, 0.5);
+}
+.board-wrap.turn-brown::after {
+  box-shadow: inset 0 0 48px 7px rgba(150, 75, 40, 0.5);
+}
+
 .action-bar {
   flex: none;
   display: flex;
