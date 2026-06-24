@@ -29,3 +29,6 @@ coverage/
 docs/design/shots/
 scripts/sim-result.txt
 scripts/code.txt
+
+# 동시 세션 작업 조율판 — 로컬 실시간 공유용(머신 단위), git 추적 제외
+ACTIVE_WORK.md
