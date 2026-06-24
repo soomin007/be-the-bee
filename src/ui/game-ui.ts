@@ -1188,6 +1188,11 @@ export function mountGame(root: HTMLElement): void {
       online.phase = 'negotiating'
       onlineMsg = '상대가 들어왔어요! 이제 선공·후공을 정해요.'
     }
+    // 합의가 DB 에 반영됨(상대가 수락) → 협상 신호를 놓쳤어도 여기서 안전하게 시작(동기화 복구).
+    if (room.status === 'playing' && online.phase !== 'playing') {
+      finalizeAgreement(room.host_side)
+      return
+    }
     online.status = room.status
     // 상대 수/모드 변경: 스냅샷이 내가 올린 것과 다르면 적용. 모드가 바뀌었으면 팝업으로 알림.
     if (room.snapshot && room.snapshot !== lastSyncedSnapshot) {
@@ -1216,10 +1221,12 @@ export function mountGame(root: HTMLElement): void {
     } else if (event === 'accept') {
       finalizeAgreement(payload.hostSide as Side)
     } else if (event === 'reject') {
+      if (online.phase === 'playing') return // 이미 합의·시작됨 → 늦게 도착한 거절은 무시(동기화 깨짐 방지)
       online.proposal = null
       onlineMsg = '상대가 거절했어요. 다시 정해 주세요.'
       render()
     } else if (event === 'cancel') {
+      if (online.phase === 'playing') return // 이미 합의·시작됨 → 늦은 취소 무시
       online.proposal = null // 상대가 자기 제안을 취소함
       render()
     } else if (event === 'rematchReq') {
@@ -1267,7 +1274,13 @@ export function mountGame(root: HTMLElement): void {
       void cleanupOldRooms(dayAgoIso()) // 오래된 방 정리(테이블 가볍게)
       const room = await createRoom(code0, 'yellow')
       enterOnline(room.id, true, 'waiting', 'yellow')
-      onlineMsg = `방을 만들었어요(코드 ${room.id}). “초대 링크 복사”로 상대를 부르세요. 상대가 들어오면 선공·후공을 정해요.`
+      const url = inviteUrl(room.id)
+      try {
+        void navigator.clipboard.writeText(url) // 자동 복사 — 따로 복사 버튼 찾을 필요 없이 바로 붙여넣기
+      } catch {
+        /* 클립보드 불가 환경: 아래 팝업의 링크를 직접 복사 */
+      }
+      onlineMsg = `방을 만들고 초대 링크를 복사했어요!\n${url}\n상대에게 붙여넣어 보내세요. 들어오면 선공·후공을 정해요.`
       render()
     } catch (e) {
       message = '방 만들기 실패: ' + (e as Error).message
@@ -1348,7 +1361,9 @@ export function mountGame(root: HTMLElement): void {
     online.proposal = null
     online.phase = 'playing'
     online.status = 'playing'
-    if (online.isHost) void agreeStart(online.roomId, hostSide)
+    // 양쪽 다 DB 에 합의를 기록 → DB(room.status=playing+host_side)가 합의의 단일 진실.
+    // 신호(broadcast)가 유실돼도 상대는 onRoomUpdate 에서 이걸 보고 안전하게 시작한다.
+    void agreeStart(online.roomId, hostSide)
     onlineMsg = `선공·후공이 정해졌어요. 당신은 ${sideLabel(online.mySide)}. 시작합니다!`
     render()
   }
@@ -2211,7 +2226,7 @@ export function mountGame(root: HTMLElement): void {
         <div class="modal-card">
           ${BEE_SVG}
           <div class="modal-title">↩ 무르기</div>
-          <div class="modal-sub">방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b> 진영이 둔 수를 무릅니다.<br>상대 <b>${PLAYER_LABEL[approver]}</b> 진영이 동의하나요? (사람끼리는 각자 한 번만)</div>
+          <div class="modal-sub">방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b>이 둔 수를 무릅니다.<br>상대 <b>${PLAYER_LABEL[approver]}</b>이 동의하나요? (사람끼리는 각자 한 번만)</div>
           <div class="modal-actions">
             <button data-act="undoGrant">동의</button>
             <button data-act="undoDeny">거절</button>
