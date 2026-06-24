@@ -131,6 +131,27 @@ svg.board {
   box-shadow: 0 2px 8px rgba(120, 80, 0, 0.12);
   backdrop-filter: blur(2px);
 }
+/* 온라인 대전 상태 배너(방 코드 · 내 차례/상대 차례/대기) */
+.board-status .online-status {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid;
+  box-shadow: 0 2px 8px rgba(120, 80, 0, 0.14);
+  backdrop-filter: blur(2px);
+}
+.board-status .online-status.my-turn {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #15803d;
+}
+.board-status .online-status.wait-turn {
+  background: #fef9e7;
+  border-color: #d2b059;
+  color: #8a6d1b;
+}
 .board-notes:empty {
   display: none;
 }

@@ -43,6 +43,8 @@ import {
 import { maybeShowTutorial, openTutorial } from './tutorial'
 import { ICON } from './icons'
 import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
+import { mpEnabled } from '../mp/supabase'
+import { createRoom, joinRoom, pushState, subscribeRoom, mySide, type Room, type RoomStatus, type Side } from '../mp/room'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -347,6 +349,9 @@ export function mountGame(root: HTMLElement): void {
   let coachNote: MoveNote | null = null // 전문가 vs AI: 직전 "내(사람) 수" 코칭(다음 내 수까지 유지)
   let lastBoardNotesHtml = '' // 보드 옆 멘트의 직전 HTML — 같으면 재렌더 생략(등장 애니메이션 재발 방지)
   let beeTapCount = 0 // 제목 벌 탭 횟수 — 7번이면 실사 벌(이스터에그) 토글
+  // 온라인 대전: 방에 참가 중이면 세션(아니면 null). mySide = 내가 두는 진영, 그 외 차례엔 입력 잠금.
+  let online: { roomId: string; mySide: Side; status: RoomStatus; unsub: () => void } | null = null
+  let lastSyncedSnapshot = '' // 방과 마지막으로 주고받은 스냅샷 코드 — 내 push 의 에코·중복 적용 방지
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   let infoModal: 'queen' | 'saves' | null = null // 팝업(여왕벌 설명/저장 보관함), 결과 모달보다 우선
@@ -387,6 +392,10 @@ export function mountGame(root: HTMLElement): void {
   let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === 'brown')
+  // 온라인 대전 중 지금이 "내 차례"인가(방 밖이면 항상 true). 상대 차례엔 보드/행동 입력을 잠근다.
+  const myOnlineTurn = (): boolean => online === null || state.turn === online.mySide
+  // 입력(보드 클릭·행동 버튼)을 잠가야 하는가: AI 가 두는 중/AI 차례 또는 온라인 상대 차례.
+  const inputLocked = (): boolean => aiThinking || aiControls(state.turn) || !myOnlineTurn()
   const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
   // 그 진영을 두는 AI 의 난이도(해설은 전문가일 때만). 관전은 색깔별, vsAi 는 단일.
   const aiDifficultyFor = (turn: Player): Difficulty =>
@@ -710,8 +719,8 @@ export function mountGame(root: HTMLElement): void {
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return
 
-    // 인게임 행동 단축키 (사람 차례에만)
-    if (state.phase === 'playing' && !aiThinking && !aiControls(state.turn) && draft !== null) {
+    // 인게임 행동 단축키 (사람 차례에만 — 온라인 상대 차례엔 잠금)
+    if (state.phase === 'playing' && !inputLocked() && draft !== null) {
       if (draft.stage === 'chooseAction' && e.key === '1') {
         e.preventDefault()
         onPanelAction('twoTiles')
@@ -1002,6 +1011,112 @@ export function mountGame(root: HTMLElement): void {
     autoSaveNow() // 매 수 자동 저장 → 새로고침해도 이어하기
     render()
     maybeScheduleAi()
+    if (online) pushOnline() // 온라인: 내가 둔 수를 방에 반영(상대가 구독으로 받음). 상대 수는 applySnapshot 경로라 여기 안 옴
+  }
+
+  // ---- 온라인 대전(Supabase 방) -------------------------------------------
+  // 초대 링크: 같은 주소 + #room=코드. 상대가 열면 자동 입장(아래 mountGame 끝 해시 처리).
+  function inviteUrl(roomId: string): string {
+    if (typeof location === 'undefined') return roomId
+    return `${location.origin}${location.pathname}#room=${roomId}`
+  }
+  // 내가 둔 뒤 새 스냅샷을 방에 올린다. lastSyncedSnapshot 으로 내 push 의 에코를 무시한다.
+  function pushOnline(): void {
+    if (!online) return
+    const code = encodeSnapshot(snapshot())
+    lastSyncedSnapshot = code
+    const status: RoomStatus = state.phase === 'finished' ? 'finished' : 'playing'
+    online.status = status
+    void pushState(online.roomId, code, status)
+  }
+
+  // 방 행이 바뀌면(상대가 두거나 입장) 호출. 스냅샷이 내가 올린 것과 다르면 상대 수 → 그대로 적용.
+  function onRoomUpdate(room: Room): void {
+    if (!online) return
+    online.status = room.status
+    if (room.snapshot && room.snapshot !== lastSyncedSnapshot) {
+      lastSyncedSnapshot = room.snapshot
+      const s = decodeSnapshot(room.snapshot)
+      if (s) applySnapshot(s)
+    }
+    render()
+  }
+
+  function enterOnline(roomId: string, side: Side, status: RoomStatus): void {
+    settings.mode = 'hotseat' // 온라인은 로컬 AI 없이 사람 둘. aiControls=false 가 되게.
+    rebuildAi()
+    online = { roomId, mySide: side, status, unsub: subscribeRoom(roomId, onRoomUpdate) }
+    if (typeof location !== 'undefined') location.hash = `room=${roomId}`
+  }
+
+  // 방장: 새 판으로 방을 만들고 초대 코드를 띄운다(나는 노랑).
+  async function hostOnline(): Promise<void> {
+    if (!mpEnabled) {
+      message = '온라인 기능이 아직 설정되지 않았어요(서버 키 없음).'
+      render()
+      return
+    }
+    resetToFreshGame()
+    const code0 = encodeSnapshot(snapshot())
+    lastSyncedSnapshot = code0
+    try {
+      const room = await createRoom(code0, 'yellow')
+      enterOnline(room.id, 'yellow', room.status)
+      notice = `방을 만들었어요. 초대 코드 ${room.id} (또는 주소를 그대로 공유)`
+      render()
+    } catch (e) {
+      message = '방 만들기 실패: ' + (e as Error).message
+      render()
+    }
+  }
+
+  // 상대: 코드로 입장 → 방장의 현재 판으로 맞추고 반대 진영을 잡는다.
+  async function joinOnline(code: string): Promise<void> {
+    if (!mpEnabled) {
+      message = '온라인 기능이 아직 설정되지 않았어요(서버 키 없음).'
+      render()
+      return
+    }
+    try {
+      const room = await joinRoom(code.trim().toUpperCase())
+      if (!room) {
+        message = '그 방을 찾지 못했어요. 코드를 다시 확인하세요.'
+        render()
+        return
+      }
+      lastSyncedSnapshot = room.snapshot
+      const s = decodeSnapshot(room.snapshot)
+      if (s) applySnapshot(s)
+      enterOnline(room.id, mySide(room), room.status)
+      render()
+    } catch (e) {
+      message = '입장 실패: ' + (e as Error).message
+      render()
+    }
+  }
+
+  function leaveOnline(): void {
+    if (online) online.unsub()
+    online = null
+    if (typeof location !== 'undefined' && location.hash) location.hash = ''
+    notice = '온라인 방에서 나왔어요.'
+    render()
+  }
+
+  // 새 판으로 초기화(온라인 시작 시 기존 vs AI 판이 섞이지 않게). 'new' 액션과 같은 리셋.
+  function resetToFreshGame(): void {
+    clearAiTimer()
+    stopReplayTimer()
+    clearFx()
+    replayIndex = null
+    state = freshState()
+    history = []
+    moveLog = []
+    message = ''
+    coachNote = null
+    lastMove = null
+    modalDismissed = false
+    startTurn()
   }
 
   function clearAiTimer(): void {
@@ -1048,7 +1163,7 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function onHexClick(h: Hex): void {
-    if (aiThinking || aiControls(state.turn)) return
+    if (inputLocked()) return
     if (draft === null) return
     const player = state.turn
     if (draft.stage === 'chooseAction') return
@@ -1507,7 +1622,18 @@ export function mountGame(root: HTMLElement): void {
       header = `${PLAYER_LABEL[state.turn]} 차례`
       instruction = instructionText()
     }
+    // 온라인 대전이면 방 상태(대기/내 차례/상대 차례)를 맨 위에 띄운다.
+    const onlineLine = online
+      ? `<div class="online-status ${myOnlineTurn() && online.status === 'playing' ? 'my-turn' : 'wait-turn'}">${
+          online.status === 'waiting'
+            ? `🔗 방 ${online.roomId} · 상대를 기다리는 중…`
+            : myOnlineTurn()
+              ? `🟢 내 차례 · 방 ${online.roomId}`
+              : `⏳ 상대 차례 · 방 ${online.roomId}`
+        }</div>`
+      : ''
     boardStatus.innerHTML = `
+      ${onlineLine}
       <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
         <div class="status-header">${header}</div>
         <div class="instruction">${instruction}</div>
@@ -1579,7 +1705,7 @@ export function mountGame(root: HTMLElement): void {
 
   // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
   function renderActionBar(): void {
-    if (state.phase !== 'playing' || aiThinking || aiControls(state.turn) || draft === null) {
+    if (state.phase !== 'playing' || inputLocked() || draft === null) {
       actionBar.innerHTML = ''
       return
     }
@@ -1775,22 +1901,35 @@ export function mountGame(root: HTMLElement): void {
         (d) => `<button data-act="setDiff:${d}" class="${settings.aiDifficulty === d ? 'active' : ''}">${DIFF_LABEL[d]}</button>`,
       ),
     )
+    // 온라인 대전 컨트롤: 키가 설정돼 있을 때만(mpEnabled). 방 안이면 초대 링크/나가기, 밖이면 만들기/입장.
+    const onlineCtl = !mpEnabled
+      ? ''
+      : online
+        ? `<div class="settings-divider"></div>
+        <div class="settings-group-label">온라인 대전 · 방 ${online.roomId}</div>
+        <button data-act="onlineCopyLink" title="초대 링크를 복사해 상대에게 보내기">${ICON.share} 초대 링크 복사</button>
+        <button data-act="onlineLeave">나가기</button>`
+        : `<div class="settings-divider"></div>
+        <div class="settings-group-label">온라인 대전</div>
+        <button data-act="onlineHost" title="방을 만들어 초대 링크로 친구를 부르기">방 만들기</button>
+        <button data-act="onlineJoin" title="받은 방 코드로 입장">코드로 입장</button>`
     const gameGrid = `
       <div class="settings-grid">
         <div class="menu-wrap">
-          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" title="플레이 모드 바꾸기">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
+          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" ${online ? 'disabled' : ''} title="플레이 모드 바꾸기">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
         </div>
         <div class="menu-wrap">
-          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
+          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' && !online ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
         </div>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드</button>
         <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">무한 모드</button>
-        <button data-act="undo" ${history.length > 0 && !aiThinking ? '' : 'disabled'}>무르기</button>
+        <button data-act="undo" ${history.length > 0 && !aiThinking && !online ? '' : 'disabled'}>무르기</button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="new">새 게임</button>
         <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">${ICON.share} 공유하기</button>
         <button data-act="saveGame" title="지금 판을 보관함에 저장">${ICON.save} 저장</button>
         <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">${ICON.saves} 보관함</button>
+        ${onlineCtl}
       </div>`
     const viewGrid = `
       <div class="settings-grid">
@@ -2182,6 +2321,20 @@ export function mountGame(root: HTMLElement): void {
         // 결과 모달의 "공유하기" — 저장/불러오기 없이 현재 판 기보를 클립보드에 바로 복사.
         shareCode(encodeSnapshot(snapshot()))
         break
+      case 'onlineHost':
+        void hostOnline()
+        break
+      case 'onlineJoin': {
+        const code = window.prompt('받은 방 코드를 입력하세요 (예: ABC234)')
+        if (code && code.trim()) void joinOnline(code)
+        break
+      }
+      case 'onlineLeave':
+        leaveOnline()
+        break
+      case 'onlineCopyLink':
+        if (online) shareCode(inviteUrl(online.roomId))
+        break
       case 'importGame': {
         const code = window.prompt('기보 코드를 붙여넣으세요 (BTB1:... )')
         const s = code ? decodeSnapshot(code) : null
@@ -2267,4 +2420,9 @@ export function mountGame(root: HTMLElement): void {
   render()
   maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
   maybeShowTutorial(root) // 첫 접속이면 튜토리얼을 띄운다(한 번만, localStorage)
+  // 초대 링크(#room=코드)로 들어왔으면 그 방에 자동 입장(상대로 합류, 또는 방장 본인 재접속).
+  if (typeof location !== 'undefined') {
+    const m = /[#&]room=([A-Za-z0-9]+)/.exec(location.hash)
+    if (m) void joinOnline(m[1]!)
+  }
 }
