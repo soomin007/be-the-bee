@@ -45,8 +45,8 @@ export function initMobileShell(ctx: MobileShellCtx): MobileShell {
   // 우상단: 설정 톱니/닫기. 좌하단: 무르기·새 게임 빠른 FAB.
   const gear = btn('m-fab m-gear', '설정', '⚙')
   const closeBtn = btn('m-fab m-close', '설정 닫기', '✕')
-  const undoFab = btn('m-fab m-undo', '무르기', '↩')
-  const newFab = btn('m-fab m-new', '새 게임', '🔄')
+  const undoFab = btn('m-fab m-undo', '무르기', '<span class="m-ico">↩</span><span>무르기</span>')
+  const newFab = btn('m-fab m-new', '새 게임', '<span class="m-ico">🔄</span><span>새 게임</span>')
   // 하단 안내 배너(상단 HUD 가 짧게 유지되도록 긴 안내문구를 여기로).
   const statusBanner = document.createElement('div')
   statusBanner.className = 'm-status'
@@ -83,10 +83,24 @@ export function initMobileShell(ctx: MobileShellCtx): MobileShell {
     statusBanner.classList.toggle('empty', text === '')
   }
 
+  // 3D 토글은 모바일에서 PC 전용 — 흐리게 + 'PC 전용' 배지(탭해도 game-ui 가 토글 안 함).
+  function markPcOnly(): void {
+    const t3d = root.querySelector('.panel [data-act="toggle3d"]')
+    if (!t3d) return
+    t3d.classList.add('m-pconly')
+    if (!t3d.querySelector('.m-pc')) {
+      const tag = document.createElement('small')
+      tag.className = 'm-pc'
+      tag.textContent = 'PC 전용'
+      t3d.appendChild(tag)
+    }
+  }
+
   function afterRender(): void {
     if (!mq.matches) return
     applySections()
     updateStatusBanner()
+    markPcOnly()
   }
 
   function handleSectionClick(key: string): boolean {

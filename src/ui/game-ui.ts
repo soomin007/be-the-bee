@@ -1868,8 +1868,17 @@ export function mountGame(root: HTMLElement): void {
                   : `⏳ 상대 차례 · 방 ${online.roomId}`
           }</div>`
       : ''
+    // 상대 표시: 누구와(난이도) 두는지 한눈에. 온라인은 onlineLine 이 이미 보여줘 생략.
+    const oppLabel = online
+      ? ''
+      : settings.mode === 'vsAi'
+        ? `vs AI · ${DIFF_LABEL[settings.aiDifficulty]}`
+        : settings.mode === 'watch'
+          ? `AI 관전 · 노랑 ${DIFF_LABEL[settings.difficultyYellow]} / 갈색 ${DIFF_LABEL[settings.difficultyBrown]}`
+          : '사람 vs 사람'
     boardStatus.innerHTML = `
       ${onlineLine}
+      ${oppLabel ? `<div class="opponent">🎮 ${oppLabel}</div>` : ''}
       <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
         <div class="status-header">${header}</div>
         <div class="instruction">${instruction}</div>
@@ -2608,6 +2617,7 @@ export function mountGame(root: HTMLElement): void {
         settings.hints = !settings.hints
         break
       case 'toggle3d':
+        if (mobileShell.active()) return // 모바일: 3D 미지원(고려사항 多) → PC 전용. mobile.css 가 'PC 전용' 표시.
         settings.board3d = !settings.board3d
         applyBoard3D()
         break
