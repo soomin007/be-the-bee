@@ -1456,6 +1456,104 @@ svg.board.panning {
   flex: 1.4;
 }
 
+/* 앱 사용법 온보딩(스포트라이트 투어) — 실제 화면 요소를 짚어준다. 데스크탑·모바일 공용. */
+.coach-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: auto; /* 투어 중엔 앱 클릭을 막고 버튼으로만 진행 */
+  animation: bee-fade 0.18s ease-out;
+}
+/* 중앙 카드(강조 대상 없음): 화면 전체를 살짝 어둡게(스포트라이트와 같은 톤) */
+.coach-layer.center {
+  background: rgba(28, 20, 8, 0.62);
+}
+/* 스포트라이트 구멍: 투명한 사각(강조 대상이 비쳐 보임) + 바깥을 어둡게 하는 큰 그림자 */
+.coach-hole {
+  position: fixed;
+  border-radius: 12px;
+  border: 3px solid #f6c945;
+  box-shadow: 0 0 0 9999px rgba(28, 20, 8, 0.62);
+  pointer-events: none;
+  transition: left 0.22s ease, top 0.22s ease, width 0.22s ease, height 0.22s ease;
+}
+.coach-callout {
+  position: fixed;
+  width: min(88vw, 19rem);
+  pointer-events: auto;
+  background: linear-gradient(170deg, #fffdf7 0%, #fdf4df 100%);
+  border: 2px solid #eab308;
+  border-radius: 14px;
+  padding: 1rem 1.1rem 0.9rem;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+  animation: modal-pop 0.2s ease-out;
+}
+.coach-skip {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.6rem;
+  border: none;
+  background: transparent;
+  color: #9a7a3a;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.coach-skip:hover {
+  color: #6b5524;
+  text-decoration: underline;
+}
+.coach-step {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #b8860b;
+  letter-spacing: 0.05em;
+}
+.coach-title {
+  margin: 0.15rem 0 0.45rem;
+  font-size: 1.08rem;
+  color: #5a3a14;
+}
+.coach-body {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: #4a4030;
+}
+.coach-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+}
+.coach-nav button {
+  flex: 1;
+  min-width: 5rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #c9b88f;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.coach-nav button:hover:not(:disabled) {
+  background: #f5efdf;
+}
+.coach-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.coach-nav .coach-next {
+  background: #fde68a;
+  border-color: #eab308;
+  color: #92660a;
+}
+.coach-nav .coach-rules {
+  background: #fff;
+  border-color: #c9b88f;
+  color: #6b5524;
+  flex-basis: 100%;
+}
+
 /* 일러스트 등장(타일/말 팝인), staggered delay 는 인라인 style 로 */
 .tut-pop {
   transform-box: fill-box;

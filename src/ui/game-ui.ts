@@ -40,7 +40,8 @@ import {
   loadAutoSave,
   type GameSnapshot,
 } from './game-save'
-import { maybeShowTutorial, openTutorial } from './tutorial'
+import { openTutorial } from './tutorial'
+import { maybeShowOnboarding, openOnboarding, type OnboardCtx } from './onboarding'
 import { ICON } from './icons'
 import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 import { mpEnabled } from '../mp/supabase'
@@ -620,6 +621,21 @@ export function mountGame(root: HTMLElement): void {
   // 데스크탑 설정창 접기(모바일은 톱니 시트라 무관 — mobile.css 가 가림).
   function applyPanelCollapsed(): void {
     gameEl.classList.toggle('panel-collapsed', panelCollapsed)
+  }
+
+  // 앱 사용법 온보딩(스포트라이트 투어)에 넘길 환경 훅. 레이아웃 제어만 노출(게임 상태는 모름).
+  function onboardCtx(): OnboardCtx {
+    return {
+      root,
+      isMobile: () => mobileShell.active(),
+      mpEnabled,
+      setMobileSettings: (open) => mobileShell.setSettings(open),
+      setDesktopPanel: (open) => {
+        panelCollapsed = !open
+        applyPanelCollapsed()
+      },
+      openRules: () => openTutorial(root),
+    }
   }
 
   // 무르기 실제 수행(사람 차례까지 되돌림 — vs AI 는 AI 수+내 수 함께). 동의/직접 호출 공용.
@@ -2535,7 +2551,8 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     }
     const helpRows = `
-      <button class="help-tut" data-act="tutorial" title="게임 방법을 처음부터 다시 봐요">${ICON.tutorial} 튜토리얼 다시 보기</button>
+      <button class="help-tut" data-act="appHelp" title="이 앱 사용법(수 두기·설정·온라인)을 다시 봐요">${ICON.mouse} 앱 사용법 다시 보기</button>
+      <button class="help-tut" data-act="tutorial" title="게임 방법을 처음부터 다시 봐요">${ICON.tutorial} 게임 규칙 다시 보기</button>
       <div class="help-row"><span class="help-ico">${ICON.trophy}</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
       <div class="help-row"><span class="help-ico">${ICON.honey}</span><span>타일은 기존 타일에 <b>붙여서</b> 놓기</span></div>
       <div class="help-row"><span class="help-ico">${ICON.mouse}</span><span>휠 = 확대 · 드래그 = 이동</span></div>
@@ -2998,6 +3015,9 @@ export function mountGame(root: HTMLElement): void {
       case 'tutorial':
         openTutorial(root)
         return
+      case 'appHelp':
+        openOnboarding(onboardCtx())
+        return
       case 'new':
         clearAiTimer()
         stopReplayTimer()
@@ -3037,7 +3057,7 @@ export function mountGame(root: HTMLElement): void {
   setInitialCamera()
   render()
   maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
-  maybeShowTutorial(root) // 첫 접속이면 튜토리얼을 띄운다(한 번만, localStorage)
+  maybeShowOnboarding(onboardCtx()) // 첫 접속이면 앱 사용법 투어(한 번만) → 마지막에 게임 규칙으로 연결
   // 초대 링크(#room=코드)로 들어왔으면 그 방에 자동 입장(상대로 합류, 또는 방장 본인 재접속).
   if (typeof location !== 'undefined') {
     const m = /[#&]room=([A-Za-z0-9]+)/.exec(location.hash)

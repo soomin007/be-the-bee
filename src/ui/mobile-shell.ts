@@ -23,6 +23,8 @@ export interface MobileShell {
   afterRender(): void
   /** 설정 섹션 헤더(sec:KEY) 클릭 처리. 모바일이면 true(드릴다운이 처리, 호출 측은 return). */
   handleSectionClick(key: string): boolean
+  /** 설정 시트를 열거나 닫는다(온보딩 투어 등 외부에서 제어). */
+  setSettings(open: boolean): void
 }
 
 export function initMobileShell(ctx: MobileShellCtx): MobileShell {
@@ -124,6 +126,11 @@ export function initMobileShell(ctx: MobileShellCtx): MobileShell {
     }
   })
 
+  function setSettings(open: boolean): void {
+    settingsOpen = open
+    applySettingsOpen()
+  }
+
   applySettingsOpen()
-  return { active: () => mq.matches, afterRender, handleSectionClick }
+  return { active: () => mq.matches, afterRender, handleSectionClick, setSettings }
 }
