@@ -2226,7 +2226,7 @@ export function mountGame(root: HTMLElement): void {
         <div class="modal-card">
           ${BEE_SVG}
           <div class="modal-title">↩ 무르기</div>
-          <div class="modal-sub">방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b>이 둔 수를 무릅니다.<br>상대 <b>${PLAYER_LABEL[approver]}</b>이 동의하나요? (사람끼리는 각자 한 번만)</div>
+          <div class="modal-sub">방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b>이 둔 수를 무릅니다.<br>상대(<b>${PLAYER_LABEL[approver]}</b>) 동의가 필요합니다. (사람끼리는 각자 한 번만)</div>
           <div class="modal-actions">
             <button data-act="undoGrant">동의</button>
             <button data-act="undoDeny">거절</button>
