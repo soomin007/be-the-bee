@@ -6,9 +6,9 @@ import { applyMove, createAi, createInitialState } from '../src/engine/index'
 import type { GameState, Move } from '../src/engine/index'
 
 // AI 로 N 수 둬서 합법 수만으로 스냅샷을 만든다(수동 좌표 추측 회피).
-function playSnapshot(plies: number, infinite = false): GameSnapshot {
+function playSnapshot(plies: number, infinite = false, queenEnabled = false): GameSnapshot {
   const ai = createAi({ difficulty: 'easy', seed: 7 })
-  let state = createInitialState({ infiniteTiles: infinite })
+  let state = createInitialState({ infiniteTiles: infinite, queenEnabled })
   const history: GameState[] = []
   const moveLog: Move[] = []
   for (let i = 0; i < plies && state.phase === 'playing'; i++) {
@@ -42,6 +42,17 @@ describe('공유 코드 라운드트립', () => {
     const back = decodeSnapshot(encodeSnapshot(snap))
     expect(back!.state.infiniteTiles).toBe(true)
     expect(back!.state.board).toEqual(snap.state.board)
+  })
+
+  it('여왕벌 모드 플래그가 코드를 통해 보존된다', () => {
+    // qn 직렬화: 여왕벌 모드 대국을 공유 코드로 주고받아도 모드가 보존돼야 복기 분석이 모드를 반영한다.
+    const snap = playSnapshot(8, false, true)
+    const back = decodeSnapshot(encodeSnapshot(snap))
+    expect(back!.state.queenEnabled).toBe(true)
+    expect(back!.state.board).toEqual(snap.state.board)
+    // 모드 꺼진 코드는 queenEnabled 가 참이 아니어야 한다(기본값 오염 방지).
+    const off = decodeSnapshot(encodeSnapshot(playSnapshot(8, false, false)))
+    expect(off!.state.queenEnabled).toBe(false)
   })
 
   it('compact 코드는 전체 스냅샷 직렬화보다 훨씬 짧다', () => {

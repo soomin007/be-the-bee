@@ -425,6 +425,36 @@ describe('AI: self-play (엔진 통합)', () => {
   })
 })
 
+describe('AI: 전문가가 벌어진 3목을 잠기기 전에 끊는다 (벌집-채우기 예방 회귀)', () => {
+  // 실제 패배 대국(BTB1)의 28수 직전 국면. 노랑이 (-4,1)(-2,-1)(0,-3)로 "벌어진 3목"을 만들었고,
+  // 그 줄은 다음 수(29수)에 노랑 벌집으로 잠긴다. 잠기면 갈색은 보통 말로 그 위에 못 둔다(§5) →
+  // 사후 차단 불가. 그래서 전문가는 잠기기 전에 빈 급소 (-3,0)/(-1,-2)를 선점해 줄을 끊어야 한다.
+  // spreadThree 인식 전(옛 전문가)엔 엉뚱한 (2,-5)를 둬 그대로 패배했다 — 이 테스트가 예방을 고정한다.
+  const PREFIX =
+    't -1 1 0 0;t 1 -1 -1 1;t 0 -1 1 -1;t -1 0 -1 0;t -1 -1 -1 -1;t 1 1 0 -1;t 1 -2 1 -2;t 1 2 1 0;t 1 3 1 1;t 0 -2 0 -2;t 1 -3 1 -3;t 1 -4 1 -4;t -2 -1 -2 -1;t -2 1 -2 1;t -3 2 -3 2;t 0 -4 0 -4;t 0 -3 0 -3;t -1 -4 -1 -4;t 2 -4 2 -4;t -1 -3 -1 -3;t -2 -4 -2 -4;t -2 -2 -2 -2;t -3 -1 -3 -1;t -3 1 -3 1;t -4 1 -4 1;t 1 -5 1 -5;t 2 -6 2 -6'
+
+  function parseMove(tok: string): Move {
+    const p = tok.trim().split(/\s+/)
+    const n = (i: number): number => Number(p[i])
+    if (p[0] === '2') return { type: 'twoTiles', first: hex(n(1), n(2)), second: hex(n(3), n(4)) }
+    if (p[0] === 't')
+      return { type: 'tileAndPiece', tile: hex(n(1), n(2)), piece: { at: hex(n(3), n(4)), kind: 'normal' } }
+    return { type: 'pieceOnly', piece: { at: hex(n(1), n(2)), kind: 'normal' } }
+  }
+
+  it('전문가가 급소 (-3,0)/(-1,-2)를 선점해 벌어진 3목을 끊는다', () => {
+    let state = createInitialState()
+    for (const tok of PREFIX.split(';')) state = applyMove(state, parseMove(tok))
+    expect(state.turn).toBe('brown') // 28수(갈색=AI) 차례
+
+    const move = createAi({ difficulty: 'expert', seed: 0x2222 }).chooseMove(state)
+    expect(validateMove(state, move).ok).toBe(true)
+    const at = move.type === 'twoTiles' ? null : move.piece.at
+    const breaksSpread = at !== null && (hexEquals(at, hex(-3, 0)) || hexEquals(at, hex(-1, -2)))
+    expect(breaksSpread).toBe(true)
+  }, 30000)
+})
+
 // 한 판을 끝까지 두고 승자를 반환.
 function playGame(yellowAi: ReturnType<typeof createAi>, brownAi: ReturnType<typeof createAi>): Player | 'draw' {
   let state = createInitialState()
