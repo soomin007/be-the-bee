@@ -44,7 +44,21 @@ import { maybeShowTutorial, openTutorial } from './tutorial'
 import { ICON } from './icons'
 import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 import { mpEnabled } from '../mp/supabase'
-import { createRoom, joinRoom, leaveRoom, pushState, subscribeRoom, mySide, type Room, type RoomStatus, type Side } from '../mp/room'
+import {
+  createRoom,
+  joinRoom,
+  getRoom,
+  leaveRoom,
+  pushState,
+  connectRoom,
+  setHostSide,
+  opposite,
+  clientId,
+  type Room,
+  type RoomConn,
+  type RoomStatus,
+  type Side,
+} from '../mp/room'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -349,9 +363,23 @@ export function mountGame(root: HTMLElement): void {
   let coachNote: MoveNote | null = null // 전문가 vs AI: 직전 "내(사람) 수" 코칭(다음 내 수까지 유지)
   let lastBoardNotesHtml = '' // 보드 옆 멘트의 직전 HTML — 같으면 재렌더 생략(등장 애니메이션 재발 방지)
   let beeTapCount = 0 // 제목 벌 탭 횟수 — 7번이면 실사 벌(이스터에그) 토글
-  // 온라인 대전: 방에 참가 중이면 세션(아니면 null). mySide = 내가 두는 진영, 그 외 차례엔 입력 잠금.
-  let online: { roomId: string; mySide: Side; status: RoomStatus; unsub: () => void } | null = null
+  // 온라인 대전 세션(방에 참가 중이면, 아니면 null).
+  //  - phase: 'waiting'(상대 대기) → 'negotiating'(선공/후공 합의 중) → 'playing'(대국).
+  //  - mySide: 합의로 정해진 내 진영(playing 부터 유효). 그 외 차례/협상 중엔 입력 잠금.
+  //  - proposal: 진행 중인 선공/후공 제안(mine=내가 제안 / false=상대 제안받음).
+  let online:
+    | {
+        roomId: string
+        isHost: boolean
+        phase: 'waiting' | 'negotiating' | 'playing'
+        mySide: Side
+        proposal: { hostSide: Side; mine: boolean } | null
+        status: RoomStatus
+        conn: RoomConn
+      }
+    | null = null
   let lastSyncedSnapshot = '' // 방과 마지막으로 주고받은 스냅샷 코드 — 내 push 의 에코·중복 적용 방지
+  let waitPollTimer: number | null = null // 방장 대기 중 상대 입장 폴링(실시간을 놓쳐도 잡는 안전망)
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   // 팝업(결과 모달보다 우선): 여왕벌 설명/보관함 + 온라인 다이얼로그(진영 선택·나가기 확인).
@@ -394,9 +422,10 @@ export function mountGame(root: HTMLElement): void {
   let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === 'brown')
-  // 온라인 대전 중 지금이 "내 차례"인가(방 밖이면 항상 true). 상대 차례엔 보드/행동 입력을 잠근다.
-  const myOnlineTurn = (): boolean => online === null || state.turn === online.mySide
-  // 입력(보드 클릭·행동 버튼)을 잠가야 하는가: AI 가 두는 중/AI 차례 또는 온라인 상대 차례.
+  // 온라인 대전 중 지금이 "내 차례"인가(방 밖이면 항상 true). 대국 중 + 내 진영 차례여야 둘 수 있다.
+  const myOnlineTurn = (): boolean =>
+    online === null || (online.phase === 'playing' && state.turn === online.mySide)
+  // 입력(보드 클릭·행동 버튼)을 잠가야 하는가: AI 가 두는 중/AI 차례, 또는 온라인 상대 차례/협상 중.
   const inputLocked = (): boolean => aiThinking || aiControls(state.turn) || !myOnlineTurn()
   const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
   // 그 진영을 두는 AI 의 난이도(해설은 전문가일 때만). 관전은 색깔별, vsAi 는 단일.
@@ -1026,6 +1055,29 @@ export function mountGame(root: HTMLElement): void {
   function sideLabel(side: Side): string {
     return side === 'yellow' ? '노랑(선공)' : '갈색(후공)'
   }
+  // 방장이 상대를 기다리는 동안, 실시간 입장 이벤트를 놓쳐도 잡도록 주기적으로 방을 확인한다.
+  function startWaitPoll(roomId: string): void {
+    stopWaitPoll()
+    waitPollTimer = window.setInterval(() => {
+      if (!online || online.phase !== 'waiting') {
+        stopWaitPoll()
+        return
+      }
+      void getRoom(roomId).then((room) => {
+        if (room && room.status === 'playing' && online && online.phase === 'waiting') {
+          stopWaitPoll()
+          onRoomUpdate(room) // 매칭 처리(waiting→negotiating) 재사용
+        }
+      })
+    }, 2500)
+  }
+  function stopWaitPoll(): void {
+    if (waitPollTimer !== null) {
+      clearInterval(waitPollTimer)
+      waitPollTimer = null
+    }
+  }
+
   // 내가 둔 뒤 새 스냅샷을 방에 올린다. lastSyncedSnapshot 으로 내 push 의 에코를 무시한다.
   function pushOnline(): void {
     if (!online) return
@@ -1041,16 +1093,19 @@ export function mountGame(root: HTMLElement): void {
     if (!online) return
     // 상대가 나감: 알림 + 내 온라인 세션 종료(보드는 그대로 둬 마지막 국면을 본다).
     if (room.status === 'left') {
-      online.unsub()
+      stopWaitPoll()
+      online.conn.close()
       online = null
       if (typeof location !== 'undefined' && location.hash) location.hash = ''
       onlineMsg = '상대가 방에서 나갔어요. 온라인 대전을 종료합니다.'
       render()
       return
     }
-    // 매칭 성공: 대기 중이던 방에 상대가 들어옴(waiting → playing).
+    // 매칭 성공: 대기 중이던 방에 상대가 들어옴(waiting → playing) → 선공/후공 협상 시작.
     if (online.status === 'waiting' && room.status === 'playing') {
-      onlineMsg = `상대가 들어왔어요! 게임을 시작합니다. 당신은 ${sideLabel(online.mySide)}.`
+      stopWaitPoll()
+      online.phase = 'negotiating'
+      onlineMsg = '상대가 들어왔어요! 이제 선공·후공을 정해요.'
     }
     online.status = room.status
     // 상대 수/모드 변경: 스냅샷이 내가 올린 것과 다르면 적용. 모드가 바뀌었으면 팝업으로 알림.
@@ -1071,24 +1126,49 @@ export function mountGame(root: HTMLElement): void {
     render()
   }
 
-  function enterOnline(roomId: string, side: Side, status: RoomStatus): void {
+  // 선공/후공 협상 신호(broadcast). DB 가 아니라 즉석 메시지로 주고받는다.
+  function onSignal(event: string, payload: Record<string, unknown>): void {
+    if (!online) return
+    if (event === 'propose') {
+      online.proposal = { hostSide: payload.hostSide as Side, mine: false }
+      render() // 협상 모달이 예/아니오 표시
+    } else if (event === 'accept') {
+      finalizeAgreement(payload.hostSide as Side)
+    } else if (event === 'reject') {
+      online.proposal = null
+      onlineMsg = '상대가 거절했어요. 다시 정해 주세요.'
+      render()
+    } else if (event === 'cancel') {
+      online.proposal = null // 상대가 자기 제안을 취소함
+      render()
+    }
+  }
+
+  function enterOnline(roomId: string, isHost: boolean, status: RoomStatus): void {
     settings.mode = 'hotseat' // 온라인은 로컬 AI 없이 사람 둘. aiControls=false 가 되게.
     rebuildAi()
-    online = { roomId, mySide: side, status, unsub: subscribeRoom(roomId, onRoomUpdate) }
+    online = {
+      roomId,
+      isHost,
+      phase: status === 'playing' ? 'negotiating' : 'waiting',
+      mySide: 'yellow', // 협상 합의 전까지는 임시값(입력은 phase!=playing 이라 잠김)
+      proposal: null,
+      status,
+      conn: connectRoom(roomId, onRoomUpdate, onSignal),
+    }
+    if (online.phase === 'waiting') startWaitPoll(roomId) // 상대 입장 폴링 안전망
     if (typeof location !== 'undefined') location.hash = `room=${roomId}`
   }
 
-  // 방장이 진영을 고르면(또는 코인토스 결과) 새 판으로 방을 만든다.
-  async function createOnlineRoom(hostSide: Side, tossed: boolean): Promise<void> {
+  // 방장: 새 판으로 방을 만든다. 진영은 상대 입장 후 협상으로 정한다(host_side 는 임시 yellow).
+  async function createOnlineRoom(): Promise<void> {
     resetToFreshGame()
     const code0 = encodeSnapshot(snapshot())
     lastSyncedSnapshot = code0
     try {
-      const room = await createRoom(code0, hostSide)
-      enterOnline(room.id, hostSide, room.status)
-      onlineMsg =
-        (tossed ? `🪙 코인토스 결과 당신은 ${sideLabel(hostSide)}!\n` : '') +
-        `방을 만들었어요(코드 ${room.id}). “초대 링크 복사”로 상대를 부르세요. 상대가 들어오면 시작돼요.`
+      const room = await createRoom(code0, 'yellow')
+      enterOnline(room.id, true, room.status)
+      onlineMsg = `방을 만들었어요(코드 ${room.id}). “초대 링크 복사”로 상대를 부르세요. 상대가 들어오면 선공·후공을 정해요.`
       render()
     } catch (e) {
       message = '방 만들기 실패: ' + (e as Error).message
@@ -1096,7 +1176,7 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
-  // 상대: 코드로 입장 → 방장의 현재 판으로 맞추고 반대 진영을 잡는다.
+  // 상대: 코드로 입장 → 방장의 현재 판으로 맞추고 협상 단계로.
   async function joinOnline(code: string): Promise<void> {
     if (!mpEnabled) {
       message = '온라인 기능이 아직 설정되지 않았어요(서버 키 없음).'
@@ -1117,9 +1197,10 @@ export function mountGame(root: HTMLElement): void {
         settings.queen = s.state.queenEnabled === true
         settings.infiniteTiles = s.state.infiniteTiles === true
       }
-      const side = mySide(room)
-      enterOnline(room.id, side, room.status)
-      onlineMsg = `방에 입장했어요! 당신은 ${sideLabel(side)}. 매칭 성공, 게임을 시작합니다.`
+      const isHost = room.host_id === clientId() // 보통 false(게스트), 방장 재접속이면 true
+      enterOnline(room.id, isHost, room.status)
+      // 합의 결과가 이미 저장된 방에 재접속한 경우가 아니라면 협상부터.
+      onlineMsg = '방에 입장했어요! 매칭 성공. 이제 선공·후공을 정해요.'
       render()
     } catch (e) {
       message = '입장 실패: ' + (e as Error).message
@@ -1127,11 +1208,50 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
+  // 선공/후공 제안: choice = first(내가 선공)/second(내가 후공)/toss(코인토스).
+  function proposeSide(choice: 'first' | 'second' | 'toss'): void {
+    if (!online) return
+    const iAmFirst = choice === 'toss' ? Math.random() < 0.5 : choice === 'first'
+    const myColor: Side = iAmFirst ? 'yellow' : 'brown' // 노랑=선공
+    const hostSide: Side = online.isHost ? myColor : opposite(myColor)
+    online.proposal = { hostSide, mine: true }
+    online.conn.signal('propose', { hostSide })
+    if (choice === 'toss') onlineMsg = `🪙 코인토스 결과 "내가 ${sideLabel(myColor)}" 으로 제안했어요. 상대 동의를 기다려요.`
+    render()
+  }
+
+  function acceptProposal(): void {
+    if (!online || !online.proposal) return
+    const hostSide = online.proposal.hostSide
+    online.conn.signal('accept', { hostSide })
+    finalizeAgreement(hostSide)
+  }
+
+  function rejectProposal(): void {
+    if (!online || !online.proposal) return
+    const wasMine = online.proposal.mine
+    online.proposal = null
+    online.conn.signal(wasMine ? 'cancel' : 'reject') // 내 제안 취소 vs 상대 제안 거절
+    render()
+  }
+
+  // 합의 완료: 내 진영 확정 + 대국 시작. 방장은 host_side 를 방에 저장(재접속 대비).
+  function finalizeAgreement(hostSide: Side): void {
+    if (!online) return
+    online.mySide = online.isHost ? hostSide : opposite(hostSide)
+    online.proposal = null
+    online.phase = 'playing'
+    if (online.isHost) void setHostSide(online.roomId, hostSide)
+    onlineMsg = `선공·후공이 정해졌어요. 당신은 ${sideLabel(online.mySide)}. 시작합니다!`
+    render()
+  }
+
   // 나가기 확정: 상대에게 알리고(방 status=left) 내 화면은 완전히 새 판으로 리셋.
   function doLeaveOnline(): void {
+    stopWaitPoll()
     if (online) {
       void leaveRoom(online.roomId)
-      online.unsub()
+      online.conn.close()
     }
     online = null
     infoModal = null
@@ -1662,12 +1782,14 @@ export function mountGame(root: HTMLElement): void {
     }
     // 온라인 대전이면 방 상태(대기/내 차례/상대 차례)를 맨 위에 띄운다.
     const onlineLine = online
-      ? `<div class="online-status ${myOnlineTurn() && online.status === 'playing' ? 'my-turn' : 'wait-turn'}">${
-          online.status === 'waiting'
+      ? `<div class="online-status ${myOnlineTurn() && online.phase === 'playing' ? 'my-turn' : 'wait-turn'}">${
+          online.phase === 'waiting'
             ? `🔗 방 ${online.roomId} · 상대를 기다리는 중…`
-            : myOnlineTurn()
-              ? `🟢 내 차례 · 방 ${online.roomId}`
-              : `⏳ 상대 차례 · 방 ${online.roomId}`
+            : online.phase === 'negotiating'
+              ? `🤝 방 ${online.roomId} · 선공·후공 정하는 중`
+              : myOnlineTurn()
+                ? `🟢 내 차례 · 방 ${online.roomId}`
+                : `⏳ 상대 차례 · 방 ${online.roomId}`
         }</div>`
       : ''
     boardStatus.innerHTML = `
@@ -1777,16 +1899,17 @@ export function mountGame(root: HTMLElement): void {
       renderSavesModal()
       return
     }
-    if (infoModal === 'onlineSide') {
-      renderOnlineSide()
-      return
-    }
     if (infoModal === 'leaveConfirm') {
       renderLeaveConfirm()
       return
     }
     if (onlineMsg !== null) {
       renderOnlineMsg(onlineMsg)
+      return
+    }
+    // 매칭 후 선공/후공 협상 중이면(알림 팝업 닫은 뒤) 협상 모달을 띄운다.
+    if (online && online.phase === 'negotiating') {
+      renderSideNegotiate()
       return
     }
     const r = state.result
@@ -1859,20 +1982,42 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
-  // 온라인 방 만들기 — 선공(노랑)/후공(갈색)/코인토스(무작위) 선택.
-  function renderOnlineSide(): void {
+  // 매칭 후 선공·후공 합의. 제안 전이면 버튼, 내가 제안했으면 대기, 상대가 제안했으면 예/아니오.
+  function renderSideNegotiate(): void {
+    if (!online) return
+    const p = online.proposal
+    let body: string
+    if (p === null) {
+      body = `
+        <div class="modal-sub">매칭 성공! 선공·후공을 정해요. 누가 먼저 둘까요?</div>
+        <div class="modal-actions online-side">
+          <button data-act="proposeFirst">내가 선공 · 노랑</button>
+          <button data-act="proposeSecond">내가 후공 · 갈색</button>
+          <button class="modal-share" data-act="proposeToss">🪙 코인토스(무작위)</button>
+        </div>
+        <div class="nego-hint">또는 상대가 정할 때까지 기다려요.</div>`
+    } else if (p.mine) {
+      const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
+      body = `
+        <div class="modal-sub">내 제안: <b>내가 ${sideLabel(myColor)}</b><br>상대의 응답을 기다리는 중…</div>
+        <div class="modal-actions">
+          <button data-act="rejectSide">제안 취소</button>
+        </div>`
+    } else {
+      const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
+      body = `
+        <div class="modal-sub">상대가 제안했어요.<br>이대로면 <b>당신은 ${sideLabel(myColor)}</b> 예요.<br>이대로 시작할까요?</div>
+        <div class="modal-actions">
+          <button data-act="acceptSide">예, 시작</button>
+          <button data-act="rejectSide">아니오</button>
+        </div>`
+    }
     modalLayer.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal-card">
           ${BEE_SVG}
-          <div class="modal-title">🐝 온라인 방 만들기</div>
-          <div class="modal-sub">누가 먼저 둘까요? 노랑이 선공이에요.</div>
-          <div class="modal-actions online-side">
-            <button data-act="hostYellow">내가 선공 · 노랑</button>
-            <button data-act="hostBrown">내가 후공 · 갈색</button>
-            <button class="modal-share" data-act="hostToss">🪙 코인토스(무작위)</button>
-            <button data-act="closeInfo">취소</button>
-          </div>
+          <div class="modal-title">🐝 선공·후공 정하기</div>
+          ${body}
         </div>
       </div>`
     wireModalButtons()
@@ -2435,22 +2580,23 @@ export function mountGame(root: HTMLElement): void {
           message = '온라인 기능이 아직 설정되지 않았어요.'
           break
         }
-        infoModal = 'onlineSide' // 선공/후공/코인토스 선택 다이얼로그
+        void createOnlineRoom() // 진영은 상대 입장 후 협상으로 정함
         break
-      case 'hostYellow':
-        infoModal = null
-        void createOnlineRoom('yellow', false)
+      case 'proposeFirst':
+        proposeSide('first')
         break
-      case 'hostBrown':
-        infoModal = null
-        void createOnlineRoom('brown', false)
+      case 'proposeSecond':
+        proposeSide('second')
         break
-      case 'hostToss': {
-        infoModal = null
-        const side: Side = Math.random() < 0.5 ? 'yellow' : 'brown'
-        void createOnlineRoom(side, true)
+      case 'proposeToss':
+        proposeSide('toss')
         break
-      }
+      case 'acceptSide':
+        acceptProposal()
+        break
+      case 'rejectSide':
+        rejectProposal()
+        break
       case 'onlineJoin': {
         const code = window.prompt('받은 방 코드를 입력하세요 (예: ABC234)')
         if (code && code.trim()) void joinOnline(code)

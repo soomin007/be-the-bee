@@ -1267,6 +1267,11 @@ svg.board.panning {
   background: #fef3c7;
   border-color: #eab308;
 }
+.nego-hint {
+  font-size: 0.8rem;
+  color: #6b5524;
+  margin-top: 0.4rem;
+}
 
 @keyframes bee-fade {
   from {

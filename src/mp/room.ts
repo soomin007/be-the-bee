@@ -109,19 +109,47 @@ export async function pushState(id: string, snapshot: string, status: RoomStatus
   if (error) throw error
 }
 
-/** 방 행의 변경(UPDATE)을 실시간 구독. 반환값을 호출하면 구독 해제. */
-export function subscribeRoom(id: string, cb: (room: Room) => void): () => void {
+/** host_side 를 갱신(선공/후공 합의 결과를 방에 저장 → 재접속해도 유지). */
+export async function setHostSide(id: string, side: Side): Promise<void> {
+  if (!supabase) return
+  await supabase.from('rooms').update({ host_side: side, updated_at: new Date().toISOString() }).eq('id', id)
+}
+
+export interface RoomConn {
+  close: () => void
+  /** 상대에게 즉석 신호를 보낸다(선공/후공 협상 등 게임 상태가 아닌 일시적 메시지). */
+  signal: (event: string, payload?: Record<string, unknown>) => void
+}
+
+/**
+ * 방에 연결: ① 행 변경(UPDATE) 구독으로 스냅샷 동기화, ② broadcast 로 즉석 신호(협상) 송수신.
+ * 신호는 DB 에 안 남는 일시 메시지라 선공/후공 합의 같은 상호작용에 쓴다.
+ */
+export function connectRoom(
+  id: string,
+  onRow: (room: Room) => void,
+  onSignal: (event: string, payload: Record<string, unknown>) => void,
+): RoomConn {
   const sb = supabase
-  if (!sb) return () => {}
+  if (!sb) return { close: () => {}, signal: () => {} }
   const ch = sb
-    .channel(`room:${id}`)
+    .channel(`room:${id}`, { config: { broadcast: { self: false } } })
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` },
-      (payload) => cb(payload.new as Room),
+      (payload) => onRow(payload.new as Room),
     )
+    .on('broadcast', { event: 'sig' }, (payload) => {
+      const p = (payload.payload ?? {}) as Record<string, unknown>
+      onSignal(String(p.event ?? ''), p)
+    })
     .subscribe()
-  return () => {
-    void sb.removeChannel(ch)
+  return {
+    close: () => {
+      void sb.removeChannel(ch)
+    },
+    signal: (event, payload = {}) => {
+      void ch.send({ type: 'broadcast', event: 'sig', payload: { event, ...payload } })
+    },
   }
 }
