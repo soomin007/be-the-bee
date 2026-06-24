@@ -1,7 +1,7 @@
 // 자체 제작 라인 아이콘(인라인 SVG, 외부 에셋 0). 이모지 대체용.
 // 규격: 24x24 viewBox · fill=none · stroke=currentColor · 1.8px · 라운드 캡/조인.
 //   → 한 가지 선 굵기/스타일로 통일해 "한 세트"로 보이게 한다(꿀빛은 CSS color 로 지정).
-// 디자인: Claude Design 핸드오프(docs/design/settings_panel_handoff.md). 섹션 5 + 버튼 14 = 19종.
+// 디자인: Claude Design 핸드오프(2026-06-23 통합). 섹션 헤더 5 + 버튼 14 = 19종.
 
 const svg = (paths: string): string =>
   `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
