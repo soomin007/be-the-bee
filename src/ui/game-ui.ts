@@ -642,7 +642,12 @@ export function mountGame(root: HTMLElement): void {
   function setInitialCamera(): void {
     const a = hexToPixel(hex(0, 0))
     const b = hexToPixel(hex(1, 0))
-    cam = { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, w: HEX_SIZE * 26 }
+    // 헥스가 화면에서 ~36px 로 보이도록 보이는 폭을 화면 폭에 맞춘다. 좁은 모바일은 헥스 수를 줄여
+    // (=더 가까이) 보드가 또렷·탭하기 좋게, 넓은 데스크탑은 상한 26헥스로 기존과 동일. (이후 사용자
+    // 핀치/휠 줌으로 자유 조절.)
+    const { cw } = svgAspect()
+    const hexCount = Math.min(26, Math.max(8, cw / 36))
+    cam = { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, w: HEX_SIZE * hexCount }
     applyCamera()
   }
 
