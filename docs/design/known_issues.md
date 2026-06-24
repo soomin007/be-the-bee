@@ -206,3 +206,12 @@
   (EXPERT 전용·반대칭·OPEN_3 미만). 검증: 문제의 28수에서 새 전문가가 급소 선점. ③ 위협/리치
   판정은 그 대국의 여왕벌 모드를 반영해야 한다(`winningCells(…, queenAllowed)` — 표준 모드면 잠긴
   상대 벌집 칸은 어느 쪽도 못 둠). 예전 UI 의 `queenUsed=true` 사본 트릭을 엔진 파라미터로 대체.
+
+### 관찰(미확정): 전문가 난이도가 hard 보다 확실히 강하지 않을 수 있음
+- **증상**: 소규모 self-play(N=4, 8판)에서 새 expert vs hard 가 2-4. 새≈옛 expert(자기대국 1-1,
+  무 6)라 이는 `spreadThree` 변경 탓이 아니라 **전문가 난이도 정의 자체의 문제**로 보인다.
+- **원인(의심)**: `cfgFor` 주석은 "전문가=hard 보다 깊은 5수"라는데 **코드는 expert·hard 둘 다
+  beamDepth 4**(주석 부패). 전문가는 빔 폭(12 vs 8) + gapFour/spreadThree 만 더 가질 뿐 깊이가 같다.
+- **재발 방지/다음**: 표본을 키워(예: N≥20) 옛-expert·새-expert·hard·medium 을 교차 측정해 난이도
+  단조성(easy<medium<hard<expert)을 재확인할 것. 필요하면 expert beamDepth 를 5로 올리거나 주석을
+  코드에 맞춘다. (AI 튜닝은 현재 메인 마일스톤 아님 — 멀티플레이 우선이라 별도 항목으로만 남김.)
