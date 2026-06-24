@@ -7,7 +7,8 @@
 import { supabase } from './supabase'
 
 export type Side = 'yellow' | 'brown'
-export type RoomStatus = 'waiting' | 'playing' | 'finished' | 'left'
+// waiting(방장 혼자) → negotiating(매칭, 선공/후공 합의 중) → playing(대국) → finished/left.
+export type RoomStatus = 'waiting' | 'negotiating' | 'playing' | 'finished' | 'left'
 
 export interface Room {
   id: string
@@ -75,17 +76,19 @@ export async function getRoom(id: string): Promise<Room | null> {
   return (data as Room | null) ?? null
 }
 
-/** 초대 코드로 입장 — 빈 상대 슬롯을 차지하고 status 를 playing 으로. */
+/** 초대 코드로 입장. 신규면 상대 슬롯 차지+협상 단계로, 이미 참가자면 재접속이라 그대로 반환. */
 export async function joinRoom(id: string): Promise<Room | null> {
   if (!supabase) return null
   const me = clientId()
   const room = await getRoom(id)
   if (!room) return null
-  if (room.host_id === me) return room // 내가 방장이면 그대로(재접속)
-  if (room.guest_id && room.guest_id !== me) return room // 이미 다른 사람이 들어옴 — 그대로 반환(관전 처리는 추후)
+  // 이미 참가자(방장/상대)면 재접속 — 상태를 안 건드리고 현재 방을 그대로 반환(진행 중이면 재개됨).
+  if (room.host_id === me || room.guest_id === me) return room
+  // 다른 사람이 이미 상대 슬롯을 차지 → 만석(관전 미지원).
+  if (room.guest_id) return room
   const { data, error } = await supabase
     .from('rooms')
-    .update({ guest_id: me, status: 'playing', updated_at: new Date().toISOString() })
+    .update({ guest_id: me, status: 'negotiating', updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()
@@ -109,10 +112,25 @@ export async function pushState(id: string, snapshot: string, status: RoomStatus
   if (error) throw error
 }
 
-/** host_side 를 갱신(선공/후공 합의 결과를 방에 저장 → 재접속해도 유지). */
-export async function setHostSide(id: string, side: Side): Promise<void> {
+/** 선공/후공 합의 완료: host_side 확정 + status=playing(재접속 시 협상 건너뛰고 바로 재개). */
+export async function agreeStart(id: string, hostSide: Side): Promise<void> {
   if (!supabase) return
-  await supabase.from('rooms').update({ host_side: side, updated_at: new Date().toISOString() }).eq('id', id)
+  await supabase
+    .from('rooms')
+    .update({ host_side: hostSide, status: 'playing', updated_at: new Date().toISOString() })
+    .eq('id', id)
+}
+
+/** 방 삭제(정리용). delete 정책이 있어야 동작(multiplayer_schema.sql). */
+export async function deleteRoom(id: string): Promise<void> {
+  if (!supabase) return
+  await supabase.from('rooms').delete().eq('id', id)
+}
+
+/** 오래된 방 정리: updated_at 이 cutoffIso 이전인 방 삭제(방 생성 시 호출해 테이블을 가볍게). */
+export async function cleanupOldRooms(cutoffIso: string): Promise<void> {
+  if (!supabase) return
+  await supabase.from('rooms').delete().lt('updated_at', cutoffIso)
 }
 
 export interface RoomConn {
@@ -122,18 +140,26 @@ export interface RoomConn {
 }
 
 /**
- * 방에 연결: ① 행 변경(UPDATE) 구독으로 스냅샷 동기화, ② broadcast 로 즉석 신호(협상) 송수신.
- * 신호는 DB 에 안 남는 일시 메시지라 선공/후공 합의 같은 상호작용에 쓴다.
+ * 방에 연결: ① 행 변경(UPDATE) 구독으로 스냅샷 동기화, ② broadcast 로 즉석 신호(협상) 송수신,
+ * ③ presence 로 상대 접속/끊김 감지(탭 닫힘·네트워크 끊김을 자동 감지 — beforeunload 불필요).
  */
 export function connectRoom(
   id: string,
   onRow: (room: Room) => void,
   onSignal: (event: string, payload: Record<string, unknown>) => void,
+  onPeer?: (present: boolean) => void, // 상대가 접속 중인지(presence 변화 시 호출)
 ): RoomConn {
   const sb = supabase
   if (!sb) return { close: () => {}, signal: () => {} }
+  const me = clientId()
+  const peerPresent = (): boolean => {
+    const state = ch.presenceState() as Record<string, Array<{ id?: string }>>
+    return Object.values(state)
+      .flat()
+      .some((p) => p.id !== undefined && p.id !== me)
+  }
   const ch = sb
-    .channel(`room:${id}`, { config: { broadcast: { self: false } } })
+    .channel(`room:${id}`, { config: { broadcast: { self: false }, presence: { key: me } } })
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` },
@@ -143,7 +169,12 @@ export function connectRoom(
       const p = (payload.payload ?? {}) as Record<string, unknown>
       onSignal(String(p.event ?? ''), p)
     })
-    .subscribe()
+    .on('presence', { event: 'sync' }, () => onPeer?.(peerPresent()))
+    .on('presence', { event: 'join' }, () => onPeer?.(peerPresent()))
+    .on('presence', { event: 'leave' }, () => onPeer?.(peerPresent()))
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') void ch.track({ id: me })
+    })
   return {
     close: () => {
       void sb.removeChannel(ch)

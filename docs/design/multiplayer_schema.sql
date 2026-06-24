@@ -15,13 +15,15 @@ create table if not exists public.rooms (
 
 alter table public.rooms enable row level security;
 
--- MVP: 누구나 방 읽기/만들기/갱신(방 코드를 아는 사람끼리). 정교한 권한은 Phase 2.
+-- MVP: 누구나 방 읽기/만들기/갱신/삭제(방 코드를 아는 사람끼리). 정교한 권한은 추후.
 drop policy if exists "rooms_select" on public.rooms;
 drop policy if exists "rooms_insert" on public.rooms;
 drop policy if exists "rooms_update" on public.rooms;
+drop policy if exists "rooms_delete" on public.rooms;
 create policy "rooms_select" on public.rooms for select using (true);
 create policy "rooms_insert" on public.rooms for insert with check (true);
 create policy "rooms_update" on public.rooms for update using (true);
+create policy "rooms_delete" on public.rooms for delete using (true); -- 나간 방·오래된 방 정리
 
 -- 실시간 구독(행 변경 푸시) 활성화. 이미 추가돼 있으면 에러가 떠도 무시.
 alter publication supabase_realtime add table public.rooms;
