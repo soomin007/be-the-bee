@@ -538,6 +538,8 @@ export function mountGame(root: HTMLElement): void {
         <div class="action-bar"></div>
         <div class="board-notes"></div>
       </div>
+      <button class="msettings-fab" data-act="toggleMobileSettings" aria-label="설정" title="설정">⚙</button>
+      <button class="msettings-close" data-act="toggleMobileSettings" aria-label="설정 닫기" title="닫기">✕</button>
     </div>
     <div class="modal-layer"></div>
     <div class="credit">
@@ -554,6 +556,11 @@ export function mountGame(root: HTMLElement): void {
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const boardStatus = root.querySelector('.board-status') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
+  const gameEl = root.querySelector('.game') as HTMLElement
+  // 모바일 설정 시트 토글(톱니/닫기). 셸 정적 버튼이라 여기서 직접 배선(onPanelAction 은 함수선언 hoist).
+  for (const el of Array.from(root.querySelectorAll('[data-act="toggleMobileSettings"]'))) {
+    el.addEventListener('click', () => onPanelAction('toggleMobileSettings'))
+  }
 
   // 3D 보드: board-wrap 안에 three.js 캔버스 호스트. settings.board3d 면 SVG 대신 표시한다.
   // 렌더러는 처음 3D 로 그릴 때 지연 생성(three.js 비용 회피). 클릭은 SVG 와 동일한 onHexClick 으로.
@@ -586,6 +593,13 @@ export function mountGame(root: HTMLElement): void {
     boardWrap.classList.toggle('ab-top', settings.actionBarPos === 'top')
   }
   applyActionBarPos()
+
+  // 모바일 설정 시트: 톱니로 열고 닫는다(데스크탑은 패널이 항상 보여 무관). 클래스만 토글.
+  let mobileSettingsOpen = false
+  function applyMobileSettings(): void {
+    gameEl.classList.toggle('msettings-open', mobileSettingsOpen)
+  }
+  applyMobileSettings()
 
   // 컬러 테마 적용: 밀랍 그라데이션 stop 과 벌집 글로우 색을 현재 테마로 채운다.
   // (테마 변경 시 다시 호출 → render() 가 나머지 인라인 색을 다시 그린다.)
@@ -2636,6 +2650,10 @@ export function mountGame(root: HTMLElement): void {
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
         applyActionBarPos()
         break
+      case 'toggleMobileSettings':
+        mobileSettingsOpen = !mobileSettingsOpen
+        applyMobileSettings()
+        return // 클래스만 토글 — 보드 재렌더 불필요
       case 'cycleTheme': {
         if (settings.board3d) break // 3D 모드는 색 테마 미적용(버튼도 비활성). 벌 스타일은 숨은 이스터에그.
         const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
