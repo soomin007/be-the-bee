@@ -22,7 +22,8 @@ describe('핫시트 UI (headless DOM)', () => {
     expect(svg).not.toBeNull()
     // 시드 타일 2개 이상이 폴리곤으로 그려진다
     expect(svg!.querySelectorAll('polygon').length).toBeGreaterThanOrEqual(2)
-    expect(root.querySelector('.panel')!.textContent).toContain('노랑 차례')
+    // 차례 표시는 설정 패널이 아니라 보드 좌상단 HUD(.board-status)로 옮겼다.
+    expect(root.querySelector('.board-status')!.textContent).toContain('노랑 차례')
   })
 
   it('선플레이어 첫 턴은 타일+말 안내가 뜬다', () => {
@@ -47,7 +48,7 @@ describe('핫시트 UI (headless DOM)', () => {
     click(targets[0]!)
 
     // 첫 수 완료 → 턴 교대
-    expect(root.querySelector('.panel')!.textContent).toContain('갈색 차례')
+    expect(root.querySelector('.board-status')!.textContent).toContain('갈색 차례')
     // 말 하나가 그려졌다
     expect(root.querySelectorAll('svg.board circle.piece').length).toBe(1)
   })
@@ -67,7 +68,7 @@ describe('핫시트 UI (headless DOM)', () => {
 
     const newBtn = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'new')
     click(newBtn!)
-    expect(root.querySelector('.panel')!.textContent).toContain('노랑 차례')
+    expect(root.querySelector('.board-status')!.textContent).toContain('노랑 차례')
     expect(root.querySelectorAll('svg.board circle.piece').length).toBe(0)
   })
 
