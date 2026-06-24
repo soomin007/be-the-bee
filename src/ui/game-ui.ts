@@ -155,8 +155,8 @@ interface RoomSettings {
   sfxVolume: number // 0~1 (0 = 효과음 끔)
   watchDelay: number // 관전 모드 수 간격(ms)
   actionBarPos: ActionBarPos // 인게임 행동 바(턴 안내+①②) 위치
-  board3d: boolean // 보드를 3D(three.js)로 표시(실험). 기본 꺼짐 → 2D SVG.
-  board3dStyle: PieceStyle // 3D 말 스타일: 일반(스타일 토큰) / 실사(사실적 벌)
+  board3d: boolean // 보드를 3D(three.js)로 표시. 기본 꺼짐 → 2D SVG.
+  board3dStyle: PieceStyle // 3D 말 스타일: 일반(스타일 토큰) / 실사(사실적 벌, 숨은 이스터에그)
   themeId: string // 컬러 테마(themes.ts COLOR_THEMES 의 id)
   personaYellow: Persona // 관전 시 노랑 AI 성향
   personaBrown: Persona // 갈색 AI 성향(vsAi 상대 + 관전 갈색)
@@ -344,6 +344,8 @@ export function mountGame(root: HTMLElement): void {
   let notice = '' // 긍정 피드백(저장/불러오기 등), ✓ 초록, 다음 수에 사라짐
   let aiComment = '' // 전문가 AI 의 결정적 수 해설, 다음 수에 사라짐
   let coachNote: MoveNote | null = null // 전문가 vs AI: 직전 "내(사람) 수" 코칭(다음 내 수까지 유지)
+  let lastBoardNotesHtml = '' // 보드 옆 멘트의 직전 HTML — 같으면 재렌더 생략(등장 애니메이션 재발 방지)
+  let beeTapCount = 0 // 제목 벌 탭 횟수 — 7번이면 실사 벌(이스터에그) 토글
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   let infoModal: 'queen' | 'saves' | null = null // 팝업(여왕벌 설명/저장 보관함), 결과 모달보다 우선
@@ -426,23 +428,6 @@ export function mountGame(root: HTMLElement): void {
       window.prompt('아래 코드를 복사하세요', code)
     }
   }
-  // "공유하기": 가능하면 기기 공유 시트(메신저/SNS 등)로 바로 보낸다. 없으면 클립보드 복사로 폴백.
-  // 결과 모달에서 저장/불러오기 단계 없이 한 번에 기보를 전달하기 위함.
-  function shareGameCode(code: string): void {
-    const nav = navigator as Navigator & { share?: (data: { title?: string; text?: string }) => Promise<void> }
-    if (typeof nav.share === 'function') {
-      // 공유 텍스트 = BTB1 코드 그대로(받는 쪽 "코드로 가져오기"가 인식). 호출은 클릭 제스처 안에서.
-      nav.share({ title: 'Be the Bee 기보', text: code }).then(
-        () => {
-          notice = '기보를 공유했어요.'
-          render()
-        },
-        () => shareCode(code), // 취소/미지원 → 클립보드 복사로 폴백
-      )
-      return
-    }
-    shareCode(code)
-  }
   // 스냅샷으로 현재 판을 통째로 교체(복기/연출 정리 포함). 모드는 settings 가 단일 소스.
   function applySnapshot(s: GameSnapshot): void {
     state = s.state
@@ -520,7 +505,7 @@ export function mountGame(root: HTMLElement): void {
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
 
-  // 3D 보드(실험): board-wrap 안에 three.js 캔버스 호스트. settings.board3d 면 SVG 대신 표시한다.
+  // 3D 보드: board-wrap 안에 three.js 캔버스 호스트. settings.board3d 면 SVG 대신 표시한다.
   // 렌더러는 처음 3D 로 그릴 때 지연 생성(three.js 비용 회피). 클릭은 SVG 와 동일한 onHexClick 으로.
   const board3dHost = document.createElement('div')
   board3dHost.className = 'board3d-host'
@@ -1479,7 +1464,12 @@ export function mountGame(root: HTMLElement): void {
         parts.push(`<div class="coach-comment ${notePolarity(coachNote)}">🧑‍🏫 내 수: ${noteLine(coachNote)}</div>`)
       }
     }
-    boardNotes.innerHTML = parts.join('')
+    // 내용이 그대로면 innerHTML 을 안 건드린다. 매 render(타일/행동 선택 등)마다 새로 쓰면 같은 멘트의
+    // DOM 이 재생성돼 CSS 등장 애니메이션이 다시 터져 "한 턴에 같은 멘트가 계속 새로 뜨는" 것처럼 보였음.
+    const html = parts.join('')
+    if (html === lastBoardNotesHtml) return
+    lastBoardNotesHtml = html
+    boardNotes.innerHTML = html
   }
 
   // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
@@ -1736,8 +1726,8 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     const viewGrid = `
       <div class="settings-grid">
-        <button data-act="cycleTheme" title="${settings.board3d ? '3D 벌 스타일 전환(일반/실사)' : theme.desc}">${settings.board3d ? `${ICON.bee} 벌: ${settings.board3dStyle === 'realistic' ? '실사' : '일반'}` : `${ICON.theme} 테마: ${theme.label}`}</button>
-        <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D로 표시(실험)">${ICON.cube3d} 3D 보드</button>
+        <button data-act="cycleTheme" ${settings.board3d ? 'disabled' : ''} title="${settings.board3d ? '3D 모드에선 색 테마가 적용되지 않아요' : theme.desc}">${ICON.theme} 테마: ${theme.label}</button>
+        <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D(three.js)로 표시">${ICON.cube3d} 3D 보드</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
         <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수</button>
         <button data-act="resetView" title="${settings.board3d ? '3D 카메라(시점·줌)를 처음 위치로' : '보드 확대·이동을 처음 상태로'}">카메라 리셋</button>
@@ -1819,7 +1809,7 @@ export function mountGame(root: HTMLElement): void {
       <div class="help-row"><span class="help-ico">${ICON.keyboard}</span><span>화살표 = 이동 · ＋－ = 확대 · 0 = 처음 위치</span></div>`
 
     panel.innerHTML = `
-      <h2>${ICON.bee} Be the Bee</h2>
+      <h2 class="app-title" title="Be the Bee">${ICON.bee} Be the Bee</h2>
       <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
         <div class="status-header">${header}</div>
         <div class="instruction">${instruction}</div>
@@ -1842,6 +1832,23 @@ export function mountGame(root: HTMLElement): void {
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
       if (btn.hasAttribute('disabled')) continue
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+    // 이스터에그: 제목 벌을 7번 탭하면 3D 실사 벌 ↔ 일반 스타일 토글(숨김 — 평소 메뉴엔 안 보임).
+    const title = panel.querySelector('.app-title') as HTMLElement | null
+    if (title) {
+      title.addEventListener('click', () => {
+        beeTapCount += 1
+        if (beeTapCount < 7) return
+        beeTapCount = 0
+        settings.board3dStyle = settings.board3dStyle === 'realistic' ? 'stylized' : 'realistic'
+        board3dApi?.setStyle(settings.board3dStyle)
+        persist()
+        notice =
+          settings.board3dStyle === 'realistic'
+            ? '🐝 실사 벌 모드를 찾았어요! (3D 보드에서 보여요)'
+            : '일반 벌 스타일로 돌아왔어요.'
+        render()
+      })
     }
     const trackSel = panel.querySelector('select[data-ctl="bgmTrack"]') as HTMLSelectElement | null
     if (trackSel) {
@@ -2087,16 +2094,11 @@ export function mountGame(root: HTMLElement): void {
         applyActionBarPos()
         break
       case 'cycleTheme': {
-        if (settings.board3d) {
-          // 3D 모드: 테마 버튼은 벌 스타일(일반 ↔ 실사) 전환. 색 테마는 2D 에서만.
-          settings.board3dStyle = settings.board3dStyle === 'stylized' ? 'realistic' : 'stylized'
-          board3dApi?.setStyle(settings.board3dStyle)
-        } else {
-          const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
-          theme = COLOR_THEMES[(i + 1) % COLOR_THEMES.length]!
-          settings.themeId = theme.id
-          applyThemeColors()
-        }
+        if (settings.board3d) break // 3D 모드는 색 테마 미적용(버튼도 비활성). 벌 스타일은 숨은 이스터에그.
+        const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
+        theme = COLOR_THEMES[(i + 1) % COLOR_THEMES.length]!
+        settings.themeId = theme.id
+        applyThemeColors()
         break
       }
       case 'toggleWatch':
@@ -2118,8 +2120,8 @@ export function mountGame(root: HTMLElement): void {
         shareCode(encodeSnapshot(snapshot()))
         break
       case 'shareGame':
-        // 결과 모달의 "공유하기" — 저장/불러오기 없이 현재 판 기보를 바로 공유(시트→복사 폴백).
-        shareGameCode(encodeSnapshot(snapshot()))
+        // 결과 모달의 "공유하기" — 저장/불러오기 없이 현재 판 기보를 클립보드에 바로 복사.
+        shareCode(encodeSnapshot(snapshot()))
         break
       case 'importGame': {
         const code = window.prompt('기보 코드를 붙여넣으세요 (BTB1:... )')
