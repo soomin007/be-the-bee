@@ -7,7 +7,7 @@
 import { supabase } from './supabase'
 
 export type Side = 'yellow' | 'brown'
-export type RoomStatus = 'waiting' | 'playing' | 'finished'
+export type RoomStatus = 'waiting' | 'playing' | 'finished' | 'left'
 
 export interface Room {
   id: string
@@ -91,6 +91,12 @@ export async function joinRoom(id: string): Promise<Room | null> {
     .single()
   if (error) throw error
   return data as Room
+}
+
+/** 방에서 나갈 때: status 만 'left' 로 바꿔 상대에게 알린다(스냅샷은 안 건드림 → 상대 화면 안 바뀜). */
+export async function leaveRoom(id: string): Promise<void> {
+  if (!supabase) return
+  await supabase.from('rooms').update({ status: 'left', updated_at: new Date().toISOString() }).eq('id', id)
 }
 
 /** 내 수를 둔 뒤 새 스냅샷을 방에 반영(상대가 구독으로 받음). */

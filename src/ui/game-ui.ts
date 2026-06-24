@@ -44,7 +44,7 @@ import { maybeShowTutorial, openTutorial } from './tutorial'
 import { ICON } from './icons'
 import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 import { mpEnabled } from '../mp/supabase'
-import { createRoom, joinRoom, pushState, subscribeRoom, mySide, type Room, type RoomStatus, type Side } from '../mp/room'
+import { createRoom, joinRoom, leaveRoom, pushState, subscribeRoom, mySide, type Room, type RoomStatus, type Side } from '../mp/room'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -354,7 +354,9 @@ export function mountGame(root: HTMLElement): void {
   let lastSyncedSnapshot = '' // 방과 마지막으로 주고받은 스냅샷 코드 — 내 push 의 에코·중복 적용 방지
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
-  let infoModal: 'queen' | 'saves' | null = null // 팝업(여왕벌 설명/저장 보관함), 결과 모달보다 우선
+  // 팝업(결과 모달보다 우선): 여왕벌 설명/보관함 + 온라인 다이얼로그(진영 선택·나가기 확인).
+  let infoModal: 'queen' | 'saves' | 'onlineSide' | 'leaveConfirm' | null = null
+  let onlineMsg: string | null = null // 온라인 알림 팝업(매칭 성공·상대 모드 변경·상대 나감). 확인 누르면 사라짐
   // 리치(한 수로 5목) 칸, render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
@@ -1020,6 +1022,10 @@ export function mountGame(root: HTMLElement): void {
     if (typeof location === 'undefined') return roomId
     return `${location.origin}${location.pathname}#room=${roomId}`
   }
+  // 진영 라벨(노랑=선공, 갈색=후공). 노랑이 항상 먼저 둔다.
+  function sideLabel(side: Side): string {
+    return side === 'yellow' ? '노랑(선공)' : '갈색(후공)'
+  }
   // 내가 둔 뒤 새 스냅샷을 방에 올린다. lastSyncedSnapshot 으로 내 push 의 에코를 무시한다.
   function pushOnline(): void {
     if (!online) return
@@ -1030,14 +1036,37 @@ export function mountGame(root: HTMLElement): void {
     void pushState(online.roomId, code, status)
   }
 
-  // 방 행이 바뀌면(상대가 두거나 입장) 호출. 스냅샷이 내가 올린 것과 다르면 상대 수 → 그대로 적용.
+  // 방 행이 바뀌면(상대 입장·수·모드 변경·나감) 호출.
   function onRoomUpdate(room: Room): void {
     if (!online) return
+    // 상대가 나감: 알림 + 내 온라인 세션 종료(보드는 그대로 둬 마지막 국면을 본다).
+    if (room.status === 'left') {
+      online.unsub()
+      online = null
+      if (typeof location !== 'undefined' && location.hash) location.hash = ''
+      onlineMsg = '상대가 방에서 나갔어요. 온라인 대전을 종료합니다.'
+      render()
+      return
+    }
+    // 매칭 성공: 대기 중이던 방에 상대가 들어옴(waiting → playing).
+    if (online.status === 'waiting' && room.status === 'playing') {
+      onlineMsg = `상대가 들어왔어요! 게임을 시작합니다. 당신은 ${sideLabel(online.mySide)}.`
+    }
     online.status = room.status
+    // 상대 수/모드 변경: 스냅샷이 내가 올린 것과 다르면 적용. 모드가 바뀌었으면 팝업으로 알림.
     if (room.snapshot && room.snapshot !== lastSyncedSnapshot) {
       lastSyncedSnapshot = room.snapshot
       const s = decodeSnapshot(room.snapshot)
-      if (s) applySnapshot(s)
+      if (s) {
+        if (s.state.queenEnabled !== state.queenEnabled) {
+          onlineMsg = `상대가 여왕벌 모드를 ${s.state.queenEnabled ? '켰어요' : '껐어요'}.`
+        } else if (s.state.infiniteTiles !== state.infiniteTiles) {
+          onlineMsg = `상대가 무한 모드를 ${s.state.infiniteTiles ? '켰어요' : '껐어요'}.`
+        }
+        applySnapshot(s)
+        settings.queen = s.state.queenEnabled === true // 토글 버튼 상태도 상대 변경에 맞춤
+        settings.infiniteTiles = s.state.infiniteTiles === true
+      }
     }
     render()
   }
@@ -1049,20 +1078,17 @@ export function mountGame(root: HTMLElement): void {
     if (typeof location !== 'undefined') location.hash = `room=${roomId}`
   }
 
-  // 방장: 새 판으로 방을 만들고 초대 코드를 띄운다(나는 노랑).
-  async function hostOnline(): Promise<void> {
-    if (!mpEnabled) {
-      message = '온라인 기능이 아직 설정되지 않았어요(서버 키 없음).'
-      render()
-      return
-    }
+  // 방장이 진영을 고르면(또는 코인토스 결과) 새 판으로 방을 만든다.
+  async function createOnlineRoom(hostSide: Side, tossed: boolean): Promise<void> {
     resetToFreshGame()
     const code0 = encodeSnapshot(snapshot())
     lastSyncedSnapshot = code0
     try {
-      const room = await createRoom(code0, 'yellow')
-      enterOnline(room.id, 'yellow', room.status)
-      notice = `방을 만들었어요. 초대 코드 ${room.id} (또는 주소를 그대로 공유)`
+      const room = await createRoom(code0, hostSide)
+      enterOnline(room.id, hostSide, room.status)
+      onlineMsg =
+        (tossed ? `🪙 코인토스 결과 당신은 ${sideLabel(hostSide)}!\n` : '') +
+        `방을 만들었어요(코드 ${room.id}). “초대 링크 복사”로 상대를 부르세요. 상대가 들어오면 시작돼요.`
       render()
     } catch (e) {
       message = '방 만들기 실패: ' + (e as Error).message
@@ -1086,8 +1112,14 @@ export function mountGame(root: HTMLElement): void {
       }
       lastSyncedSnapshot = room.snapshot
       const s = decodeSnapshot(room.snapshot)
-      if (s) applySnapshot(s)
-      enterOnline(room.id, mySide(room), room.status)
+      if (s) {
+        applySnapshot(s)
+        settings.queen = s.state.queenEnabled === true
+        settings.infiniteTiles = s.state.infiniteTiles === true
+      }
+      const side = mySide(room)
+      enterOnline(room.id, side, room.status)
+      onlineMsg = `방에 입장했어요! 당신은 ${sideLabel(side)}. 매칭 성공, 게임을 시작합니다.`
       render()
     } catch (e) {
       message = '입장 실패: ' + (e as Error).message
@@ -1095,10 +1127,16 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
-  function leaveOnline(): void {
-    if (online) online.unsub()
+  // 나가기 확정: 상대에게 알리고(방 status=left) 내 화면은 완전히 새 판으로 리셋.
+  function doLeaveOnline(): void {
+    if (online) {
+      void leaveRoom(online.roomId)
+      online.unsub()
+    }
     online = null
+    infoModal = null
     if (typeof location !== 'undefined' && location.hash) location.hash = ''
+    resetToFreshGame()
     notice = '온라인 방에서 나왔어요.'
     render()
   }
@@ -1739,6 +1777,18 @@ export function mountGame(root: HTMLElement): void {
       renderSavesModal()
       return
     }
+    if (infoModal === 'onlineSide') {
+      renderOnlineSide()
+      return
+    }
+    if (infoModal === 'leaveConfirm') {
+      renderLeaveConfirm()
+      return
+    }
+    if (onlineMsg !== null) {
+      renderOnlineMsg(onlineMsg)
+      return
+    }
     const r = state.result
     if (state.phase !== 'finished' || r === undefined || modalDismissed) {
       modalLayer.innerHTML = ''
@@ -1801,6 +1851,62 @@ export function mountGame(root: HTMLElement): void {
     for (const btn of Array.from(modalLayer.querySelectorAll('button'))) {
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
     }
+  }
+
+  function wireModalButtons(): void {
+    for (const btn of Array.from(modalLayer.querySelectorAll('button'))) {
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+  }
+
+  // 온라인 방 만들기 — 선공(노랑)/후공(갈색)/코인토스(무작위) 선택.
+  function renderOnlineSide(): void {
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          ${BEE_SVG}
+          <div class="modal-title">🐝 온라인 방 만들기</div>
+          <div class="modal-sub">누가 먼저 둘까요? 노랑이 선공이에요.</div>
+          <div class="modal-actions online-side">
+            <button data-act="hostYellow">내가 선공 · 노랑</button>
+            <button data-act="hostBrown">내가 후공 · 갈색</button>
+            <button class="modal-share" data-act="hostToss">🪙 코인토스(무작위)</button>
+            <button data-act="closeInfo">취소</button>
+          </div>
+        </div>
+      </div>`
+    wireModalButtons()
+  }
+
+  // 나가기 전 확인.
+  function renderLeaveConfirm(): void {
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          <div class="modal-title">방에서 나갈까요?</div>
+          <div class="modal-sub">나가면 진행 중인 온라인 게임이 끝나고 상대에게도 알려져요. 내 화면은 새 게임으로 초기화됩니다.</div>
+          <div class="modal-actions">
+            <button data-act="leaveYes">나가기</button>
+            <button data-act="leaveNo">계속하기</button>
+          </div>
+        </div>
+      </div>`
+    wireModalButtons()
+  }
+
+  // 온라인 알림 팝업(매칭 성공·상대 모드 변경·상대 나감).
+  function renderOnlineMsg(msg: string): void {
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          ${BEE_SVG}
+          <div class="modal-sub">${msg.replace(/\n/g, '<br>')}</div>
+          <div class="modal-actions">
+            <button data-act="onlineMsgOk">확인</button>
+          </div>
+        </div>
+      </div>`
+    wireModalButtons()
   }
 
   // 저장 보관함: 여러 슬롯 목록(불러오기·공유코드 복사·삭제) + 현재 판 저장/복사 + 코드 가져오기.
@@ -2268,6 +2374,7 @@ export function mountGame(root: HTMLElement): void {
           settings.queen = false
           if (pieceKind === 'queen') pieceKind = 'normal'
           state = { ...state, queenEnabled: false }
+          if (online) pushOnline() // 온라인: 상대에게 모드 변경 반영(상대 화면에 팝업)
         } else {
           // 켜기 전 설명 팝업, 확인해야 켜진다
           infoModal = 'queen'
@@ -2277,6 +2384,7 @@ export function mountGame(root: HTMLElement): void {
         settings.queen = true
         state = { ...state, queenEnabled: true } // 현재 판에도 즉시 반영
         infoModal = null
+        if (online) pushOnline()
         break
       case 'queenCancel':
         infoModal = null
@@ -2285,7 +2393,8 @@ export function mountGame(root: HTMLElement): void {
         // 무한 모드는 현재 판에도 즉시 반영(타일이 줄지/소진되지 않게). 새 게임도 설정 반영.
         settings.infiniteTiles = !settings.infiniteTiles
         state = { ...state, infiniteTiles: settings.infiniteTiles }
-        notice = settings.infiniteTiles ? '무한 모드 ON — 타일 무제한' : '무한 모드 OFF — 타일 30개'
+        notice = settings.infiniteTiles ? '무한 모드 ON, 타일 무제한' : '무한 모드 OFF, 타일 30개'
+        if (online) pushOnline()
         break
       case 'toggleActionPos':
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
@@ -2322,18 +2431,48 @@ export function mountGame(root: HTMLElement): void {
         shareCode(encodeSnapshot(snapshot()))
         break
       case 'onlineHost':
-        void hostOnline()
+        if (!mpEnabled) {
+          message = '온라인 기능이 아직 설정되지 않았어요.'
+          break
+        }
+        infoModal = 'onlineSide' // 선공/후공/코인토스 선택 다이얼로그
         break
+      case 'hostYellow':
+        infoModal = null
+        void createOnlineRoom('yellow', false)
+        break
+      case 'hostBrown':
+        infoModal = null
+        void createOnlineRoom('brown', false)
+        break
+      case 'hostToss': {
+        infoModal = null
+        const side: Side = Math.random() < 0.5 ? 'yellow' : 'brown'
+        void createOnlineRoom(side, true)
+        break
+      }
       case 'onlineJoin': {
         const code = window.prompt('받은 방 코드를 입력하세요 (예: ABC234)')
         if (code && code.trim()) void joinOnline(code)
         break
       }
       case 'onlineLeave':
-        leaveOnline()
+        infoModal = 'leaveConfirm' // 나가기 전 확인 창
+        break
+      case 'leaveYes':
+        doLeaveOnline()
+        break
+      case 'leaveNo':
+        infoModal = null
+        break
+      case 'closeInfo':
+        infoModal = null
         break
       case 'onlineCopyLink':
         if (online) shareCode(inviteUrl(online.roomId))
+        break
+      case 'onlineMsgOk':
+        onlineMsg = null
         break
       case 'importGame': {
         const code = window.prompt('기보 코드를 붙여넣으세요 (BTB1:... )')

@@ -1255,6 +1255,19 @@ svg.board.panning {
   font-weight: 700;
 }
 
+/* 온라인 진영 선택: 버튼을 세로로 꽉 차게 쌓아 또렷하게(선공/후공/코인토스/취소) */
+.modal-actions.online-side {
+  flex-direction: column;
+  width: 100%;
+}
+.modal-actions.online-side button {
+  width: 100%;
+}
+.modal-actions.online-side button:first-child {
+  background: #fef3c7;
+  border-color: #eab308;
+}
+
 @keyframes bee-fade {
   from {
     opacity: 0;
