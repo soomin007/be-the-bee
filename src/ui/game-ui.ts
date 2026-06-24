@@ -376,7 +376,7 @@ export function mountGame(root: HTMLElement): void {
         isHost: boolean
         phase: 'waiting' | 'negotiating' | 'playing'
         mySide: Side
-        proposal: { hostSide: Side; mine: boolean } | null
+        proposal: { hostSide: Side; mine: boolean; toss?: boolean } | null
         peerConnected: boolean // 상대가 지금 접속 중인지(presence). false 면 끊김 표시.
         status: RoomStatus
         conn: RoomConn
@@ -1211,7 +1211,7 @@ export function mountGame(root: HTMLElement): void {
   function onSignal(event: string, payload: Record<string, unknown>): void {
     if (!online) return
     if (event === 'propose') {
-      online.proposal = { hostSide: payload.hostSide as Side, mine: false }
+      online.proposal = { hostSide: payload.hostSide as Side, mine: false, toss: payload.toss === true }
       render() // 협상 모달이 예/아니오 표시
     } else if (event === 'accept') {
       finalizeAgreement(payload.hostSide as Side)
@@ -1320,9 +1320,9 @@ export function mountGame(root: HTMLElement): void {
     const iAmFirst = choice === 'toss' ? Math.random() < 0.5 : choice === 'first'
     const myColor: Side = iAmFirst ? 'yellow' : 'brown' // 노랑=선공
     const hostSide: Side = online.isHost ? myColor : opposite(myColor)
-    online.proposal = { hostSide, mine: true }
-    online.conn.signal('propose', { hostSide })
-    if (choice === 'toss') onlineMsg = `🪙 코인토스 결과 "내가 ${sideLabel(myColor)}" 으로 제안했어요. 상대 동의를 기다려요.`
+    const toss = choice === 'toss'
+    online.proposal = { hostSide, mine: true, toss }
+    online.conn.signal('propose', { hostSide, toss }) // 상대도 코인토스였음을 알도록 플래그 동기화
     render()
   }
 
@@ -2143,6 +2143,9 @@ export function mountGame(root: HTMLElement): void {
   function renderSideNegotiate(): void {
     if (!online) return
     const p = online.proposal
+    // 코인 플립 애니메이션(결과 색 면으로 착지). 양쪽이 같은 결과를 본다(각자 자기 색 면).
+    const coinHtml = (c: Side): string =>
+      `<div class="coin-toss"><div class="coin coin-land-${c}"><div class="coin-face coin-yellow">노랑</div><div class="coin-face coin-brown">갈색</div></div></div>`
     let body: string
     if (p === null) {
       body = `
@@ -2156,14 +2159,16 @@ export function mountGame(root: HTMLElement): void {
     } else if (p.mine) {
       const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
       body = `
-        <div class="modal-sub">내 제안: <b>내가 ${sideLabel(myColor)}</b><br>상대의 응답을 기다리는 중…</div>
+        ${p.toss ? coinHtml(myColor) : ''}
+        <div class="modal-sub">${p.toss ? '🪙 코인토스 결과 — ' : '내 제안: '}<b>내가 ${sideLabel(myColor)}</b><br>상대의 응답을 기다리는 중…</div>
         <div class="modal-actions">
           <button data-act="rejectSide">제안 취소</button>
         </div>`
     } else {
       const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
       body = `
-        <div class="modal-sub">상대가 제안했어요.<br>이대로면 <b>당신은 ${sideLabel(myColor)}</b> 예요.<br>이대로 시작할까요?</div>
+        ${p.toss ? coinHtml(myColor) : ''}
+        <div class="modal-sub">${p.toss ? '🪙 상대가 코인토스했어요! 결과 — ' : '상대가 제안했어요. '}<b>당신은 ${sideLabel(myColor)}</b>.<br>이대로 시작할까요?</div>
         <div class="modal-actions">
           <button data-act="acceptSide">예, 시작</button>
           <button data-act="rejectSide">아니오</button>
@@ -2199,16 +2204,16 @@ export function mountGame(root: HTMLElement): void {
 
   // 사람끼리 무르기 동의: 되돌릴 사람(undoAsk)의 요청을 상대(지금 차례)가 허락/거절.
   function renderUndoAsk(): void {
-    const requester = undoAsk
-    const approver = state.turn // 지금 차례 = 동의자
+    const mover = undoAsk // 방금 둔 사람(되돌릴 수의 주인 = 무르기 1회를 쓰는 쪽)
+    const approver = state.turn // 지금 차례 = 동의해 줄 상대
     modalLayer.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal-card">
           ${BEE_SVG}
-          <div class="modal-title">↩ 무르기 요청</div>
-          <div class="modal-sub">${requester ? PLAYER_LABEL[requester] : ''}가 방금 둔 수를 무르고 싶어해요.<br>${PLAYER_LABEL[approver]}, 허락할까요? (사람끼리는 각자 한 번만)</div>
+          <div class="modal-title">↩ 무르기</div>
+          <div class="modal-sub">방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b> 진영이 둔 수를 무릅니다.<br>상대 <b>${PLAYER_LABEL[approver]}</b> 진영이 동의하나요? (사람끼리는 각자 한 번만)</div>
           <div class="modal-actions">
-            <button data-act="undoGrant">허락</button>
+            <button data-act="undoGrant">동의</button>
             <button data-act="undoDeny">거절</button>
           </div>
         </div>

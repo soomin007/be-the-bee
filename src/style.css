@@ -1506,3 +1506,61 @@ svg.board.panning {
     cursor: pointer;
   }
 }
+
+/* 코인토스 애니메이션(선공·후공 정하기): 결과 색 면으로 착지하는 3D 플립. 양쪽 다 같은 결과를 본다. */
+.coin-toss {
+  display: flex;
+  justify-content: center;
+  margin: 0.1rem 0 0.6rem;
+  perspective: 700px;
+}
+.coin {
+  width: 68px;
+  height: 68px;
+  position: relative;
+  transform-style: preserve-3d;
+}
+.coin-land-yellow {
+  animation: coin-spin-yellow 1.15s cubic-bezier(0.25, 0.6, 0.3, 1) both;
+}
+.coin-land-brown {
+  animation: coin-spin-brown 1.15s cubic-bezier(0.25, 0.6, 0.3, 1) both;
+}
+@keyframes coin-spin-yellow {
+  from {
+    transform: rotateY(0);
+  }
+  to {
+    transform: rotateY(1800deg); /* 5바퀴 → 노랑(앞면) */
+  }
+}
+@keyframes coin-spin-brown {
+  from {
+    transform: rotateY(0);
+  }
+  to {
+    transform: rotateY(1980deg); /* 5.5바퀴 → 갈색(뒷면) */
+  }
+}
+.coin-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  border: 3px solid #b8860b;
+  box-shadow: 0 3px 10px rgba(120, 80, 0, 0.3);
+}
+.coin-yellow {
+  background: radial-gradient(circle at 36% 30%, #ffe082, #f4c430 70%, #c79412);
+  color: #6b4e00;
+}
+.coin-brown {
+  background: radial-gradient(circle at 36% 30%, #a9786b, #6f3529 70%, #4a241c);
+  color: #fde9b0;
+  transform: rotateY(180deg);
+}
