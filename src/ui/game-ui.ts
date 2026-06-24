@@ -377,6 +377,7 @@ export function mountGame(root: HTMLElement): void {
         phase: 'waiting' | 'negotiating' | 'playing'
         mySide: Side
         proposal: { hostSide: Side; mine: boolean; toss?: boolean } | null
+        undoReq: boolean // 내가 무르기를 요청해 상대 동의를 기다리는 중(true 면 대기 모달).
         peerConnected: boolean // 상대가 지금 접속 중인지(presence). false 면 끊김 표시.
         status: RoomStatus
         conn: RoomConn
@@ -436,6 +437,14 @@ export function mountGame(root: HTMLElement): void {
     online === null || (online.phase === 'playing' && state.turn === online.mySide)
   // 입력(보드 클릭·행동 버튼)을 잠가야 하는가: AI 가 두는 중/AI 차례, 또는 온라인 상대 차례/협상 중.
   const inputLocked = (): boolean => aiThinking || aiControls(state.turn) || !myOnlineTurn()
+  // 무르기 버튼/단축키를 쓸 수 있는가. 온라인은 "내가 방금 둠(=상대 차례) + 각자 1회 + 요청 중 아님",
+  // 사람끼리는 "상대가 무르기를 안 썼을 때"(요청자=직전에 둔 사람).
+  const undoEnabled = (): boolean => {
+    if (history.length === 0 || aiThinking) return false
+    if (online)
+      return online.phase === 'playing' && state.turn !== online.mySide && !undoUsed[online.mySide] && !online.undoReq
+    return !(settings.mode === 'hotseat' && undoUsed[opponent(state.turn)])
+  }
   const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
   // 그 진영을 두는 AI 의 난이도(해설은 전문가일 때만). 관전은 색깔별, vsAi 는 단일.
   const aiDifficultyFor = (turn: Player): Difficulty =>
@@ -810,20 +819,19 @@ export function mountGame(root: HTMLElement): void {
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return
     if (infoModal !== null) return
 
-    // 무르기(U)·새 게임(N) 단축키 — 행동 선택 단축키와 같은 결. 온라인은 자체 UI 라 제외.
-    if (!online) {
-      if (e.key === 'u' || e.key === 'U') {
-        if (!aiThinking) {
-          e.preventDefault()
-          onPanelAction('undo')
-        }
-        return
-      }
-      if (e.key === 'n' || e.key === 'N') {
+    // 무르기(U) 단축키 — 온라인 포함(gating 은 onPanelAction 'undo' 가 처리).
+    if (e.key === 'u' || e.key === 'U') {
+      if (!aiThinking) {
         e.preventDefault()
-        onPanelAction('new')
-        return
+        onPanelAction('undo')
       }
+      return
+    }
+    // 새 게임(N) — 온라인은 방을 깨므로 제외(자체 나가기/재대국 UI 사용).
+    if (!online && (e.key === 'n' || e.key === 'N')) {
+      e.preventDefault()
+      onPanelAction('new')
+      return
     }
 
     // 인게임 행동 단축키 (사람 차례에만 — 온라인 상대 차례엔 잠금)
@@ -1237,6 +1245,34 @@ export function mountGame(root: HTMLElement): void {
     } else if (event === 'rematchNo') {
       onlineMsg = '상대가 한 판 더를 거절했어요.'
       render()
+    } else if (event === 'undoReq') {
+      // 상대가 무르기를 요청 → 동의/거절 모달(되돌릴 진영 = payload.side).
+      if (online.phase !== 'playing') return
+      undoAsk = payload.side as Player
+      infoModal = 'undoAsk'
+      render()
+    } else if (event === 'undoOk') {
+      // 내 무르기 요청을 상대가 동의 → 내가 한 수 되돌리고 스냅샷을 방에 반영(상대는 구독으로 동기화).
+      if (!online.undoReq) return // 요청 중이 아니면 무시(지연/중복)
+      online.undoReq = false
+      undoUsed[online.mySide] = true
+      doUndo()
+      pushOnline()
+      notice = '상대가 동의했어요. 한 수 물렀습니다.'
+      render()
+    } else if (event === 'undoNo') {
+      if (!online.undoReq) return
+      online.undoReq = false
+      onlineMsg = '상대가 무르기를 거절했어요.'
+      render()
+    } else if (event === 'undoCancel') {
+      // 요청자가 취소 → 내 동의 모달을 닫는다.
+      if (infoModal === 'undoAsk') {
+        infoModal = null
+        undoAsk = null
+        notice = '상대가 무르기 요청을 취소했어요.'
+        render()
+      }
     }
   }
 
@@ -1249,6 +1285,7 @@ export function mountGame(root: HTMLElement): void {
       phase,
       mySide,
       proposal: null,
+      undoReq: false,
       peerConnected: phase !== 'waiting', // 협상/대국 단계면 상대가 방금 있었음(presence 가 곧 갱신)
       status: phase === 'waiting' ? 'waiting' : phase === 'negotiating' ? 'negotiating' : 'playing',
       conn: connectRoom(roomId, onRoomUpdate, onSignal, onPeer),
@@ -1386,6 +1423,7 @@ export function mountGame(root: HTMLElement): void {
     online.phase = 'playing'
     online.status = 'playing'
     online.proposal = null
+    online.undoReq = false
     infoModal = null
     modalDismissed = false
     lastSyncedSnapshot = encodeSnapshot(snapshot())
@@ -1425,6 +1463,7 @@ export function mountGame(root: HTMLElement): void {
     coachNote = null
     lastMove = null
     modalDismissed = false
+    undoUsed = { yellow: false, brown: false } // 재대국 → 무르기 사용권 초기화
     startTurn()
   }
 
@@ -2075,6 +2114,10 @@ export function mountGame(root: HTMLElement): void {
       renderUndoAsk()
       return
     }
+    if (online && online.undoReq) {
+      renderUndoWait()
+      return
+    }
     if (onlineMsg !== null) {
       renderOnlineMsg(onlineMsg)
       return
@@ -2217,19 +2260,38 @@ export function mountGame(root: HTMLElement): void {
     wireModalButtons()
   }
 
-  // 사람끼리 무르기 동의: 되돌릴 사람(undoAsk)의 요청을 상대(지금 차례)가 허락/거절.
+  // 무르기 동의: 되돌릴 사람(undoAsk)의 요청을 상대(지금 차례 = 나)가 허락/거절.
   function renderUndoAsk(): void {
     const mover = undoAsk // 방금 둔 사람(되돌릴 수의 주인 = 무르기 1회를 쓰는 쪽)
     const approver = state.turn // 지금 차례 = 동의해 줄 상대
+    const sub = online
+      ? `상대(<b>${mover ? PLAYER_LABEL[mover] : ''}</b>)가 방금 둔 수를 무르려고 해요.<br>동의할까요? (각자 한 번만)`
+      : `방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b>이 둔 수를 무릅니다.<br>상대(<b>${PLAYER_LABEL[approver]}</b>) 동의가 필요합니다. (사람끼리는 각자 한 번만)`
     modalLayer.innerHTML = `
       <div class="modal-backdrop">
         <div class="modal-card">
           ${BEE_SVG}
           <div class="modal-title">↩ 무르기</div>
-          <div class="modal-sub">방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b>이 둔 수를 무릅니다.<br>상대(<b>${PLAYER_LABEL[approver]}</b>) 동의가 필요합니다. (사람끼리는 각자 한 번만)</div>
+          <div class="modal-sub">${sub}</div>
           <div class="modal-actions">
             <button data-act="undoGrant">동의</button>
             <button data-act="undoDeny">거절</button>
+          </div>
+        </div>
+      </div>`
+    wireModalButtons()
+  }
+
+  // 온라인: 내가 무르기를 요청하고 상대 동의를 기다리는 대기 모달(취소 가능).
+  function renderUndoWait(): void {
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          ${BEE_SVG}
+          <div class="modal-title">↩ 무르기 요청함</div>
+          <div class="modal-sub">상대에게 무르기를 요청했어요.<br>상대가 동의하면 한 수 물러요. 잠시 기다려 주세요.</div>
+          <div class="modal-actions">
+            <button data-act="undoCancelReq">요청 취소</button>
           </div>
         </div>
       </div>`
@@ -2387,7 +2449,7 @@ export function mountGame(root: HTMLElement): void {
         </div>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드</button>
         <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">무한 모드</button>
-        <button data-act="undo" ${history.length > 0 && !aiThinking && !online && !(settings.mode === 'hotseat' && undoUsed[opponent(state.turn)]) ? '' : 'disabled'}>무르기<kbd>U</kbd></button>
+        <button data-act="undo" ${undoEnabled() ? '' : 'disabled'}>무르기<kbd>U</kbd></button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
         <button data-act="new">새 게임<kbd>N</kbd></button>
         <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">${ICON.share} 공유하기</button>
@@ -2697,6 +2759,22 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'undo':
         if (history.length === 0) break
+        if (online) {
+          // 온라인: 내가 방금 둔 수(=지금 상대 차례)만 무를 수 있다. 상대 동의 필요, 각자 1회.
+          if (online.phase !== 'playing') break
+          if (state.turn === online.mySide) {
+            notice = '내 차례에는 무를 수 없어요. 내가 둔 직후(상대 차례)에 무르기를 요청하세요.'
+            break
+          }
+          if (undoUsed[online.mySide]) {
+            notice = '무르기를 이미 썼어요(각자 한 번만).'
+            break
+          }
+          if (online.undoReq) break // 이미 요청 중
+          online.undoReq = true
+          online.conn.signal('undoReq', { side: online.mySide }) // 상대 화면에 동의 모달
+          break
+        }
         if (settings.mode === 'hotseat') {
           // 사람끼리: 직전에 둔 사람(되돌릴 사람)이 요청자, 지금 차례가 동의자. 각자 1회 한정.
           const requester = opponent(state.turn)
@@ -2711,6 +2789,13 @@ export function mountGame(root: HTMLElement): void {
         doUndo()
         break
       case 'undoGrant':
+        if (online) {
+          // 온라인 동의: 되돌리기는 요청자가 수행+스냅샷 push 하고, 나는 구독으로 동기화된다(이중 되돌리기 방지).
+          online.conn.signal('undoOk')
+          undoAsk = null
+          infoModal = null
+          break
+        }
         if (undoAsk !== null) {
           undoUsed[undoAsk] = true
           undoAsk = null
@@ -2719,9 +2804,20 @@ export function mountGame(root: HTMLElement): void {
         }
         break
       case 'undoDeny':
+        if (online) {
+          online.conn.signal('undoNo')
+        }
         undoAsk = null
         infoModal = null
         notice = '무르기를 거절했어요.'
+        break
+      case 'undoCancelReq':
+        // 온라인: 요청자가 대기 중 취소 → 상대 모달도 닫게 신호.
+        if (online && online.undoReq) {
+          online.undoReq = false
+          online.conn.signal('undoCancel')
+          notice = '무르기 요청을 취소했어요.'
+        }
         break
       case 'closeModal':
         modalDismissed = true
