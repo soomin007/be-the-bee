@@ -3,6 +3,7 @@
 
 import { hex, type Hex } from '../engine/index'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel } from './layout'
+import { PIECE_DEFS, pieceMarkup } from './piece-art'
 
 const SEEN_KEY = 'be-the-bee/tutorial-seen'
 export function tutorialSeen(): boolean {
@@ -26,7 +27,6 @@ const TILE: Record<Color, { mid: string; stroke: string }> = {
   yellow: { mid: '#f0c531', stroke: '#6e5114' },
   brown: { mid: '#97581d', stroke: '#43280a' },
 }
-const STRIPE: Record<Color, string> = { yellow: '#3a2600', brown: '#241200' }
 
 // 그라데이션·글로우 정의(튜토리얼 전용 id, 한 번에 한 SVG 만 DOM 에 있음).
 const DEFS = `
@@ -37,15 +37,10 @@ const DEFS = `
     <radialGradient id="tw-brown" cx="38%" cy="32%" r="75%">
       <stop offset="0%" stop-color="#c4843a"/><stop offset="55%" stop-color="#97581d"/><stop offset="100%" stop-color="#744213"/>
     </radialGradient>
-    <radialGradient id="tb-yellow" cx="35%" cy="28%" r="72%">
-      <stop offset="0%" stop-color="#f4cf73"/><stop offset="55%" stop-color="#e0a106"/><stop offset="100%" stop-color="#9a6f07"/>
-    </radialGradient>
-    <radialGradient id="tb-brown" cx="35%" cy="28%" r="72%">
-      <stop offset="0%" stop-color="#b88a52"/><stop offset="55%" stop-color="#8a5418"/><stop offset="100%" stop-color="#5e3910"/>
-    </radialGradient>
     <filter id="tutGlow" x="-60%" y="-60%" width="220%" height="220%">
       <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f59e0b" flood-opacity="0.95"/>
     </filter>
+    ${PIECE_DEFS}
   </defs>`
 
 function px(h: Hex): { x: number; y: number } {
@@ -67,33 +62,16 @@ function tile(h: Hex, color: Color, opt: TileOpt = {}): string {
   return `<polygon class="tut-pop" points="${pts}" fill="url(#tw-${color})" stroke="${TILE[color].stroke}" stroke-width="2"${filt}${style}/>`
 }
 
-// 말 = 벌(바닥 그림자 + 구형 음영 + 날개 + 줄무늬 + 광택). 게임 렌더와 같은 구성.
+// 말 = 게임 보드와 동일한 "벌+원판" 에셋(piece-art 공유). 원판 반지름은 게임과 같은 HEX_SIZE*0.6.
 function bee(h: Hex, color: Color, delay = 0): string {
   const c = px(h)
-  const r = S * 0.52
-  const st = STRIPE[color]
-  return `<g class="tut-pop" style="animation-delay:${delay}ms">
-    <ellipse cx="${c.x + r * 0.28}" cy="${c.y + r * 0.86}" rx="${r * 0.9}" ry="${r * 0.24}" fill="#000" opacity="0.18"/>
-    <ellipse cx="${c.x - r * 0.34}" cy="${c.y - r * 0.5}" rx="${r * 0.3}" ry="${r * 0.17}" fill="#fff" opacity="0.8" stroke="${st}" stroke-width="1" transform="rotate(-22 ${c.x - r * 0.34} ${c.y - r * 0.5})"/>
-    <ellipse cx="${c.x + r * 0.34}" cy="${c.y - r * 0.5}" rx="${r * 0.3}" ry="${r * 0.17}" fill="#fff" opacity="0.8" stroke="${st}" stroke-width="1" transform="rotate(22 ${c.x + r * 0.34} ${c.y - r * 0.5})"/>
-    <circle cx="${c.x}" cy="${c.y}" r="${r}" fill="url(#tb-${color})" stroke="#fff" stroke-width="2.5"/>
-    <line x1="${c.x - r * 0.6}" y1="${c.y - r * 0.2}" x2="${c.x + r * 0.6}" y2="${c.y - r * 0.2}" stroke="${st}" stroke-width="${r * 0.26}" stroke-linecap="round"/>
-    <line x1="${c.x - r * 0.72}" y1="${c.y + r * 0.16}" x2="${c.x + r * 0.72}" y2="${c.y + r * 0.16}" stroke="${st}" stroke-width="${r * 0.26}" stroke-linecap="round"/>
-    <ellipse cx="${c.x - r * 0.34}" cy="${c.y - r * 0.4}" rx="${r * 0.26}" ry="${r * 0.16}" fill="#fff" opacity="0.5" transform="rotate(-32 ${c.x - r * 0.34} ${c.y - r * 0.4})"/>
-  </g>`
+  return pieceMarkup(c.x, c.y, S * 0.6, color, { delay })
 }
 
-// 여왕벌 = 벌 + 왕관.
+// 여왕벌 = 벌 + 머리 왕관 + 원판 빨간 링(게임과 동일).
 function queen(h: Hex, color: Color, delay = 0): string {
   const c = px(h)
-  const r = S * 0.52
-  const crownY = c.y - r * 1.05
-  const crown = `<g class="tut-pop" style="animation-delay:${delay + 120}ms">
-    <path d="M${c.x - r * 0.6} ${crownY + r * 0.34} L${c.x - r * 0.6} ${crownY - r * 0.1} L${c.x - r * 0.28} ${crownY + r * 0.16} L${c.x} ${crownY - r * 0.22} L${c.x + r * 0.28} ${crownY + r * 0.16} L${c.x + r * 0.6} ${crownY - r * 0.1} L${c.x + r * 0.6} ${crownY + r * 0.34} Z"
-      fill="#ffd54a" stroke="#b8860b" stroke-width="1.5" stroke-linejoin="round"/>
-    <circle cx="${c.x}" cy="${crownY - r * 0.06}" r="2.2" fill="#ef4444"/>
-  </g>`
-  return bee(h, color, delay) + crown
+  return pieceMarkup(c.x, c.y, S * 0.6, color, { delay, queen: true })
 }
 
 // 꽃가루 반짝(승리 연출), center 둘레로 튀는 점들(무한 반복).
