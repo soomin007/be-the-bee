@@ -8,6 +8,15 @@
 
 ## 2026-06-24
 
+### 멀티플레이: Supabase 실시간 필터(id=eq.코드)가 언더스코어 든 id 에서 이벤트 미수신
+- **증상**: 방 생성·RLS·구독은 되는데 `postgres_changes` UPDATE 이벤트가 구독자에게 안 옴.
+  필터 없이 구독하면 INSERT/UPDATE 둘 다 정상 수신 → 테이블 Realtime 은 정상.
+- **원인**: 점검용 테스트 방 id 를 `__MPTEST__`(언더스코어 포함)로 썼는데, Supabase 서버측 필터
+  `filter: id=eq.__MPTEST__` 가 그 값을 못 맞춰 이벤트가 안 옴. 평범한 코드(`ABC234`)면 정상.
+- **재발 방지**: 방 코드(필터 키)는 **영문 대문자+숫자만**(roomCode 의 32자 알파벳). 언더스코어·특수
+  문자 금지. 실시간이 안 오면 ① 필터 빼고 구독해 테이블 Realtime 여부부터 가르고, ② 그다음 필터 값
+  형식을 의심한다. (게임 동기화는 BTB1 스냅샷 문자열로 — inf/qn 도 보존됨, game-save.ts.)
+
 ### CSS: 필 스위치 노브가 안 움직이고 색만 바뀜 — background-position calc 수렴
 - **증상**: 설정 토글이 "모양만 스위치"고 켜고 꺼도 노브(흰 원)가 좌우로 안 움직이고 배경색만 바뀜.
 - **원인**: 노브를 `::after` 의 `background-image`(radial-gradient)로 그리고 위치를 `background-position`
