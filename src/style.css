@@ -173,7 +173,7 @@ svg.board.panning {
 }
 
 .panel {
-  width: 320px;
+  width: 384px;
   flex: none;
   padding: 1.25rem;
   border-right: 1px solid #e6dcc3;
@@ -410,35 +410,51 @@ svg.board.panning {
   border-color: #ecdfbe;
 }
 
-/* 토글 = 필 스위치 (data-act 가 toggle* 인 on/off 버튼. 위치 토글 toggleActionPos 는 제외).
-   라벨+스위치가 편하게 들어가도록 한 줄 전체 폭을 쓴다(좁은 2열에서 라벨이 접히지 않게). */
+/* 토글 = 진짜 좌우로 미끄러지는 필 스위치 (data-act 가 toggle* 인 on/off 버튼. 위치 토글
+   toggleActionPos 는 위/아래라 제외 → 카드 유지). 2열 그리드 칸 안에 들어가도록 오른쪽에 스위치
+   자리를 padding 으로 비우고, 트랙(::before)·노브(::after)를 절대배치해 flex 라벨과 겹치지 않게 한다.
+   노브는 right 값을 바꿔 실제로 슬라이드한다(예전 background-position 방식은 off/on 위치가
+   같은 값으로 수렴해 색만 바뀌고 안 움직였음 — known_issues). */
 .settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"]) {
-  grid-column: 1 / -1;
+  position: relative;
+  padding-right: 48px;
 }
-.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"])::after {
+/* 트랙(알약) */
+.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"])::before {
   content: "";
-  margin-left: auto; /* 아이콘·라벨은 왼쪽, 스위치는 오른쪽 끝으로 */
-  flex: none;
-  width: 38px;
-  height: 22px;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 20px;
   border-radius: 999px;
-  background-color: #ece0c2;
-  background-image: radial-gradient(circle at center, #fff 0 7.5px, transparent 8px);
-  background-repeat: no-repeat;
-  background-size: 22px 22px;
-  background-position: 8px center;
+  background: #ece0c2;
   border: 1px solid #d9c89a;
   box-shadow: inset 0 1px 2px rgba(120, 90, 20, 0.18);
-  transition: background-position 0.18s, background-color 0.18s, border-color 0.18s;
+  transition: background 0.18s, border-color 0.18s;
 }
-.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"]).active {
-  background: linear-gradient(180deg, #fffdf7, #fdf5e4);
-  border-color: #ecdfbe;
+/* 노브(흰 원) — off 일 때 트랙 왼쪽 */
+.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"])::after {
+  content: "";
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(80, 50, 0, 0.3);
+  transition: right 0.18s;
+}
+/* on — 트랙 금색 + 노브가 오른쪽으로 미끄러짐 */
+.settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"]).active::before {
+  background: linear-gradient(180deg, #f0bd3e, #e0a92a);
+  border-color: #c2982f;
 }
 .settings-grid > button[data-act^="toggle"]:not([data-act="toggleActionPos"]).active::after {
-  background-color: #e0a92a;
-  background-position: calc(100% - 8px) center;
-  border-color: #c2982f;
+  right: 10px;
 }
 
 /* 드롭다운 = 셀렉트 필드 (모드·난이도 메뉴 버튼) */
