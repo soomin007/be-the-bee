@@ -7,6 +7,9 @@ const page = await browser.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
+// 튜토리얼 오버레이가 보드/버튼 클릭을 가로채므로 스킵(known_issues: UI 오버레이 추가 후 점검 스크립트).
+await page.evaluate(() => localStorage.setItem('be-the-bee/tutorial-seen', '1'))
+await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('button[data-act="menuMode"]')
 
 async function clickCenter(loc) {
@@ -31,7 +34,7 @@ const before = await page.locator('svg.board circle.piece').count()
 await page.locator('button[data-act="undo"]').click()
 await page.waitForTimeout(900)
 const after = await page.locator('svg.board circle.piece').count()
-const turn = ((await page.locator('.panel .status-header').textContent()) ?? '').trim()
+const turn = ((await page.locator('.board-status .status-header').textContent()) ?? '').trim()
 
 await browser.close()
 const ok = before >= 2 && after === 0 && turn.includes('노랑') && errors.length === 0

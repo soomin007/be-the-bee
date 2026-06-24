@@ -486,6 +486,7 @@ export function mountGame(root: HTMLElement): void {
           <g class="content"></g>
           <g class="fx" pointer-events="none"></g>
         </svg>
+        <div class="board-status"></div>
         <div class="action-bar"></div>
         <div class="board-notes"></div>
       </div>
@@ -503,6 +504,7 @@ export function mountGame(root: HTMLElement): void {
   const boardWrap = root.querySelector('.board-wrap') as HTMLElement
   const actionBar = root.querySelector('.action-bar') as HTMLElement
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
+  const boardStatus = root.querySelector('.board-status') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
 
   // 3D 보드: board-wrap 안에 three.js 캔버스 호스트. settings.board3d 면 SVG 대신 표시한다.
@@ -1430,9 +1432,69 @@ export function mountGame(root: HTMLElement): void {
     }
 
     renderPanel()
+    renderBoardStatus()
     renderActionBar()
     renderBoardNotes()
     renderModal()
+  }
+
+  // 게임 상태(누구 차례·안내·자원·점수)를 설정 패널이 아니라 보드 화면 좌상단 오버레이에 띄운다.
+  // 설정 창에는 진짜 "설정"만 남기기 위함. 복기 중에는 그 수의 진행 상태를 보여준다.
+  function renderBoardStatus(): void {
+    if (replayIndex !== null) {
+      const idx = replayIndex
+      const n = moveLog.length
+      const vs = timeline()[idx]!
+      const sc = totalHiveScores(vs.board)
+      boardStatus.innerHTML = `
+        <div class="status replay">
+          <div class="status-header">복기 ${idx} / ${n} 수</div>
+          <div class="instruction">${describeMove(idx)}</div>
+        </div>
+        <div class="scores">벌집 점수 노랑 ${sc.yellow} : ${sc.brown} 갈색</div>`
+      return
+    }
+    const sc = totalHiveScores(state.board)
+    const supplyLine = (p: Player): string => {
+      const s = state.supplies[p]
+      const tiles = state.infiniteTiles ? '∞' : String(s.tiles)
+      return `${PLAYER_LABEL[p]}: 타일 ${tiles} · 말 ${s.pieces}${s.queenUsed ? ' · 여왕벌✓' : ''}`
+    }
+    let header: string
+    let instruction: string
+    if (state.phase === 'finished' && state.result !== undefined) {
+      if (state.result.kind === 'win') {
+        header = `🏆 ${PLAYER_LABEL[state.result.winner]} 승리!`
+        instruction = '말 5개를 일렬로 연결했습니다.'
+      } else {
+        const w = state.result.winner
+        header = w === 'draw' ? '무승부' : `🏆 ${PLAYER_LABEL[w]} 승리 (점수)`
+        instruction = `타일 소진, 벌집 점수 노랑 ${state.result.scores.yellow} : ${state.result.scores.brown} 갈색`
+      }
+    } else if (aiThinking || aiControls(state.turn)) {
+      header = `${PLAYER_LABEL[state.turn]} 차례`
+      instruction =
+        settings.mode === 'watch'
+          ? watchRunning
+            ? '🤖 AI끼리 관전 중…'
+            : '⏸ 멈춤. ▶ 시작을 누르세요'
+          : '🤖 AI가 생각 중…'
+    } else {
+      header = `${PLAYER_LABEL[state.turn]} 차례`
+      instruction = instructionText()
+    }
+    boardStatus.innerHTML = `
+      <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
+        <div class="status-header">${header}</div>
+        <div class="instruction">${instruction}</div>
+        ${message ? `<div class="message">⚠️ ${message}</div>` : ''}
+        ${notice ? `<div class="notice">✓ ${notice}</div>` : ''}
+      </div>
+      <div class="supplies">
+        <div>${supplyLine('yellow')}</div>
+        <div>${supplyLine('brown')}</div>
+      </div>
+      <div class="scores">벌집 점수 노랑 ${sc.yellow} : ${sc.brown} 갈색</div>`
   }
 
   // 인게임 메시지(경고/훈수 = 위협, 칭찬/지적 = 해설·코칭)를 보드 옆, 행동 버튼의 반대쪽에 띄운다.
@@ -1610,20 +1672,12 @@ export function mountGame(root: HTMLElement): void {
 
   function renderReplayPanel(idx: number): void {
     const n = moveLog.length
-    const tl = timeline()
-    const vs = tl[idx]!
-    const scores = totalHiveScores(vs.board)
     const playing = replayTimer !== null
     const disPrev = idx <= 0 ? 'disabled' : ''
     const disNext = idx >= n ? 'disabled' : ''
     // 이 수의 해설(✓/✗)은 보드 옆 board-notes 에 띄운다(renderBoardNotes). 보드만 봐도 읽히게.
     panel.innerHTML = `
       <h2>🐝 복기</h2>
-      <div class="status replay">
-        <div class="status-header">복기 ${idx} / ${n} 수</div>
-        <div class="instruction">${describeMove(idx)}</div>
-      </div>
-      <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       <div class="replay-nav">
         <button data-act="replayFirst" ${disPrev} title="처음으로">⏮</button>
         <button data-act="replayPrev" ${disPrev} title="이전 수">◀</button>
@@ -1661,36 +1715,7 @@ export function mountGame(root: HTMLElement): void {
       renderReplayPanel(replayIndex)
       return
     }
-    const scores = totalHiveScores(state.board)
-    const supplyLine = (p: Player): string => {
-      const s = state.supplies[p]
-      const tiles = state.infiniteTiles ? '∞' : String(s.tiles)
-      return `${PLAYER_LABEL[p]}: 타일 ${tiles} · 말 ${s.pieces}${s.queenUsed ? ' · 여왕벌✓' : ''}`
-    }
-
-    let header: string
-    let instruction: string
-    if (state.phase === 'finished' && state.result !== undefined) {
-      if (state.result.kind === 'win') {
-        header = `🏆 ${PLAYER_LABEL[state.result.winner]} 승리!`
-        instruction = '말 5개를 일렬로 연결했습니다.'
-      } else {
-        const w = state.result.winner
-        header = w === 'draw' ? '무승부' : `🏆 ${PLAYER_LABEL[w]} 승리 (점수)`
-        instruction = `타일 소진, 벌집 점수 노랑 ${state.result.scores.yellow} : ${state.result.scores.brown} 갈색`
-      }
-    } else if (aiThinking || aiControls(state.turn)) {
-      header = `${PLAYER_LABEL[state.turn]} 차례`
-      instruction =
-        settings.mode === 'watch'
-          ? watchRunning
-            ? '🤖 AI끼리 관전 중…'
-            : '⏸ 멈춤. ▶ 시작을 누르세요'
-          : '🤖 AI가 생각 중…'
-    } else {
-      header = `${PLAYER_LABEL[state.turn]} 차례`
-      instruction = instructionText()
-    }
+    // 게임 상태(차례·안내·자원·점수)는 보드 좌상단 오버레이(renderBoardStatus)로 옮겼다 — 패널엔 설정만.
 
     // 모드/난이도는 버튼을 누르면 그 밑에 펼쳐지는 메뉴, 나머지는 토글. (보드 아래 액션 바와 분리)
     const menu = (kind: 'mode' | 'difficulty', items: string[]): string =>
@@ -1810,17 +1835,6 @@ export function mountGame(root: HTMLElement): void {
 
     panel.innerHTML = `
       <h2 class="app-title" title="Be the Bee">${ICON.bee} Be the Bee</h2>
-      <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
-        <div class="status-header">${header}</div>
-        <div class="instruction">${instruction}</div>
-        ${message ? `<div class="message">⚠️ ${message}</div>` : ''}
-        ${notice ? `<div class="notice">✓ ${notice}</div>` : ''}
-      </div>
-      <div class="supplies">
-        <div>${supplyLine('yellow')}</div>
-        <div>${supplyLine('brown')}</div>
-      </div>
-      <div class="scores">벌집 점수 노랑 ${scores.yellow} : ${scores.brown} 갈색</div>
       ${settingsSummary}
       ${section('game', '게임', gameGrid)}
       ${section('view', '화면 · 설정', viewGrid)}

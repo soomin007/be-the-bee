@@ -31,12 +31,13 @@ await clickCenter(page.locator('svg.board polygon[stroke="#16a34a"]').first())
 await page.waitForTimeout(200)
 
 // 검증: 말(circle.piece) 1개가 그려졌고 갈색 차례로 넘어갔는가
+// (차례 표시는 설정 패널이 아니라 보드 좌상단 HUD `.board-status` 로 이동했다)
 const circles = await page.locator('svg.board circle.piece').count()
-const panel = (await page.locator('.panel').textContent()) ?? ''
+const hud = (await page.locator('.board-status').textContent()) ?? ''
 await browser.close()
 
-const ok = circles === 1 && panel.includes('갈색 차례')
-console.log(`circles=${circles}, 갈색차례=${panel.includes('갈색 차례')}, pageerrors=${errors.length}`)
+const ok = circles === 1 && hud.includes('갈색 차례')
+console.log(`circles=${circles}, 갈색차례=${hud.includes('갈색 차례')}, pageerrors=${errors.length}`)
 if (errors.length) console.log('ERRORS:', errors.join(' | '))
 console.log(ok ? 'PASS: 보드 클릭으로 수가 적용됨' : 'FAIL: 클릭이 안 먹힘')
 process.exit(ok ? 0 : 1)
