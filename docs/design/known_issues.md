@@ -235,9 +235,11 @@
   overscroll-behavior:none }` + 높이 고정. 스크롤이 필요한 곳만 자체 스크롤 컨테이너로:
   설정 시트(`.panel`)는 `overflow-y` + `overscroll-behavior:contain`, 보드는 JS pan(`touch-action:none`).
   화면이 100dvh 안에 들어오게 flex(보드 `flex:1; min-height:0`)로 짜면 잠가도 클리핑되지 않는다.
-- **후속(중요)**: iOS Safari 는 **`overflow:hidden` 만으론 부족**하다 — 비스크롤 영역(상단 HUD 등)을
-  드래그하면 페이지가 움직이고 주소창이 끌려 올라간다. 추가로 ① **`body { position:fixed; inset:0 }`**
-  로 페이지 자체를 고정, ② 비스크롤 영역(`.board-wrap`·FAB)에 **`touch-action:none`** 으로 드래그를
-  네이티브 스크롤로 해석하지 않게 한다. **주의**: `touch-action:none` 을 설정 시트의 **공통 조상**
-  (`body`/`#app`/`.game`)에 주면 시트 내부 스크롤까지 막힌다(touch-action 은 조상과 교집합) → 시트
-  밖 요소(`.board-wrap` 등)에만 준다.
+- **후속(중요)**: `overflow:hidden` 만으론 비스크롤 영역(상단 HUD 등) 드래그로 페이지가 움직이고
+  주소창이 끌려 올라간다. 해법은 **비스크롤 영역에 `touch-action:none`** — `.board-wrap`(보드·HUD·
+  안내·행동바)·`.m-fab` 에 주면 드래그를 네이티브 스크롤로 해석하지 않는다(보드 팬은 JS pointer 라
+  유지). **주의1**: `touch-action:none` 을 설정 시트의 **공통 조상**(`body`/`#app`/`.game`)에 주면
+  시트 내부 스크롤까지 막힌다(touch-action 은 조상과 교집합) → 시트 **밖** 요소에만 준다.
+- **함정(겪음)**: 끌림을 막으려 **`body { position:fixed; inset:0 }`** 를 쓰면 `#app` 의 `100dvh` 와
+  어긋나 **실기기에서 화면 비율이 깨진다**(갤럭시 S22+ 확인). position:fixed 로 풀지 말 것 —
+  `touch-action:none` + `overflow/overscroll` 로 충분하고, 화면 크기는 `#app{100dvh}` 단일 기준 유지.
