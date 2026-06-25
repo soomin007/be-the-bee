@@ -393,7 +393,7 @@ export function mountGame(root: HTMLElement): void {
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   // 팝업(결과 모달보다 우선): 여왕벌 설명/보관함 + 온라인 다이얼로그(진영 선택·나가기 확인) + 무르기 동의.
-  let infoModal: 'queen' | 'saves' | 'leaveConfirm' | 'rematchAsk' | 'undoAsk' | null = null
+  let infoModal: 'queen' | 'saves' | 'leaveConfirm' | 'rematchAsk' | 'undoAsk' | 'newOnlineWarn' | null = null
   // 데스크탑 설정창 접기(모바일은 톱니 시트라 무관).
   let panelCollapsed = false
   // 새 게임 설정 마법사(상대 선택 → 분기). null=닫힘. 임시 설정을 들고 있다가 "시작" 때 settings 에 반영
@@ -1523,6 +1523,18 @@ export function mountGame(root: HTMLElement): void {
     online = null
     if (typeof location !== 'undefined' && location.hash) location.hash = ''
   }
+  // 새 게임 설정 마법사를 연다(상대 선택 → 로컬/온라인 또는 AI 난이도·성향). 'new' 와 온라인 경고의 "계속"이 재사용.
+  function openNewGameWizard(): void {
+    newGameWiz = {
+      step: 'opponent',
+      diff: settings.aiDifficulty,
+      persona: settings.personaBrown,
+      diffY: settings.difficultyYellow,
+      personaY: settings.personaYellow,
+      diffB: settings.difficultyBrown,
+      personaB: settings.personaBrown,
+    }
+  }
   // 새 판 공통 마무리(리셋 + 자동저장). 'new' 의 리셋과 동일한 결.
   function finishNew(): void {
     notice = ''
@@ -2277,6 +2289,10 @@ export function mountGame(root: HTMLElement): void {
       renderUndoAsk()
       return
     }
+    if (infoModal === 'newOnlineWarn') {
+      renderNewOnlineWarn()
+      return
+    }
     if (online && online.undoReq) {
       renderUndoWait()
       return
@@ -2471,6 +2487,22 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-actions">
             <button data-act="leaveYes">나가기</button>
             <button data-act="leaveNo">계속하기</button>
+          </div>
+        </div>
+      </div>`
+    wireModalButtons()
+  }
+
+  // 온라인 대전 중 "새 게임"을 누르면 방에서 나가게 되므로 먼저 경고.
+  function renderNewOnlineWarn(): void {
+    modalLayer.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          <div class="modal-title">새 게임을 시작할까요?</div>
+          <div class="modal-sub">지금 온라인 대전 중이에요. 새 게임을 시작하면 이 방에서 나가게 되고 상대에게도 알려져요.<br>다시 두려면 같은 초대 링크가 필요해요.</div>
+          <div class="modal-actions">
+            <button data-act="newWarnYes">새 게임 시작</button>
+            <button data-act="newWarnNo">계속 두기</button>
           </div>
         </div>
       </div>`
@@ -3284,16 +3316,20 @@ export function mountGame(root: HTMLElement): void {
         openOnboarding(onboardCtx())
         return
       case 'new':
-        // 바로 리셋하지 않고 설정 마법사를 연다(상대 선택 → 로컬/온라인 또는 AI 난이도·성향).
-        newGameWiz = {
-          step: 'opponent',
-          diff: settings.aiDifficulty,
-          persona: settings.personaBrown,
-          diffY: settings.difficultyYellow,
-          personaY: settings.personaYellow,
-          diffB: settings.difficultyBrown,
-          personaB: settings.personaBrown,
+        // 온라인 방에 있는 동안 새 게임을 누르면 방에서 나가게 되므로 먼저 경고한다(데스크탑·모바일 공통).
+        if (online) {
+          infoModal = 'newOnlineWarn'
+          break
         }
+        // 바로 리셋하지 않고 설정 마법사를 연다(상대 선택 → 로컬/온라인 또는 AI 난이도·성향).
+        openNewGameWizard()
+        break
+      case 'newWarnYes': // 온라인 경고에서 "계속" → 마법사 열기(실제 이탈은 로컬/AI/관전 선택 시 leaveOnlineForNew)
+        infoModal = null
+        openNewGameWizard()
+        break
+      case 'newWarnNo': // 온라인 경고에서 "취소" → 방에 그대로 머무름
+        infoModal = null
         break
       case 'togglePanel': // 데스크탑 설정창 접기/펼치기
         panelCollapsed = !panelCollapsed
