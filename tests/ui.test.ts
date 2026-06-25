@@ -6,6 +6,12 @@ function click(el: Element): void {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 }
 
+// 행동 선택 버튼(①/②) 클릭. 모든 턴이 행동 선택으로 시작한다(첫 턴은 ①이 비활성, ②만 가능).
+function chooseAction(root: HTMLElement, act: 'twoTiles' | 'tileAndPiece'): void {
+  const btn = Array.from(root.querySelectorAll('.action-bar button')).find((b) => b.getAttribute('data-act') === act)
+  if (btn) click(btn)
+}
+
 describe('핫시트 UI (headless DOM)', () => {
   let root: HTMLDivElement
 
@@ -26,13 +32,22 @@ describe('핫시트 UI (headless DOM)', () => {
     expect(root.querySelector('.board-status')!.textContent).toContain('노랑 차례')
   })
 
-  it('선플레이어 첫 턴은 타일+말 안내가 뜬다', () => {
+  it('선플레이어 첫 턴은 행동 ①(타일 2개)이 비활성, ② 선택 시 타일+말 안내가 뜬다', () => {
     mountGame(root)
+    const findAct = (act: string): HTMLButtonElement | undefined =>
+      Array.from(root.querySelectorAll('.action-bar button')).find((b) => b.getAttribute('data-act') === act) as
+        | HTMLButtonElement
+        | undefined
+    // 첫 턴엔 두 버튼이 다 보이되 ①(타일 2개)은 비활성, ②(타일+말)만 가능.
+    expect(findAct('twoTiles')!.disabled).toBe(true)
+    expect(findAct('tileAndPiece')!.disabled).toBe(false)
+    chooseAction(root, 'tileAndPiece')
     expect(root.querySelector('.instruction')!.textContent).toContain('타일+말')
   })
 
   it('프론티어 클릭 → 말 놓기로 첫 수를 두면 갈색 차례로 넘어간다', () => {
     mountGame(root)
+    chooseAction(root, 'tileAndPiece') // 첫 턴 행동 선택(②)
     // 1) 타일 놓을 자리(프론티어): opacity 0.22 점선 폴리곤
     const frontier = Array.from(root.querySelectorAll('polygon')).filter(
       (p) => p.getAttribute('opacity') === '0.22',
@@ -56,6 +71,7 @@ describe('핫시트 UI (headless DOM)', () => {
   it('새 게임 버튼은 초기 상태로 되돌린다', () => {
     mountGame(root)
     // 첫 수 진행
+    chooseAction(root, 'tileAndPiece') // 첫 턴 행동 선택(②)
     const frontier = Array.from(root.querySelectorAll('polygon')).filter(
       (p) => p.getAttribute('opacity') === '0.22',
     )
@@ -82,7 +98,8 @@ describe('핫시트 UI (headless DOM)', () => {
       const vsAiOpt = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'setMode:vsAi')!
       click(vsAiOpt)
 
-      // 사람(노랑) 첫 수: 타일 → 말
+      // 사람(노랑) 첫 수: 행동 선택(②) → 타일 → 말
+      chooseAction(root, 'tileAndPiece')
       const frontier = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('opacity') === '0.22')
       click(frontier[0]!)
       const targets = Array.from(root.querySelectorAll('polygon')).filter((p) => p.getAttribute('stroke') === '#16a34a')

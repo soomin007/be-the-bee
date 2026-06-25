@@ -10,10 +10,17 @@ const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 
 await page.goto(URL, { waitUntil: 'networkidle' })
-// 튜토리얼 오버레이가 첫 클릭을 가로채지 않게 스킵(known_issues 2026-06-22)
-await page.evaluate(() => localStorage.setItem('be-the-bee/tutorial-seen', '1'))
+// 튜토리얼·앱 사용법 온보딩 오버레이가 첫 클릭을 가로채지 않게 둘 다 스킵(known_issues 2026-06-22/25)
+await page.evaluate(() => {
+  localStorage.setItem('be-the-bee/tutorial-seen', '1')
+  localStorage.setItem('be-the-bee/onboarding-seen', '1')
+})
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board polygon')
+
+// 0) 첫 턴도 행동 선택으로 시작 — ②(타일+말) 선택해야 프론티어가 보인다(① 타일 2개는 첫 턴 비활성)
+await clickCenter(page.locator('.action-bar button[data-act="tileAndPiece"]'))
+await page.waitForSelector('svg.board polygon[opacity="0.22"]')
 
 // 셀 중심 픽셀을 실제로 클릭(겹친 요소가 있어도 최상단 핸들러가 onHexClick 처리).
 async function clickCenter(locator) {

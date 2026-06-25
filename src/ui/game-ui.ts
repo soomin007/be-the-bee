@@ -933,7 +933,10 @@ export function mountGame(root: HTMLElement): void {
       return
     }
     const allowed = allowedMoveTypes(state)
-    if (allowed.length === 1 && allowed[0] === 'tileAndPiece') draft = { stage: 'tile', action: 'tileAndPiece' }
+    // 타일을 놓을 수 있는 턴이면 항상 행동 선택지를 보여준다(불가한 건 renderActionBar 가 비활성화).
+    // 첫 턴(②만 가능)·타일 1개 남음(②만)도 버튼이 보여 행동 구조를 일관되게 배운다.
+    // 타일이 아예 없어 '말만' 두는 턴은 선택지가 없으니 곧장 말 놓기로 간다.
+    if (allowed.includes('twoTiles') || allowed.includes('tileAndPiece')) draft = { stage: 'chooseAction' }
     else if (allowed.length === 1 && allowed[0] === 'pieceOnly') draft = { stage: 'piece', action: 'pieceOnly' }
     else draft = { stage: 'chooseAction' }
   }
@@ -2090,8 +2093,12 @@ export function mountGame(root: HTMLElement): void {
     }
     const items: string[] = []
     if (draft.stage === 'chooseAction') {
+      const allowed = allowedMoveTypes(state)
+      const twoOk = allowed.includes('twoTiles')
+      // ① 타일 2개를 못 쓰는 이유(첫 턴이거나 타일이 1개뿐) — 비활성 버튼에 안내.
+      const twoWhy = state.moveNumber === 0 ? '첫 턴에는 타일과 말을 함께 두는 ②만 둘 수 있어요' : '타일이 1개뿐이라 타일 2개는 둘 수 없어요'
       items.push(`<span class="ab-prompt">${PLAYER_LABEL[state.turn]} 차례 · 행동 선택</span>`)
-      items.push(`<button data-act="twoTiles">① 타일 2개<kbd>1</kbd></button>`)
+      items.push(`<button data-act="twoTiles" ${twoOk ? '' : `disabled title="${twoWhy}"`}>① 타일 2개<kbd>1</kbd></button>`)
       items.push(`<button data-act="tileAndPiece">② 타일 + 말<kbd>2</kbd></button>`)
     } else {
       items.push(`<span class="ab-prompt">${instructionText()}</span>`)
@@ -2762,9 +2769,11 @@ export function mountGame(root: HTMLElement): void {
         if (settings.mode !== 'hotseat') openMenu = openMenu === 'difficulty' ? null : 'difficulty'
         break
       case 'twoTiles':
+        if (!allowedMoveTypes(state).includes('twoTiles')) break // 첫 턴·타일1개면 불가(버튼 비활성)
         draft = { stage: 'tile', action: 'twoTiles' }
         break
       case 'tileAndPiece':
+        if (!allowedMoveTypes(state).includes('tileAndPiece')) break
         draft = { stage: 'tile', action: 'tileAndPiece' }
         break
       case 'queen':
