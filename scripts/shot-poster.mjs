@@ -1,7 +1,11 @@
-// 홍보용 포스터(세로 1080x1400, 2x → 2160x2800 PNG) 생성.
-//   node scripts/shot-poster.mjs   →  public/poster.png (배포 URL 로도 공유 가능)
-// dev 서버 불필요(page.setContent). 게임의 실제 말 아트(piece-art 스펙)·꿀 팔레트를 그대로 써서
-// "꿀벌 5목이 완성되는 순간"을 히어로로 삼는다. 외부 이미지 0 — SVG/CSS + 구글폰트만.
+// 홍보용 포스터 생성(여러 포맷). dev 서버 불필요(page.setContent).
+//   node scripts/shot-poster.mjs
+// 게임의 실제 말 아트(piece-art 스펙)·꿀 팔레트를 그대로 써서 "꿀벌 5목 완성" 순간을 히어로로 삼는다.
+// 외부 이미지 0 — SVG/CSS + 구글폰트만. 산출물(public/, 배포 URL 로도 공유 가능):
+//   poster.png            세로 1080x1400 (기본)
+//   poster-instagram.png  인스타 4:5 1080x1350 (피드 권장)
+//   poster-square.png     인스타 1:1 1080x1080
+//   poster-wide.png       가로 16:9 1920x1080 (트위터/유튜브/배너)
 import { chromium } from 'playwright'
 import { readFileSync, mkdirSync } from 'node:fs'
 
@@ -61,11 +65,10 @@ function pieceMarkup(cx, cy, discR, owner, queen = false) {
 }
 
 // ---- 히어로 보드(육각 벌집 + 가운데를 가로지르는 노랑 5목, 꿀빛 글로우) ----
-const R = 78 // hex 중심→꼭짓점
+const R = 78
 const SQ3 = Math.sqrt(3)
 const hx = (q, r) => R * SQ3 * (q + r / 2)
 const hy = (q, r) => R * 1.5 * r
-// pointy-top 육각 꼭짓점
 function hexPts(cx, cy) {
   let p = ''
   for (let i = 0; i < 6; i++) {
@@ -74,7 +77,6 @@ function hexPts(cx, cy) {
   }
   return p.trim()
 }
-// 셀: t=타일색, p=말(없으면 null). 가운데 r=1 줄의 노랑 5개가 승리 라인.
 const CELLS = [
   { q: 0, r: 1, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'y', p: 'y', win: true },
   { q: 2, r: 1, t: 'y', p: 'y', win: true }, { q: 3, r: 1, t: 'y', p: 'y', win: true },
@@ -98,14 +100,12 @@ function boardSvg() {
     const sw = c.win ? 6 : 2.4
     return `<polygon points="${hexPts(x, y)}" fill="url(#${grad})" stroke="${stroke}" stroke-width="${sw}"/>`
   }).join('')
-  // 승리 라인 꿀빛 글로우(타일 위, 말 아래)
   const wins = CELLS.filter((c) => c.win)
   const lineX1 = hx(wins[0].q, wins[0].r), lineX2 = hx(wins[wins.length - 1].q, wins[wins.length - 1].r)
   const lineY = hy(wins[0].q, wins[0].r)
   const glowLine =
     `<line x1="${lineX1}" y1="${lineY}" x2="${lineX2}" y2="${lineY}" stroke="#f97316" stroke-width="${R * 1.25}" stroke-linecap="round" opacity="0.7" filter="url(#softglow)"/>` +
     `<line x1="${lineX1}" y1="${lineY}" x2="${lineX2}" y2="${lineY}" stroke="#ffe39a" stroke-width="${R * 0.3}" stroke-linecap="round" opacity="0.95" filter="url(#softglow)"/>`
-  // 꽃가루 반짝(라인 주변 소수)
   const sparkS = [[lineX1 - 30, lineY - 60], [lineX2 + 24, lineY + 40], [(lineX1 + lineX2) / 2, lineY - 78]]
     .map(([x, y]) => `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="6" fill="#fff1b8"/>`).join('')
   const pieces = CELLS.filter((c) => c.p).map((c) => pieceMarkup(hx(c.q, c.r), hy(c.q, c.r), R * 0.62, c.p === 'y' ? 'yellow' : 'brown', c.q2)).join('')
@@ -124,102 +124,160 @@ function boardSvg() {
   </svg>`
 }
 
-// ---- 포스터 HTML ----
-const poster = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
+// ---- 공유 콘텐츠 조각(레이아웃이 클래스로 크기 제어) ----
+const C = {
+  mascot: `<div class="mascot">${beeMascot}</div>`,
+  wordmark: `<div class="wordmark"><span class="l1">Be the</span><span class="l2">Bee</span></div>`,
+  eyebrow: `<div class="eyebrow">2인 육각 전략 보드게임</div>`,
+  tagline: `<div class="tagline"><div class="big">같은 색 꿀벌 <em>5마리</em>를 한 줄로.</div><div class="sub">벌집의 주인이 되세요.</div></div>`,
+  chips: `<div class="chips">
+      <span class="chip">👥 사람 vs 사람</span>
+      <span class="chip">🤖 AI와 대결</span>
+      <span class="chip">👀 AI 관전</span>
+      <span class="chip">🔗 온라인 초대 대전</span>
+    </div>`,
+  cta: `<div class="cta">▶ 무료 플레이 · <b>soomin007.github.io/be-the-bee</b></div>`,
+  credit: `<div class="credit">원작 보드게임 김수민 · 김재현 · 조주현 &nbsp;|&nbsp; 프로그램 구현 김수민</div>`,
+  board: boardSvg(),
+}
+
+// 공통 head(폰트 + 색 토큰 + 공통 베이스).
+const HEAD = `<meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,900&family=Jua&family=Gothic+A1:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root {
-    --ink: #43290a;        /* 짙은 밀랍(본문/제목) */
-    --ink-soft: #7a4f12;   /* 부드러운 갈색 */
-    --gold: #f4c430;       /* 꿀 */
-    --amber: #d99405;
-    --glow: #f97316;
-    --cream: #fffaef;
-  }
-  html, body { width: 1080px; height: 1400px; }
-  .poster {
-    width: 1080px; height: 1400px; position: relative; overflow: hidden;
+  :root { --ink:#43290a; --ink-soft:#7a4f12; --gold:#f4c430; --amber:#d99405; --glow:#f97316; --cream:#fffaef; }
+  .poster { position: relative; overflow: hidden;
     background: radial-gradient(120% 75% at 50% 8%, #fff5cf 0%, #f7d765 42%, #efbe3a 72%, #e3a722 100%);
-    font-family: 'Gothic A1', 'Malgun Gothic', sans-serif; color: var(--ink);
-    display: flex; flex-direction: column; align-items: center;
-    padding: 86px 80px 64px;
-  }
-  /* 배경 벌집 무늬(아주 옅게) */
+    font-family: 'Gothic A1','Malgun Gothic',sans-serif; color: var(--ink); }
   .bg-hex { position: absolute; background: #6b4a12; opacity: 0.07;
-    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
-  .bg1 { width: 360px; height: 415px; top: -150px; left: -120px; }
-  .bg2 { width: 300px; height: 346px; bottom: 250px; right: -130px; opacity: 0.06; }
-  .bg3 { width: 200px; height: 230px; top: 120px; right: 60px; opacity: 0.05; }
-
-  .top { display: flex; align-items: center; gap: 22px; z-index: 2; }
-  .mascot { width: 116px; height: 116px; flex: none;
-    filter: drop-shadow(0 8px 12px rgba(90,55,5,0.32)); }
-  .wordmark { font-family: 'Fraunces', Georgia, serif; font-weight: 900; line-height: 0.88;
-    letter-spacing: -2px; }
-  .wordmark .l1 { font-size: 80px; color: var(--ink); }
-  .wordmark .l2 { font-size: 80px; color: var(--amber);
-    text-shadow: 0 3px 0 #b9790a, 0 0 1px #5c3c08; }
-  .eyebrow { margin-top: 20px; font-size: 24px; font-weight: 800; letter-spacing: 8px;
-    color: var(--ink-soft); text-transform: none; z-index: 2; }
-
-  .hero { z-index: 2; margin-top: 18px; width: 100%; display: flex; justify-content: center; }
-  .board { width: 960px; height: auto; filter: drop-shadow(0 22px 30px rgba(95,58,8,0.28)); }
-
-  .tagline { z-index: 2; text-align: center; margin-top: 28px; }
-  .tagline .big { font-family: 'Jua', 'Malgun Gothic', sans-serif; font-size: 76px; line-height: 1.04;
-    color: var(--ink); }
-  .tagline .big em { font-style: normal; color: var(--glow);
-    text-shadow: 0 2px 0 #c64f0a; }
-  .tagline .sub { margin-top: 14px; font-family: 'Jua', sans-serif; font-size: 40px; color: var(--ink-soft); }
-
-  .chips { z-index: 2; margin-top: 34px; display: flex; flex-wrap: wrap; gap: 16px 18px;
-    justify-content: center; max-width: 860px; }
-  .chip { font-size: 27px; font-weight: 800; color: var(--ink);
-    background: var(--cream); border: 3px solid #c79a2f; border-radius: 999px;
-    padding: 13px 26px; box-shadow: 0 4px 0 #c79a2f; }
-
-  .foot { z-index: 2; margin-top: auto; width: 100%; display: flex; flex-direction: column;
-    align-items: center; gap: 18px; }
-  .cta { font-size: 34px; font-weight: 800; color: var(--cream); letter-spacing: 0.5px;
-    background: #43290a; border-radius: 999px; padding: 18px 44px;
-    box-shadow: 0 8px 0 rgba(40,24,6,0.35); }
+    clip-path: polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); }
+  .wordmark { font-family:'Fraunces',Georgia,serif; font-weight:900; line-height:0.88; letter-spacing:-2px; display:flex; flex-direction:column; }
+  .wordmark .l2 { color: var(--amber); text-shadow: 0 3px 0 #b9790a, 0 0 1px #5c3c08; }
+  .wordmark .l1 { color: var(--ink); }
+  .eyebrow { font-weight:800; color: var(--ink-soft); }
+  .mascot svg { display:block; filter: drop-shadow(0 8px 12px rgba(90,55,5,0.32)); }
+  .board { display:block; filter: drop-shadow(0 22px 30px rgba(95,58,8,0.28)); height:auto; }
+  .tagline .big { font-family:'Jua','Malgun Gothic',sans-serif; line-height:1.04; color: var(--ink); }
+  .tagline .big em { font-style:normal; color: var(--glow); text-shadow: 0 2px 0 #c64f0a; }
+  .tagline .sub { font-family:'Jua',sans-serif; color: var(--ink-soft); }
+  .chips { display:flex; flex-wrap:wrap; }
+  .chip { font-weight:800; color: var(--ink); background: var(--cream);
+    border:3px solid #c79a2f; border-radius:999px; box-shadow:0 4px 0 #c79a2f; }
+  .cta { font-weight:800; color: var(--cream); background:#43290a; border-radius:999px;
+    box-shadow:0 8px 0 rgba(40,24,6,0.35); }
   .cta b { color: var(--gold); }
-  .credit { font-size: 22px; font-weight: 700; color: var(--ink-soft); text-align: center; }
-</style></head><body>
-  <div class="poster">
+  .credit { font-weight:700; color: var(--ink-soft); }
+</style>`
+
+// 세로(기본·인스타 4:5): w x h 가변.
+function portrait(w, h) {
+  return `<!doctype html><html lang="ko"><head>${HEAD}<style>
+    html,body{width:${w}px;height:${h}px}
+    .poster{width:${w}px;height:${h}px;display:flex;flex-direction:column;align-items:center;padding:80px 80px 60px}
+    .bg1{width:360px;height:415px;top:-150px;left:-120px}
+    .bg2{width:300px;height:346px;bottom:240px;right:-130px;opacity:0.06}
+    .bg3{width:200px;height:230px;top:120px;right:60px;opacity:0.05}
+    .top{display:flex;align-items:center;gap:22px;z-index:2}
+    .mascot{width:112px;height:112px;flex:none}.mascot svg{width:112px;height:112px}
+    .wordmark .l1,.wordmark .l2{font-size:78px}
+    .eyebrow{margin-top:18px;font-size:24px;letter-spacing:8px;z-index:2}
+    .hero{z-index:2;margin-top:20px;width:100%;display:flex;justify-content:center}
+    .board{width:900px}
+    .tagline{z-index:2;text-align:center;margin-top:26px}
+    .tagline .big{font-size:74px}.tagline .sub{margin-top:14px;font-size:40px}
+    .chips{z-index:2;margin-top:32px;gap:16px 18px;justify-content:center;max-width:860px}
+    .chip{font-size:27px;padding:13px 26px}
+    .foot{z-index:2;margin-top:auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:18px}
+    .cta{font-size:33px;padding:18px 42px}.credit{font-size:22px;text-align:center}
+  </style></head><body><div class="poster">
     <div class="bg-hex bg1"></div><div class="bg-hex bg2"></div><div class="bg-hex bg3"></div>
-    <div class="top">
-      <div class="mascot">${beeMascot}</div>
-      <div class="wordmark"><div class="l1">Be the</div><div class="l2">Bee</div></div>
+    <div class="top">${C.mascot}${C.wordmark}</div>
+    ${C.eyebrow}
+    <div class="hero">${C.board}</div>
+    ${C.tagline}${C.chips}
+    <div class="foot">${C.cta}${C.credit}</div>
+  </div></body></html>`
+}
+
+// 정사각 1:1 (인스타 그리드용) — 더 압축.
+function square(w, h) {
+  return `<!doctype html><html lang="ko"><head>${HEAD}<style>
+    html,body{width:${w}px;height:${h}px}
+    .poster{width:${w}px;height:${h}px;display:flex;flex-direction:column;align-items:center;padding:50px 64px 44px}
+    .bg1{width:300px;height:346px;top:-120px;left:-100px}
+    .bg2{width:240px;height:277px;bottom:-90px;right:-90px;opacity:0.06}
+    .top{display:flex;align-items:center;gap:18px;z-index:2}
+    .mascot{width:88px;height:88px;flex:none}.mascot svg{width:88px;height:88px}
+    .wordmark .l1,.wordmark .l2{font-size:62px}
+    .eyebrow{margin-top:12px;font-size:20px;letter-spacing:6px;z-index:2}
+    .hero{z-index:2;margin-top:16px;width:100%;display:flex;justify-content:center}
+    .board{width:680px}
+    .tagline{z-index:2;text-align:center;margin-top:20px}
+    .tagline .big{font-size:56px}.tagline .sub{margin-top:10px;font-size:30px}
+    .chips{z-index:2;margin-top:22px;gap:12px 14px;justify-content:center;max-width:780px}
+    .chip{font-size:23px;padding:10px 20px;border-width:2px;box-shadow:0 3px 0 #c79a2f}
+    .foot{z-index:2;margin-top:auto;width:100%;display:flex;flex-direction:column;align-items:center;gap:13px}
+    .cta{font-size:27px;padding:14px 32px}.credit{font-size:18px;text-align:center}
+  </style></head><body><div class="poster">
+    <div class="bg-hex bg1"></div><div class="bg-hex bg2"></div>
+    <div class="top">${C.mascot}${C.wordmark}</div>
+    ${C.eyebrow}
+    <div class="hero">${C.board}</div>
+    ${C.tagline}${C.chips}
+    <div class="foot">${C.cta}${C.credit}</div>
+  </div></body></html>`
+}
+
+// 가로 16:9 — 좌(문구) / 우(보드) 2단.
+function wide(w, h) {
+  return `<!doctype html><html lang="ko"><head>${HEAD}<style>
+    html,body{width:${w}px;height:${h}px}
+    .poster{width:${w}px;height:${h}px;display:flex;align-items:center;gap:64px;padding:80px 96px}
+    .bg1{width:420px;height:485px;top:-170px;left:-150px}
+    .bg2{width:320px;height:369px;bottom:-150px;right:-120px;opacity:0.06}
+    .bg3{width:180px;height:208px;top:80px;right:760px;opacity:0.05}
+    .left{position:relative;z-index:2;flex:1;display:flex;flex-direction:column;justify-content:center;gap:24px}
+    .top{display:flex;align-items:center;gap:20px}
+    .mascot{width:104px;height:104px;flex:none}.mascot svg{width:104px;height:104px}
+    .wordmark .l1,.wordmark .l2{font-size:78px}
+    .eyebrow{font-size:23px;letter-spacing:7px;margin-top:-8px}
+    .tagline .big{font-size:64px}.tagline .sub{margin-top:12px;font-size:36px}
+    .chips{gap:14px 16px;max-width:720px}
+    .chip{font-size:25px;padding:12px 24px}
+    .foot{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+    .cta{font-size:30px;padding:16px 38px;align-self:flex-start}.credit{font-size:20px}
+    .right{position:relative;z-index:2;flex:none;display:flex;align-items:center}
+    .board{width:860px}
+  </style></head><body><div class="poster">
+    <div class="bg-hex bg1"></div><div class="bg-hex bg2"></div><div class="bg-hex bg3"></div>
+    <div class="left">
+      <div class="top">${C.mascot}${C.wordmark}</div>
+      ${C.eyebrow}${C.tagline}${C.chips}
+      <div class="foot">${C.cta}${C.credit}</div>
     </div>
-    <div class="eyebrow">2인 육각 전략 보드게임</div>
-    <div class="hero">${boardSvg()}</div>
-    <div class="tagline">
-      <div class="big">같은 색 꿀벌 <em>5마리</em>를 한 줄로.</div>
-      <div class="sub">벌집의 주인이 되세요.</div>
-    </div>
-    <div class="chips">
-      <span class="chip">👥 사람 vs 사람</span>
-      <span class="chip">🤖 AI와 대결</span>
-      <span class="chip">👀 AI 관전</span>
-      <span class="chip">🔗 온라인 초대 대전</span>
-    </div>
-    <div class="foot">
-      <div class="cta">▶ 무료 플레이 · <b>soomin007.github.io/be-the-bee</b></div>
-      <div class="credit">원작 보드게임 김수민 · 김재현 · 조주현 &nbsp;|&nbsp; 프로그램 구현 김수민</div>
-    </div>
-  </div>
-</body></html>`
+    <div class="right">${C.board}</div>
+  </div></body></html>`
+}
+
+const FORMATS = [
+  { name: 'poster', html: portrait(1080, 1400), w: 1080, h: 1400 },
+  { name: 'poster-instagram', html: portrait(1080, 1350), w: 1080, h: 1350 },
+  { name: 'poster-square', html: square(1080, 1080), w: 1080, h: 1080 },
+  { name: 'poster-wide', html: wide(1920, 1080), w: 1920, h: 1080 },
+]
 
 mkdirSync('public', { recursive: true })
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 2 })
-await page.setContent(poster, { waitUntil: 'networkidle' })
-try { await page.evaluate(() => document.fonts.ready) } catch {}
-await page.waitForTimeout(250)
-await page.locator('.poster').screenshot({ path: 'public/poster.png' })
+for (const f of FORMATS) {
+  const page = await browser.newPage({ viewport: { width: f.w, height: f.h }, deviceScaleFactor: 2 })
+  await page.setContent(f.html, { waitUntil: 'networkidle' })
+  try { await page.evaluate(() => document.fonts.ready) } catch {}
+  await page.waitForTimeout(250)
+  await page.locator('.poster').screenshot({ path: `public/${f.name}.png` })
+  await page.close()
+  console.log(`saved public/${f.name}.png (${f.w * 2}x${f.h * 2})`)
+}
 await browser.close()
-console.log('saved public/poster.png (2160x2800)')
