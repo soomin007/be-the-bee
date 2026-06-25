@@ -86,13 +86,17 @@ export async function joinRoom(id: string): Promise<Room | null> {
   if (room.host_id === me || room.guest_id === me) return room
   // 다른 사람이 이미 상대 슬롯을 차지 → 만석(관전 미지원).
   if (room.guest_id) return room
+  // 빈 슬롯일 때만 차지(.is guest_id null) — 코드를 단톡방 등에 뿌려 동시에 여러 명이 들어와도
+  // 단 한 명만 슬롯을 얻게 하는 원자적 갱신. 내가 못 얻었으면(0행) 갱신된(만석) 방을 다시 읽어 반환.
   const { data, error } = await supabase
     .from('rooms')
     .update({ guest_id: me, status: 'negotiating', updated_at: new Date().toISOString() })
     .eq('id', id)
+    .is('guest_id', null)
     .select()
-    .single()
+    .maybeSingle()
   if (error) throw error
+  if (!data) return await getRoom(id) // 그 찰나에 다른 사람이 차지 → 호출 측(joinOnline)이 만석으로 거절
   return data as Room
 }
 

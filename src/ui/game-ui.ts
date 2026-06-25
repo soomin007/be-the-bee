@@ -1374,6 +1374,15 @@ export function mountGame(root: HTMLElement): void {
         render()
         return
       }
+      // 만석: 이미 두 명(방장+상대)이 들어찼고 내가 그중 하나가 아니면 입장 거절(관전 미지원).
+      // 코드를 여러 곳에 뿌려 3명+가 들어와도 두 사람만 두고 desync 안 나게.
+      const me = clientId()
+      if (room.host_id !== me && room.guest_id !== me && room.guest_id != null) {
+        message = '이 방은 이미 두 명이 들어차 있어요. 두 명까지만 둘 수 있어요(관전은 아직 없어요).'
+        if (typeof location !== 'undefined' && location.hash) location.hash = '' // 새로고침 재시도 방지
+        render()
+        return
+      }
       lastSyncedSnapshot = room.snapshot
       const s = decodeSnapshot(room.snapshot)
       if (s) {
