@@ -2090,7 +2090,7 @@ export function mountGame(root: HTMLElement): void {
         ? `vs AI · ${DIFF_LABEL[settings.aiDifficulty]}`
         : settings.mode === 'watch'
           ? `AI 관전 · 노랑 ${DIFF_LABEL[settings.difficultyYellow]} / 갈색 ${DIFF_LABEL[settings.difficultyBrown]}`
-          : 'vs 사람'
+          : 'vs 사람 (로컬)'
     boardStatus.innerHTML = `
       ${onlineLine}
       ${oppLabel ? `<div class="opponent">🎮 ${oppLabel}</div>` : ''}
@@ -2664,7 +2664,7 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     const settingsSummary =
       settings.mode === 'hotseat'
-        ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat}</div>`
+        ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat} (${online ? '온라인' : '로컬'})</div>`
         : settings.mode === 'watch'
           ? `<div class="settings-summary">🎮 ${MODE_LABEL.watch} · 노랑 <b>${DIFF_LABEL[settings.difficultyYellow]}</b> / 갈색 <b>${DIFF_LABEL[settings.difficultyBrown]}</b></div>`
           : `<div class="settings-summary">🎮 ${MODE_LABEL[settings.mode]} · 난이도 <b>${DIFF_LABEL[settings.aiDifficulty]}</b></div>`

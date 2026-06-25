@@ -49,7 +49,8 @@ function desktopSteps(ctx: OnboardCtx): Step[] {
       pad: 6,
     },
     {
-      sel: '.action-bar',
+      // 차례 라벨(ab-prompt)부터 ①·② 버튼까지만 감싼다(액션바 전체 폭의 빈 공간은 제외).
+      sel: ['.action-bar .ab-prompt', '.action-bar [data-act="twoTiles"]', '.action-bar [data-act="tileAndPiece"]'],
       title: '👆 수 두는 법',
       body: '내 차례엔 여기서 행동을 골라요.<br>① 타일 2개 두기 · ② 타일 1개 + 말 1개.<br>고른 뒤 판을 클릭해 놓아요.',
     },
