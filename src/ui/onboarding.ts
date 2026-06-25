@@ -33,6 +33,9 @@ export interface OnboardCtx {
 interface Step {
   sel?: string | string[] // 강조할 요소 selector(없으면 중앙 카드). 배열이면 여러 요소를 한 번에 감싼다.
   title: string
+  // 본문. 줄바꿈은 반드시 `<br>`로 "문장(구) 단위"로만 — 한 줄이 콜아웃 폭(min(94vw,26rem))을 넘어
+  // 문장 중간에서 잘리지 않게. 한 `<br>` 구간은 한글 ~18자 이내가 안전(데스크탑·모바일 공통).
+  // 점검: scripts 로 단계별 .coach-body 높이 = (<br>수+1)×lineHeight 인지 확인(중간 줄바꿈=불일치).
   body: string
   before?: () => void // 단계 진입 직전 처리(모바일 시트 열기 등)
   pad?: number // 스포트라이트 여백(px)
@@ -57,12 +60,12 @@ function desktopSteps(ctx: OnboardCtx): Step[] {
     {
       sel: '.board-status',
       title: '👀 상태 보기',
-      body: '지금 누구 차례인지, 남은 타일과 말, 다음에 할 일 안내가 여기 떠요.',
+      body: '지금 누구 차례인지, 남은 타일과 말,<br>다음에 할 일이 여기에 떠요.',
     },
     {
       sel: '[data-act="menuMode"]',
       title: '⚙️ 모드·난이도',
-      body: '사람끼리 · AI와 대결 · AI 관전 중에서 고르고, AI 난이도와 여왕벌·무한 모드도 여기서 바꿔요.',
+      body: '사람끼리·AI 대결·AI 관전 중에 골라요.<br>난이도·여왕벌·무한 모드도 여기서 바꿔요.',
     },
     {
       sel: ['[data-act="undo"]', '[data-act="new"]'],
@@ -72,7 +75,7 @@ function desktopSteps(ctx: OnboardCtx): Step[] {
     {
       sel: '[data-act="onlineHost"]',
       title: '👥 온라인 대전',
-      body: '방을 만들어 초대 링크를 보내면 멀리 있는 친구와도 함께 둘 수 있어요.',
+      body: '방을 만들어 초대 링크를 보내면<br>멀리 있는 친구와도 함께 둘 수 있어요.',
       when: () => ctx.mpEnabled,
     },
   ]
@@ -100,17 +103,17 @@ function mobileSteps(ctx: OnboardCtx): Step[] {
     {
       sel: ['.m-undo', '.m-new'],
       title: '↩️ 빠른 버튼',
-      body: '왼쪽 아래에서 무르기와 새 게임을 바로 할 수 있어요.',
+      body: '왼쪽 아래에서 무르기와<br>새 게임을 바로 할 수 있어요.',
     },
     {
       sel: '.m-gear',
       title: '⚙️ 설정 열기',
-      body: '오른쪽 위 톱니를 누르면 설정이 열려요. 한번 볼까요?',
+      body: '오른쪽 위 톱니를 누르면<br>설정이 열려요. 한번 볼까요?',
     },
     {
       sel: '.panel',
       title: '⚙️ 설정',
-      body: '여기서 모드(사람끼리·AI·관전)와 난이도, 여왕벌/무한 모드, 테마·사운드, 그리고 온라인 대전을 바꿔요.',
+      body: '여기서 모드·난이도, 여왕벌/무한 모드,<br>테마·사운드, 온라인 대전을 바꿔요.',
       before: () => ctx.setMobileSettings(true),
       pad: 0,
     },
@@ -127,7 +130,7 @@ export function openOnboarding(ctx: OnboardCtx): void {
   // 공통 마무리 장(중앙 카드) — 여기서 게임 규칙으로 이어가거나 바로 시작.
   steps.push({
     title: '🎉 다 됐어요!',
-    body: '이제 직접 해볼까요?<br>게임 규칙이 궁금하면 아래 “게임 규칙 보기”를 눌러요.',
+    body: '이제 직접 해볼까요?<br>게임 규칙이 궁금하면<br>아래 “게임 규칙 보기”를 눌러요.',
     before: () => {
       if (mobile) ctx.setMobileSettings(false) // 마지막 장에선 시트를 닫아 보드가 보이게
     },
@@ -164,6 +167,20 @@ export function openOnboarding(ctx: OnboardCtx): void {
     }
     if (l === Infinity) return null // 보이는 대상이 하나도 없으면 중앙 카드로
     return new DOMRect(l, t, r - l, b - t)
+  }
+
+  // 대상이 스크롤된 컨테이너(설정 패널 등)에 가려 화면 밖이면 보이도록 스크롤한다(루트는 잠겨 있어
+  // 패널만 움직임). 패널을 쭉 내린 뒤 "앱 사용법 다시 보기"로 재오픈해도 패널 단계가 화면 밖에 안 그려지게.
+  function scrollTargetIntoView(step: Step): void {
+    if (!step.sel) return
+    const sels = Array.isArray(step.sel) ? step.sel : [step.sel]
+    for (const sel of sels) {
+      const el = root.querySelector(sel) as HTMLElement | null
+      if (el && getComputedStyle(el).display !== 'none') {
+        el.scrollIntoView({ block: 'center', inline: 'nearest' })
+        return
+      }
+    }
   }
 
   function place(): void {
@@ -204,6 +221,7 @@ export function openOnboarding(ctx: OnboardCtx): void {
   function render(): void {
     const step = steps[idx]!
     step.before?.()
+    scrollTargetIntoView(step) // 대상이 스크롤 밖이면 보이게(패널 스크롤 보정)
     const last = idx === steps.length - 1
     callout.innerHTML = `
       <button class="coach-skip" data-coach="skip" title="닫기">건너뛰기 ✕</button>
