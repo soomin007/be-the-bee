@@ -150,8 +150,12 @@ commit + push origin main** (사용자 지시 없어도 자동). 작은 단위�
 무엇을 왜 했는지의 기록은 `session_logs/`(+ 필요 시 `known_issues.md`)에만 남기면 된다.
 작업을 끝낼 때마다 해당 항목을 계획 문서에서 삭제한다.
 
-## Out of scope (for now)
+## Scope
 
-Online matchmaking, accounts, store packaging, real-time multiplayer. Build
-**local hotseat + vs AI only**. Invite-link rooms may come later, so keep the
-engine serializable and netcode-friendly, but do NOT build any networking yet.
+In scope and built: local hotseat, vs AI, AI 관전, and **online 1:1 via invite-link
+rooms** (Supabase: 방 생성/입장·선공후공 협상·코인토스·이탈/재접속·재대국·온라인 무르기).
+The engine stays JSON-serializable/snapshot-based so the netcode layer is thin (BTB1).
+
+Still out of scope: matchmaking/lobby, accounts/nicknames, spectator links, store
+packaging, native wrapping (Capacitor comes later, no engine rewrite). Don't build
+these unless asked.
