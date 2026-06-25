@@ -7,8 +7,17 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  /* 페이지(루트) 스크롤 금지 — 스크롤은 "설정 시트 안"과 "보드 스와이프(JS pan)"에서만 일어난다.
+     모바일 주소창 노출/숨김·바운스로 화면이 뷰포트보다 커져 어긋나던 현상 차단. */
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
   background: linear-gradient(160deg, #fdf8ec 0%, #f4ead0 100%);
   background-attachment: fixed;
   color: #2b2b2b;
@@ -19,6 +28,7 @@ body {
 #app {
   height: 100vh; /* 폴백(구형) */
   height: 100dvh; /* 모바일 주소창 높이만큼 화면이 잘리지 않게 */
+  overflow: hidden; /* 루트 스크롤 금지(아래 설정 시트·보드만 예외) */
 }
 
 .game {
@@ -259,6 +269,9 @@ svg.board.panning {
   /* 스크롤바를 항상 표시 → 섹션을 펼쳐 길어져도 폭이 안 변해 박스/글자 배치가 흔들리지 않는다. */
   overflow-y: scroll;
   overflow-x: hidden;
+  /* 시트 끝까지 스크롤해도 루트로 전파 안 되게(모바일 바운스 방지) + 관성 스크롤. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
   scrollbar-width: thin; /* Firefox */
   scrollbar-color: #d2b059 #f1e4c5; /* Firefox: thumb track */
@@ -1462,6 +1475,7 @@ svg.board.panning {
   inset: 0;
   z-index: 1000;
   pointer-events: auto; /* 투어 중엔 앱 클릭을 막고 버튼으로만 진행 */
+  touch-action: none; /* 오버레이 위 스와이프/핀치가 페이지로 새지 않게 */
   animation: bee-fade 0.18s ease-out;
 }
 /* 중앙 카드(강조 대상 없음): 화면 전체를 살짝 어둡게(스포트라이트와 같은 톤) */
