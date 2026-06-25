@@ -263,6 +263,35 @@
     min-height: 48px;
     box-shadow: 0 3px 12px rgba(120, 80, 0, 0.28);
   }
+  /* 관전 컨트롤(행동 버튼 자리): ▶/⏸ + 속도 슬라이더. 슬라이더 공간 위해 조금 넓게(왼쪽 FAB 와 안 겹침). */
+  .action-bar:has(.ab-watch-speed) {
+    max-width: 64vw;
+  }
+  .ab-watch-speed {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 0.8rem;
+    background: rgba(255, 253, 247, 0.97);
+    border: 1px solid #e6dcc3;
+    box-shadow: 0 3px 12px rgba(120, 80, 0, 0.22);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #6b5524;
+  }
+  .ab-watch-speed input[type='range'] {
+    flex: 1;
+    min-width: 4.5rem;
+    accent-color: #d2a230;
+  }
+  .ab-speed-ico {
+    font-size: 0.9rem;
+  }
+  .ab-speed-val {
+    min-width: 2.4rem;
+    text-align: right;
+  }
 }
 
 /* 좁은 폰: 설정 1열, HUD 더 작게. */

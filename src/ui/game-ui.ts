@@ -235,7 +235,7 @@ const PERSONA_LABEL: Record<Persona, string> = {
 }
 const PERSONA_DESC: Record<Persona, string> = {
   balanced: '공격과 수비를 고르게',
-  aggressive: '내 말 공격·동시 위협(포크) 우선',
+  aggressive: '내 말 공격·두 곳을 동시에 노리기 우선',
   defensive: '상대 위협 차단·허리 끊기 우선',
   hive: '벌집·타일선 발전을 더 챙김',
 }
@@ -1848,6 +1848,10 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
+    // 벌집 초읽기(카운트다운)가 떠 있으면 플레이 영역 비네트를 "사이렌"으로(턴색 ↔ 빨강 천천히 번갈아).
+    // 데스크탑·모바일 공통(비네트가 board-wrap ::after 라 둘 다 적용).
+    boardWrap.classList.toggle('siren', state.phase === 'playing' && !!(oppCountdown || myCountdown))
+
     // 5) 말 놓을 수 있는 타일 강조(말 단계)
     if (pieceStage) {
       for (const key of Object.keys(board2)) {
@@ -2151,6 +2155,28 @@ export function mountGame(root: HTMLElement): void {
 
   // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
   function renderActionBar(): void {
+    // 모바일 관전: 행동 버튼이 없는 자리(우하단 플로팅)에 ▶/⏸ 와 속도 슬라이더를 둔다(설정 시트 안 열어도 조작).
+    if (settings.mode === 'watch' && mobileShell.active() && state.phase === 'playing' && replayIndex === null) {
+      actionBar.innerHTML = `
+        <button class="watch-toggle ${watchRunning ? 'active' : ''}" data-act="toggleWatch">${watchRunning ? '⏸ 멈춤' : '▶ 시작'}</button>
+        <div class="ab-watch-speed">
+          <span class="ab-speed-ico" aria-hidden="true">⏱️</span>
+          <input type="range" data-ctl="watchDelay" min="100" max="2000" step="100" value="${settings.watchDelay}" aria-label="관전 수 간격">
+          <span class="ab-speed-val">${(settings.watchDelay / 1000).toFixed(1)}초</span>
+        </div>`
+      const toggle = actionBar.querySelector('button')
+      if (toggle) toggle.addEventListener('click', () => onPanelAction('toggleWatch'))
+      const slider = actionBar.querySelector('input[data-ctl="watchDelay"]') as HTMLInputElement | null
+      if (slider) {
+        const val = actionBar.querySelector('.ab-speed-val') as HTMLElement | null
+        slider.addEventListener('input', () => {
+          settings.watchDelay = Number(slider.value)
+          if (val) val.textContent = `${(settings.watchDelay / 1000).toFixed(1)}초`
+        })
+        slider.addEventListener('change', persist)
+      }
+      return
+    }
     if (state.phase !== 'playing' || inputLocked() || draft === null) {
       actionBar.innerHTML = ''
       return
