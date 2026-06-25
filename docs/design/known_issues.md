@@ -224,3 +224,14 @@
 - **재발 방지/다음**: 표본을 키워(예: N≥20) 옛-expert·새-expert·hard·medium 을 교차 측정해 난이도
   단조성(easy<medium<hard<expert)을 재확인할 것. 필요하면 expert beamDepth 를 5로 올리거나 주석을
   코드에 맞춘다. (AI 튜닝은 현재 메인 마일스톤 아님 — 멀티플레이 우선이라 별도 항목으로만 남김.)
+
+### 모바일: 페이지(루트) 스크롤로 fixed 오버레이(온보딩) 어긋남
+- **증상**: 모바일에서 화면이 실제 뷰포트보다 커져 페이지가 세로로 스크롤되고, `position:fixed`+
+  `getBoundingClientRect` 로 위치를 잡는 앱 온보딩(스포트라이트) 콜아웃/구멍이 어긋나 보임.
+- **원인**: `#app`/`.game` 은 `100dvh` 로 맞췄지만 루트(html/body)에 스크롤 차단이 없어, 주소창
+  노출/숨김·바운스·`dvh` 갱신 타이밍에 따라 루트가 스크롤됨. Playwright 에뮬레이션은 이 동적
+  뷰포트 변화를 재현하지 않아(docScrollH==innerH) 정적 분석으로는 안 보임.
+- **재발 방지**: 루트 스크롤은 **명시적으로 잠근다** — `html, body, #app { overflow:hidden;
+  overscroll-behavior:none }` + 높이 고정. 스크롤이 필요한 곳만 자체 스크롤 컨테이너로:
+  설정 시트(`.panel`)는 `overflow-y` + `overscroll-behavior:contain`, 보드는 JS pan(`touch-action:none`).
+  화면이 100dvh 안에 들어오게 flex(보드 `flex:1; min-height:0`)로 짜면 잠가도 클리핑되지 않는다.
