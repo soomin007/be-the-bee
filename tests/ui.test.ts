@@ -82,10 +82,16 @@ describe('핫시트 UI (headless DOM)', () => {
     click(targets[0]!)
     expect(root.querySelectorAll('svg.board circle.piece').length).toBe(1)
 
-    const newBtn = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'new')
-    click(newBtn!)
+    // 새 게임은 설정 마법사를 연다: 새 게임 → 사람과 → 로컬(번갈아) 선택해야 새 핫시트 판으로 리셋.
+    const findAct = (act: string): Element | undefined =>
+      Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === act)
+    click(findAct('new')!)
+    expect(root.querySelector('.modal-backdrop .ng-card')).not.toBeNull() // 마법사 열림
+    click(findAct('ngOpp:human')!)
+    click(findAct('ngWhere:local')!)
     expect(root.querySelector('.board-status')!.textContent).toContain('노랑 차례')
     expect(root.querySelectorAll('svg.board circle.piece').length).toBe(0)
+    expect(root.querySelector('.modal-backdrop')).toBeNull() // 마법사 닫힘
   })
 
   it('vs AI 모드: 사람 첫 수 후 AI(갈색)가 자동으로 둔다', () => {

@@ -392,6 +392,19 @@ export function mountGame(root: HTMLElement): void {
   let infoModal: 'queen' | 'saves' | 'leaveConfirm' | 'rematchAsk' | 'undoAsk' | null = null
   // 데스크탑 설정창 접기(모바일은 톱니 시트라 무관).
   let panelCollapsed = false
+  // 새 게임 설정 마법사(상대 선택 → 분기). null=닫힘. 임시 설정을 들고 있다가 "시작" 때 settings 에 반영
+  // (취소하면 settings 는 안 바뀐다). 온라인 경기를 마친 뒤면 '상대와 재대결' 버튼을 추가로 보여준다.
+  let newGameWiz:
+    | {
+        step: 'opponent' | 'humanWhere' | 'online' | 'ai' | 'watch'
+        diff: Difficulty // vs AI 난이도
+        persona: Persona // vs AI 성향
+        diffY: Difficulty // 관전: 노랑
+        personaY: Persona
+        diffB: Difficulty // 관전: 갈색
+        personaB: Persona
+      }
+    | null = null
   // 사람끼리: 각자 무르기 1회 + 상대 동의. undoUsed=진영별 사용 여부, undoAsk=되돌릴(요청한) 진영.
   let undoUsed: Record<Player, boolean> = { yellow: false, brown: false }
   let undoAsk: Player | null = null
@@ -1486,6 +1499,57 @@ export function mountGame(root: HTMLElement): void {
     startTurn()
   }
 
+  // ---- 새 게임 마법사 시작 동작 -------------------------------------------
+  // 로컬/AI/관전 새 판으로 가기 전, 온라인 방에 있으면 떠난다(상대에게 알리고 세션 종료).
+  function leaveOnlineForNew(): void {
+    if (!online) return
+    stopWaitPoll()
+    void leaveRoom(online.roomId)
+    online.conn.close()
+    online = null
+    if (typeof location !== 'undefined' && location.hash) location.hash = ''
+  }
+  // 새 판 공통 마무리(리셋 + 자동저장). 'new' 의 리셋과 동일한 결.
+  function finishNew(): void {
+    notice = ''
+    resetToFreshGame()
+    autoSaveNow()
+    newGameWiz = null
+    persist()
+    render()
+  }
+  function startLocalNew(): void {
+    leaveOnlineForNew()
+    settings.mode = 'hotseat'
+    watchRunning = false
+    rebuildAi()
+    finishNew()
+  }
+  function startAiNew(): void {
+    if (!newGameWiz) return
+    leaveOnlineForNew()
+    settings.mode = 'vsAi'
+    settings.aiDifficulty = newGameWiz.diff
+    settings.personaBrown = newGameWiz.persona
+    watchRunning = false
+    rebuildAi()
+    finishNew()
+    maybeScheduleAi() // 사람(노랑) 선공이라 AI(갈색)는 안 둠 — 가드만
+  }
+  function startWatchNew(): void {
+    if (!newGameWiz) return
+    leaveOnlineForNew()
+    settings.mode = 'watch'
+    settings.difficultyYellow = newGameWiz.diffY
+    settings.personaYellow = newGameWiz.personaY
+    settings.difficultyBrown = newGameWiz.diffB
+    settings.personaBrown = newGameWiz.personaB
+    watchRunning = true // 관전은 바로 시작(두 AI 자동 진행)
+    rebuildAi()
+    finishNew()
+    maybeScheduleAi()
+  }
+
   function clearAiTimer(): void {
     if (aiTimer !== null) {
       clearTimeout(aiTimer)
@@ -2116,6 +2180,11 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function renderModal(): void {
+    // 새 게임 마법사가 열려 있으면 무엇보다 우선(사용자가 직접 연 설정 흐름).
+    if (newGameWiz) {
+      renderNewGameWizard()
+      return
+    }
     // 설명 팝업(여왕벌 등)이 떠 있으면 결과 모달보다 우선 표시.
     if (infoModal === 'queen') {
       renderQueenInfo()
@@ -2349,6 +2418,74 @@ export function mountGame(root: HTMLElement): void {
           </div>
         </div>
       </div>`
+    wireModalButtons()
+  }
+
+  // 새 게임 설정 마법사: 상대 선택 → (사람=로컬/온라인) / (AI·관전=난이도·성향). 온라인 경기 종료 후엔 재대결.
+  function renderNewGameWizard(): void {
+    const w = newGameWiz
+    if (!w) return
+    const optRow = (prefix: string, items: readonly string[], label: (v: string) => string, sel: string): string =>
+      `<div class="ng-opts">${items
+        .map((v) => `<button data-act="${prefix}:${v}" class="${v === sel ? 'active' : ''}">${label(v)}</button>`)
+        .join('')}</div>`
+    const diffRow = (prefix: string, sel: Difficulty): string => optRow(prefix, DIFFS, (v) => DIFF_LABEL[v as Difficulty], sel)
+    const personaRow = (prefix: string, sel: Persona): string =>
+      `${optRow(prefix, PERSONAS, (v) => PERSONA_LABEL[v as Persona], sel)}<div class="ng-desc">${PERSONA_DESC[sel]}</div>`
+    let inner = ''
+    if (w.step === 'opponent') {
+      const rematch =
+        online && state.phase === 'finished'
+          ? `<button class="ng-rematch" data-act="ngRematch">🔄 방금 상대와 재대결(한 판 더)</button>`
+          : ''
+      inner = `
+        <div class="modal-title">🐝 새 게임</div>
+        <div class="modal-sub">누구와 둘까요?</div>
+        ${rematch}
+        <div class="ng-choices">
+          <button data-act="ngOpp:human">👥 사람과</button>
+          <button data-act="ngOpp:ai">🤖 AI와 대결</button>
+          <button data-act="ngOpp:watch">👀 AI 관전</button>
+        </div>
+        <div class="modal-actions"><button data-act="ngCancel">취소</button></div>`
+    } else if (w.step === 'humanWhere') {
+      inner = `
+        <div class="modal-title">👥 사람과</div>
+        <div class="modal-sub">어디서 둘까요?</div>
+        <div class="ng-choices">
+          <button data-act="ngWhere:local">📱 한 기기에서 번갈아</button>
+          <button data-act="ngWhere:online" ${mpEnabled ? '' : 'disabled title="온라인 기능이 설정되지 않았어요"'}>🔗 온라인으로</button>
+        </div>
+        <div class="modal-actions"><button data-act="ngBack">← 뒤로</button></div>`
+    } else if (w.step === 'online') {
+      inner = `
+        <div class="modal-title">🔗 온라인 대전</div>
+        <div class="modal-sub">방을 만들어 초대하거나, 받은 코드로 입장해요.</div>
+        <div class="ng-choices">
+          <button data-act="ngHost">방 만들기 (초대 링크 복사)</button>
+          <button data-act="ngJoin">초대 코드 입력</button>
+        </div>
+        <div class="modal-actions"><button data-act="ngBack">← 뒤로</button></div>`
+    } else if (w.step === 'ai') {
+      inner = `
+        <div class="modal-title">🤖 AI와 대결</div>
+        <div class="modal-sub">난이도와 성향을 골라요. (당신은 노랑, 선공)</div>
+        <div class="ng-label">난이도</div>${diffRow('ngDiff', w.diff)}
+        <div class="ng-label">성향</div>${personaRow('ngPersona', w.persona)}
+        <div class="modal-actions"><button data-act="ngBack">← 뒤로</button><button class="ng-start" data-act="ngStartAi">시작 🐝</button></div>`
+    } else {
+      inner = `
+        <div class="modal-title">👀 AI 관전</div>
+        <div class="modal-sub">두 AI의 난이도와 성향을 골라요.</div>
+        <div class="ng-side-label">🟡 노랑</div>
+        <div class="ng-label">난이도</div>${diffRow('ngDiffY', w.diffY)}
+        <div class="ng-label">성향</div>${personaRow('ngPersonaY', w.personaY)}
+        <div class="ng-side-label">🟤 갈색</div>
+        <div class="ng-label">난이도</div>${diffRow('ngDiffB', w.diffB)}
+        <div class="ng-label">성향</div>${personaRow('ngPersonaB', w.personaB)}
+        <div class="modal-actions"><button data-act="ngBack">← 뒤로</button><button class="ng-start" data-act="ngStartWatch">시작 🐝</button></div>`
+    }
+    modalLayer.innerHTML = `<div class="modal-backdrop"><div class="modal-card ng-card">${inner}</div></div>`
     wireModalButtons()
   }
 
@@ -2729,6 +2866,49 @@ export function mountGame(root: HTMLElement): void {
       return
     }
 
+    // 새 게임 마법사: 상대 선택·난이도/성향 고르기(임시 상태만 바꾸고 다시 그림). 접두사 ng* 로 모음.
+    if (newGameWiz && act.startsWith('ng')) {
+      if (act === 'ngOpp:human') newGameWiz.step = 'humanWhere'
+      else if (act === 'ngOpp:ai') newGameWiz.step = 'ai'
+      else if (act === 'ngOpp:watch') newGameWiz.step = 'watch'
+      else if (act === 'ngWhere:online') newGameWiz.step = 'online'
+      else if (act === 'ngWhere:local') {
+        startLocalNew()
+        return
+      } else if (act.startsWith('ngDiffY:')) newGameWiz.diffY = act.slice('ngDiffY:'.length) as Difficulty
+      else if (act.startsWith('ngDiffB:')) newGameWiz.diffB = act.slice('ngDiffB:'.length) as Difficulty
+      else if (act.startsWith('ngDiff:')) newGameWiz.diff = act.slice('ngDiff:'.length) as Difficulty
+      else if (act.startsWith('ngPersonaY:')) newGameWiz.personaY = act.slice('ngPersonaY:'.length) as Persona
+      else if (act.startsWith('ngPersonaB:')) newGameWiz.personaB = act.slice('ngPersonaB:'.length) as Persona
+      else if (act.startsWith('ngPersona:')) newGameWiz.persona = act.slice('ngPersona:'.length) as Persona
+      else if (act === 'ngBack') newGameWiz.step = newGameWiz.step === 'online' ? 'humanWhere' : 'opponent'
+      else if (act === 'ngCancel') newGameWiz = null
+      else if (act === 'ngRematch') {
+        newGameWiz = null
+        requestRematch()
+        return
+      } else if (act === 'ngHost') {
+        newGameWiz = null
+        void createOnlineRoom()
+        return
+      } else if (act === 'ngJoin') {
+        const code = window.prompt('받은 방 코드를 입력하세요 (예: ABC234)')
+        if (code && code.trim()) {
+          newGameWiz = null // 입력했을 때만 마법사 닫고 입장(취소면 온라인 화면 유지)
+          void joinOnline(code)
+        } else render()
+        return
+      } else if (act === 'ngStartAi') {
+        startAiNew()
+        return
+      } else if (act === 'ngStartWatch') {
+        startWatchNew()
+        return
+      }
+      render()
+      return
+    }
+
     // 모드/난이도 메뉴 선택
     if (act.startsWith('setMode:')) {
       stopReplayTimer()
@@ -3028,21 +3208,16 @@ export function mountGame(root: HTMLElement): void {
         openOnboarding(onboardCtx())
         return
       case 'new':
-        clearAiTimer()
-        stopReplayTimer()
-        clearFx()
-        replayIndex = null
-        state = freshState()
-        history = []
-        moveLog = []
-        message = ''
-        notice = ''
-        coachNote = null
-        lastMove = null
-        modalDismissed = false
-        undoUsed = { yellow: false, brown: false } // 새 게임 → 무르기 사용권 초기화
-        startTurn()
-        autoSaveNow() // 새 게임도 이어하기 기준점으로 저장
+        // 바로 리셋하지 않고 설정 마법사를 연다(상대 선택 → 로컬/온라인 또는 AI 난이도·성향).
+        newGameWiz = {
+          step: 'opponent',
+          diff: settings.aiDifficulty,
+          persona: settings.personaBrown,
+          diffY: settings.difficultyYellow,
+          personaY: settings.personaYellow,
+          diffB: settings.difficultyBrown,
+          personaB: settings.personaBrown,
+        }
         break
       case 'togglePanel': // 데스크탑 설정창 접기/펼치기
         panelCollapsed = !panelCollapsed
