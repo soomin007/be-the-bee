@@ -21,8 +21,22 @@ body {
   background: linear-gradient(160deg, #fdf8ec 0%, #f4ead0 100%);
   background-attachment: fixed;
   color: #2b2b2b;
+  /* 슬라이더·체크박스 등 폼 컨트롤의 강조색을 꿀빛으로(개별 지정 없으면 이 값 — 관전 속도 등). */
+  accent-color: #d2a230;
   /* 한국어는 단어(어절) 단위로 줄바꿈, 단어 중간에서 잘리지 않게 */
   word-break: keep-all;
+}
+
+/* 드래그 선택·키보드 포커스도 꿀빛 톤으로 마감(커서/버튼 결 통일). */
+::selection {
+  background: #fde68a;
+  color: #5a3a14;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #e0a92a;
+  outline-offset: 2px;
 }
 
 #app {
