@@ -369,6 +369,7 @@ export function mountGame(root: HTMLElement): void {
   let aiComment = '' // 전문가 AI 의 결정적 수 해설, 다음 수에 사라짐
   let coachNote: MoveNote | null = null // 전문가 vs AI: 직전 "내(사람) 수" 코칭(다음 내 수까지 유지)
   let lastBoardNotesHtml = '' // 보드 옆 멘트의 직전 HTML — 같으면 재렌더 생략(등장 애니메이션 재발 방지)
+  let lastModalKey = '' // 모달 상태 서명 — 같으면 재렌더 생략(온라인 안내 등 모달 깜빡임 방지)
   let beeTapCount = 0 // 제목 벌 탭 횟수 — 7번이면 실사 벌(이스터에그) 토글
   // 온라인 대전 세션(방에 참가 중이면, 아니면 null).
   //  - phase: 'waiting'(상대 대기) → 'negotiating'(선공/후공 합의 중) → 'playing'(대국).
@@ -2225,6 +2226,30 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function renderModal(): void {
+    // 모달 상태가 직전과 같으면 다시 그리지 않는다 — render() 가 presence/구독 등으로 자주 불려도
+    // 같은 모달(특히 온라인 안내)을 매번 새로 그려 등장 애니메이션이 재시작·깜빡이던 것을 막는다.
+    // 보관함(saves)은 슬롯 목록이 동적이라 가드에서 제외(항상 갱신).
+    const resK = state.result
+    const modalKey = newGameWiz
+      ? `wiz:${newGameWiz.step}:${newGameWiz.diff}:${newGameWiz.persona}:${newGameWiz.diffY}:${newGameWiz.personaY}:${newGameWiz.diffB}:${newGameWiz.personaB}`
+      : infoModal === 'saves'
+        ? `saves:${beeTapCount}:${Math.random()}` // 동적(슬롯 목록) → 가드 안 함
+        : infoModal === 'undoAsk'
+          ? `undoAsk:${undoAsk ?? ''}`
+          : infoModal
+            ? `info:${infoModal}`
+            : online && online.undoReq
+              ? 'undoWait'
+              : onlineMsg
+                ? `msg:${onlineMsg}`
+                : online && online.phase === 'negotiating'
+                  ? `nego:${online.proposal ? `${online.proposal.hostSide}:${online.proposal.mine}:${online.proposal.toss ?? ''}` : 'none'}`
+                  : state.phase === 'finished' && resK !== undefined && !modalDismissed
+                    ? `result:${resK.kind}` // 종료 결과는 고정이라 kind 만으로 충분
+                    : 'none'
+    if (modalKey === lastModalKey) return
+    lastModalKey = modalKey
+
     // 새 게임 마법사가 열려 있으면 무엇보다 우선(사용자가 직접 연 설정 흐름).
     if (newGameWiz) {
       renderNewGameWizard()
