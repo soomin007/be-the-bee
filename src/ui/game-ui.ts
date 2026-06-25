@@ -2018,6 +2018,8 @@ export function mountGame(root: HTMLElement): void {
     renderActionBar()
     renderBoardNotes()
     renderModal()
+    // 모달(새 게임 마법사·결과·온라인 등)이 떠 있으면 모바일 FAB·행동 버튼을 숨긴다(모달 위로 떠 글씨 가림 방지).
+    gameEl.classList.toggle('modal-open', modalLayer.childElementCount > 0)
     applyTurnTint() // 차례 색 비네트(공통)
     mobileShell.afterRender() // 모바일: 아코디언 접힘·하단 안내 배너 재맞춤(데스크탑 무동작)
   }

@@ -249,6 +249,12 @@
   .game.msettings-open .m-status {
     display: none;
   }
+  /* 모달(새 게임 마법사·결과 등)이 떠 있으면 FAB·행동바·배너 숨김 — 모달 위로 떠 글씨 가리는 것 방지. */
+  .game.modal-open .m-fab,
+  .game.modal-open .action-bar,
+  .game.modal-open .m-status {
+    display: none;
+  }
 
   /* === 행동 선택 = 우하단 플로팅(FAB). 안내는 .m-status 가 보여줌 === */
   .action-bar {

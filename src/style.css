@@ -1127,7 +1127,7 @@ svg.board.panning {
   background: rgba(0, 0, 0, 0.45);
   display: grid;
   place-items: center;
-  z-index: 20;
+  z-index: 70; /* 모바일 FAB(50)·닫기(60)·행동바(30) 위로 — 모달이 항상 맨 앞 */
   animation: bee-fade 0.2s ease-out;
 }
 
