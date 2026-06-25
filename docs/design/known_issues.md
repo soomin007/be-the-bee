@@ -235,3 +235,9 @@
   overscroll-behavior:none }` + 높이 고정. 스크롤이 필요한 곳만 자체 스크롤 컨테이너로:
   설정 시트(`.panel`)는 `overflow-y` + `overscroll-behavior:contain`, 보드는 JS pan(`touch-action:none`).
   화면이 100dvh 안에 들어오게 flex(보드 `flex:1; min-height:0`)로 짜면 잠가도 클리핑되지 않는다.
+- **후속(중요)**: iOS Safari 는 **`overflow:hidden` 만으론 부족**하다 — 비스크롤 영역(상단 HUD 등)을
+  드래그하면 페이지가 움직이고 주소창이 끌려 올라간다. 추가로 ① **`body { position:fixed; inset:0 }`**
+  로 페이지 자체를 고정, ② 비스크롤 영역(`.board-wrap`·FAB)에 **`touch-action:none`** 으로 드래그를
+  네이티브 스크롤로 해석하지 않게 한다. **주의**: `touch-action:none` 을 설정 시트의 **공통 조상**
+  (`body`/`#app`/`.game`)에 주면 시트 내부 스크롤까지 막힌다(touch-action 은 조상과 교집합) → 시트
+  밖 요소(`.board-wrap` 등)에만 준다.
