@@ -31,7 +31,7 @@ export interface OnboardCtx {
 }
 
 interface Step {
-  sel?: string // 강조할 요소 selector(없으면 화면 중앙 카드)
+  sel?: string | string[] // 강조할 요소 selector(없으면 중앙 카드). 배열이면 여러 요소를 한 번에 감싼다.
   title: string
   body: string
   before?: () => void // 단계 진입 직전 처리(모바일 시트 열기 등)
@@ -41,36 +41,36 @@ interface Step {
 
 function desktopSteps(ctx: OnboardCtx): Step[] {
   return [
-    { title: '👋 환영해요!', body: '이 앱을 어떻게 쓰는지 30초만 함께 볼게요.<br>화살표 키로도 넘길 수 있어요.' },
+    { title: '🐝 환영해요!', body: '이 앱을 어떻게 쓰는지 30초만 함께 볼게요.<br>화살표 키로도 넘길 수 있어요.' },
     {
       sel: '.board-wrap',
-      title: '🐝 게임판',
+      title: '🍯 게임판',
       body: '여기에 타일과 말이 놓여요.<br>휠로 확대·축소, 드래그로 이동해요.',
       pad: 6,
     },
     {
       sel: '.action-bar',
-      title: '🎯 수 두는 법',
+      title: '👆 수 두는 법',
       body: '내 차례엔 여기서 행동을 골라요.<br>① 타일 2개 두기 · ② 타일 1개 + 말 1개.<br>고른 뒤 판을 클릭해 놓아요.',
     },
     {
       sel: '.board-status',
-      title: '📊 상태 보기',
+      title: '👀 상태 보기',
       body: '지금 누구 차례인지, 남은 타일과 말, 다음에 할 일 안내가 여기 떠요.',
     },
     {
       sel: '[data-act="menuMode"]',
-      title: '🎮 모드·난이도',
+      title: '⚙️ 모드·난이도',
       body: '사람끼리 · AI와 대결 · AI 관전 중에서 고르고, AI 난이도와 여왕벌·무한 모드도 여기서 바꿔요.',
     },
     {
-      sel: '[data-act="undo"]',
-      title: '↩ 게임 관리',
+      sel: ['[data-act="undo"]', '[data-act="new"]'],
+      title: '↩️ 게임 관리',
       body: '무르기(U)·새 게임(N)·복기·공유·저장 버튼이 모여 있어요.',
     },
     {
       sel: '[data-act="onlineHost"]',
-      title: '🔗 온라인 대전',
+      title: '👥 온라인 대전',
       body: '방을 만들어 초대 링크를 보내면 멀리 있는 친구와도 함께 둘 수 있어요.',
       when: () => ctx.mpEnabled,
     },
@@ -79,26 +79,26 @@ function desktopSteps(ctx: OnboardCtx): Step[] {
 
 function mobileSteps(ctx: OnboardCtx): Step[] {
   return [
-    { title: '👋 환영해요!', body: '이 앱을 어떻게 쓰는지 30초만 함께 볼게요.' },
+    { title: '🐝 환영해요!', body: '이 앱을 어떻게 쓰는지 30초만 함께 볼게요.' },
     {
       sel: '.board-wrap',
-      title: '🐝 게임판',
+      title: '🍯 게임판',
       body: '여기에 타일과 말이 놓여요.<br>두 손가락으로 확대, 한 손가락으로 이동해요.',
       pad: 4,
     },
     {
       sel: '.board-status',
-      title: '📊 상태 보기',
+      title: '👀 상태 보기',
       body: '맨 위 줄에 누구 차례인지, 누구와 두는지 떠요.',
     },
     {
       sel: '.action-bar',
-      title: '🎯 수 두는 법',
+      title: '👆 수 두는 법',
       body: '내 차례엔 오른쪽 아래 버튼으로 행동을 골라요.<br>① 타일 2개 · ② 타일 + 말.<br>고른 뒤 판을 탭해 놓아요.',
     },
     {
-      sel: '.m-undo',
-      title: '↩ 빠른 버튼',
+      sel: ['.m-undo', '.m-new'],
+      title: '↩️ 빠른 버튼',
       body: '왼쪽 아래에서 무르기와 새 게임을 바로 할 수 있어요.',
     },
     {
@@ -108,7 +108,7 @@ function mobileSteps(ctx: OnboardCtx): Step[] {
     },
     {
       sel: '.panel',
-      title: '🎮 설정',
+      title: '⚙️ 설정',
       body: '여기서 모드(사람끼리·AI·관전)와 난이도, 여왕벌/무한 모드, 테마·사운드, 그리고 온라인 대전을 바꿔요.',
       before: () => ctx.setMobileSettings(true),
       pad: 0,
@@ -125,7 +125,7 @@ export function openOnboarding(ctx: OnboardCtx): void {
   const steps = (mobile ? mobileSteps(ctx) : desktopSteps(ctx)).filter((s) => s.when?.() ?? true)
   // 공통 마무리 장(중앙 카드) — 여기서 게임 규칙으로 이어가거나 바로 시작.
   steps.push({
-    title: '✨ 다 됐어요!',
+    title: '🎉 다 됐어요!',
     body: '이제 직접 해볼까요?<br>게임 규칙이 궁금하면 아래 “게임 규칙 보기”를 눌러요.',
     before: () => {
       if (mobile) ctx.setMobileSettings(false) // 마지막 장에선 시트를 닫아 보드가 보이게
@@ -144,13 +144,25 @@ export function openOnboarding(ctx: OnboardCtx): void {
 
   function targetRect(step: Step): DOMRect | null {
     if (!step.sel) return null
-    const el = root.querySelector(step.sel) as HTMLElement | null
-    if (!el) return null
-    const cs = getComputedStyle(el)
-    if (cs.display === 'none' || cs.visibility === 'hidden') return null
-    const r = el.getBoundingClientRect()
-    if (r.width < 2 || r.height < 2) return null
-    return r
+    const sels = Array.isArray(step.sel) ? step.sel : [step.sel]
+    let l = Infinity
+    let t = Infinity
+    let r = -Infinity
+    let b = -Infinity
+    for (const sel of sels) {
+      const el = root.querySelector(sel) as HTMLElement | null
+      if (!el) continue
+      const cs = getComputedStyle(el)
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue
+      const box = el.getBoundingClientRect()
+      if (box.width < 2 || box.height < 2) continue
+      l = Math.min(l, box.left)
+      t = Math.min(t, box.top)
+      r = Math.max(r, box.right)
+      b = Math.max(b, box.bottom)
+    }
+    if (l === Infinity) return null // 보이는 대상이 하나도 없으면 중앙 카드로
+    return new DOMRect(l, t, r - l, b - t)
   }
 
   function place(): void {
