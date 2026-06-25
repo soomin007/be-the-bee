@@ -2095,9 +2095,9 @@ export function mountGame(root: HTMLElement): void {
       <div class="status ${state.phase === 'finished' ? 'finished' : state.turn}">
         <div class="status-header">${header}</div>
         <div class="instruction">${instruction}</div>
-        ${message ? `<div class="message">⚠️ ${message}</div>` : ''}
-        ${notice ? `<div class="notice">✓ ${notice}</div>` : ''}
       </div>
+      ${message ? `<div class="message">⚠️ ${message}</div>` : ''}
+      ${notice ? `<div class="notice">✓ ${notice}</div>` : ''}
       <div class="supplies">
         <div>${supplyLine('yellow')}</div>
         <div>${supplyLine('brown')}</div>
