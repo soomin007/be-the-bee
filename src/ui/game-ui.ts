@@ -168,7 +168,8 @@ const AI_DELAY_MS = 350
 interface RoomSettings {
   mode: Mode
   aiDifficulty: Difficulty
-  hints: boolean // 훈수 모드: 위험/승리 칸 힌트 표시
+  hints: boolean // 훈수(승리 힌트): 내가 5목 둘 칸·내 벌집 초읽기 등 "유리" 정보. 기본 꺼짐.
+  dangerAlerts: boolean // 위험 경고: 상대가 다음 한 수로 5목·막을 수 없는 벌집(사이렌). 기본 켜짐.
   queen: boolean // 여왕벌 모드(확장, 숙련자용). 기본 꺼짐. AI 는 사용 안 함
   infiniteTiles: boolean // 무한 모드(디지털 변형): 타일 제한 없음. 기본 꺼짐
   bgmTrack: number // BGM_TRACKS 인덱스
@@ -205,6 +206,7 @@ function defaultSettings(): RoomSettings {
     mode: 'hotseat',
     aiDifficulty: 'medium',
     hints: false,
+    dangerAlerts: true, // 위험 경고는 기본 켜짐(초보가 지는 걸 놓치지 않게). 설정에서 끌 수 있음.
     queen: false,
     infiniteTiles: false,
     bgmTrack: 0,
@@ -257,6 +259,7 @@ function loadSettings(): RoomSettings {
       mode: MODES.includes(s.mode as Mode) ? (s.mode as Mode) : d.mode,
       aiDifficulty: DIFFS.includes(s.aiDifficulty as Difficulty) ? (s.aiDifficulty as Difficulty) : d.aiDifficulty,
       hints: typeof s.hints === 'boolean' ? s.hints : d.hints,
+      dangerAlerts: typeof s.dangerAlerts === 'boolean' ? s.dangerAlerts : d.dangerAlerts,
       queen: typeof s.queen === 'boolean' ? s.queen : d.queen,
       infiniteTiles: typeof s.infiniteTiles === 'boolean' ? s.infiniteTiles : d.infiniteTiles,
       bgmTrack:
@@ -1147,8 +1150,8 @@ export function mountGame(root: HTMLElement): void {
         sound.hive()
       }
     }
-    // 훈수 모드면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
-    if (settings.hints && state.phase === 'playing') {
+    // 위험 경고가 켜져 있으면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
+    if (settings.dangerAlerts && state.phase === 'playing') {
       const opp = opponent(state.turn)
       if (winningCells(state.board, opp, state.supplies[opp], settings.queen).length > 0) sound.alert()
     }
@@ -1793,21 +1796,26 @@ export function mountGame(root: HTMLElement): void {
         )
       }
     }
-    // 위험/승리 칸 힌트는 훈수 모드에서만(설명서엔 없는 보조, 방 설정으로 공통 적용)
+    // 보조 표시는 두 갈래로 나뉜다(설명서엔 없는 보조, 방 설정으로 공통 적용):
+    //  · 위험 경고(dangerAlerts, 기본 켜짐): 상대가 다음 한 수로 5목·막을 수 없는 벌집(상대 초읽기·사이렌).
+    //  · 승리 힌트(hints, 기본 꺼짐): 내가 5목 둘 칸·내 벌집 초읽기 등 "유리" 정보.
     dangerCells = []
     winNowCells = []
     oppCountdown = null
     myCountdown = null
-    if (settings.hints && state.phase === 'playing' && !replaying) {
+    if (state.phase === 'playing' && !replaying) {
       const opp = opponent(state.turn)
       // 분석은 그 판의 여왕벌 모드를 반영한다(queenEnabled). 표준 모드면 잠긴 상대 벌집 칸은 어느
       // 쪽도 둘 수 없으니 리치가 아니다 — 엔진 winningCells 의 queenAllowed 가 직접 가른다.
-      dangerCells = winningCells(state.board, opp, state.supplies[opp], settings.queen)
-      winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn], settings.queen)
-      // 벌집 초읽기: 잠긴 벌집 위 "막을 수 없는 5목"까지 남은 수(리치보다 한발 이른 경고).
-      for (const cd of hiveCountdowns(state.board)) {
-        if (cd.owner === state.turn) myCountdown = cd
-        else oppCountdown = cd
+      if (settings.dangerAlerts) dangerCells = winningCells(state.board, opp, state.supplies[opp], settings.queen)
+      if (settings.hints) winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn], settings.queen)
+      // 벌집 초읽기: 잠긴 벌집 위 "막을 수 없는 5목"까지 남은 수. 상대=위험 경고, 나=승리 힌트로 갈라 게이팅.
+      if (settings.dangerAlerts || settings.hints) {
+        for (const cd of hiveCountdowns(state.board)) {
+          if (cd.owner === state.turn) {
+            if (settings.hints) myCountdown = cd
+          } else if (settings.dangerAlerts) oppCountdown = cd
+        }
       }
       // 상대 초읽기 줄을 보드에 점선 윤곽으로 강조 — 어디가 위험한지 한눈에.
       if (oppCountdown) {
@@ -2648,7 +2656,8 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="cycleTheme" ${settings.board3d ? 'disabled' : ''} title="${settings.board3d ? '3D 모드에선 색 테마가 적용되지 않아요' : theme.desc}">${ICON.theme} 테마: ${theme.label}</button>
         <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D(three.js)로 표시">${ICON.cube3d} 3D 보드</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
-        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}">훈수</button>
+        <button data-act="toggleDanger" class="${settings.dangerAlerts ? 'active' : ''}" title="상대가 이길 위기(다음 한 수로 5목·막을 수 없는 벌집)면 알려줘요">⚠️ 위험 경고</button>
+        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}" title="내가 5목 둘 칸·내 벌집 초읽기 등 유리한 정보를 보여줘요">💡 승리 힌트</button>
         <button data-act="resetView" title="${settings.board3d ? '3D 카메라(시점·줌)를 처음 위치로' : '보드 확대·이동을 처음 상태로'}">카메라 리셋</button>
       </div>`
     const settingsSummary =
@@ -3057,6 +3066,10 @@ export function mountGame(root: HTMLElement): void {
       case 'toggleHints':
         settings.hints = !settings.hints
         break
+      case 'toggleDanger':
+        settings.dangerAlerts = !settings.dangerAlerts
+        notice = settings.dangerAlerts ? '위험 경고 ON' : '위험 경고 OFF'
+        break
       case 'toggle3d':
         if (mobileShell.active()) return // 모바일: 3D 미지원(고려사항 多) → PC 전용. mobile.css 가 'PC 전용' 표시.
         settings.board3d = !settings.board3d
@@ -3265,6 +3278,15 @@ export function mountGame(root: HTMLElement): void {
     startTurn()
   }
   setInitialCamera()
+  // 위험 경고가 기본 켜짐을 한 번 알린다(끌 수 있다고). 새/기존 사용자 모두 1회(전용 플래그).
+  try {
+    if (localStorage.getItem('be-the-bee/danger-told') !== '1') {
+      notice = '위험 경고가 켜져 있어요. 상대가 이길 위기면 알려드려요. 설정 → 화면·설정에서 끌 수 있어요.'
+      localStorage.setItem('be-the-bee/danger-told', '1')
+    }
+  } catch {
+    /* 무시 */
+  }
   render()
   maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
   maybeShowOnboarding(onboardCtx()) // 첫 접속이면 앱 사용법 투어(한 번만) → 마지막에 게임 규칙으로 연결
