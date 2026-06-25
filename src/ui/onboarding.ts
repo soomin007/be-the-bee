@@ -63,7 +63,13 @@ function desktopSteps(ctx: OnboardCtx): Step[] {
       body: '지금 누구 차례인지, 남은 타일과 말,<br>다음에 할 일이 여기에 떠요.',
     },
     {
-      sel: '[data-act="menuMode"]',
+      // 설명에 맞춰 모드·난이도·여왕벌·무한 버튼(게임 섹션 상단 2×2)을 한 번에 감싼다.
+      sel: [
+        '[data-act="menuMode"]',
+        '[data-act="menuDifficulty"]',
+        '[data-act="toggleQueen"]',
+        '[data-act="toggleInfinite"]',
+      ],
       title: '⚙️ 모드·난이도',
       body: '사람끼리·AI 대결·AI 관전 중에 골라요.<br>난이도·여왕벌·무한 모드도 여기서 바꿔요.',
     },
