@@ -1356,7 +1356,7 @@ export function mountGame(root: HTMLElement): void {
       onlineMsg = `방을 만들고 초대 링크를 복사했어요!\n${url}\n상대에게 붙여넣어 보내세요. 들어오면 선공·후공을 정해요.`
       render()
     } catch (e) {
-      message = '방 만들기 실패: ' + (e as Error).message
+      onlineMsg = '방 만들기 실패: ' + (e as Error).message
       render()
     }
   }
@@ -1364,14 +1364,15 @@ export function mountGame(root: HTMLElement): void {
   // 상대: 코드로 입장 → 방장의 현재 판으로 맞추고 협상 단계로.
   async function joinOnline(code: string): Promise<void> {
     if (!mpEnabled) {
-      message = '온라인 기능이 아직 설정되지 않았어요(서버 키 없음).'
+      onlineMsg = '온라인 기능이 아직 설정되지 않았어요(서버 키 없음).'
       render()
       return
     }
     try {
       const room = await joinRoom(code.trim().toUpperCase())
       if (!room) {
-        message = '그 방을 찾지 못했어요. 코드를 다시 확인하세요.'
+        onlineMsg = '그 방을 찾지 못했어요. 코드를 다시 확인하세요.'
+        if (typeof location !== 'undefined' && location.hash) location.hash = ''
         render()
         return
       }
@@ -1379,7 +1380,7 @@ export function mountGame(root: HTMLElement): void {
       // 코드를 여러 곳에 뿌려 3명+가 들어와도 두 사람만 두고 desync 안 나게.
       const me = clientId()
       if (room.host_id !== me && room.guest_id !== me && room.guest_id != null) {
-        message = '이 방은 이미 두 명이 들어차 있어요. 두 명까지만 둘 수 있어요(관전은 아직 없어요).'
+        onlineMsg = '이 방은 이미 두 명이 들어차 있어요.\n두 명까지만 둘 수 있어요(관전은 아직 없어요).'
         if (typeof location !== 'undefined' && location.hash) location.hash = '' // 새로고침 재시도 방지
         render()
         return
@@ -1404,7 +1405,7 @@ export function mountGame(root: HTMLElement): void {
       }
       render()
     } catch (e) {
-      message = '입장 실패: ' + (e as Error).message
+      onlineMsg = '입장 실패: ' + (e as Error).message
       render()
     }
   }
@@ -3175,7 +3176,7 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'onlineHost':
         if (!mpEnabled) {
-          message = '온라인 기능이 아직 설정되지 않았어요.'
+          onlineMsg = '온라인 기능이 아직 설정되지 않았어요.'
           break
         }
         void createOnlineRoom() // 진영은 상대 입장 후 협상으로 정함
