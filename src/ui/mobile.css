@@ -34,6 +34,7 @@
   /* 상단 HUD 바: 흐름 안(absolute 아님) → 안내 배너가 그 아래에 자연스럽게 쌓인다. */
   .board-status {
     position: relative;
+    left: auto; /* base 의 left:0.55rem(절대배치용)을 무효화 — 안 그러면 8.8px 오른쪽으로 밀려 잘림 */
     z-index: 6; /* 차례 비네트(z1) 위로 — HUD 글씨가 안 가리게 */
     order: -2;
     width: auto;
@@ -43,9 +44,15 @@
     justify-content: center;
     gap: 0.1rem 0.7rem;
     padding: 0.3rem 0.6rem;
-    margin: -0.4rem -0.4rem 0; /* board-wrap 패딩 무시하고 끝까지 */
+    /* 음수 가로 마진(풀블리드)은 오른쪽이 뷰포트를 넘어 잘려 보였다(#app overflow:hidden). 보드랩 패딩
+       안에 들어오는 둥근 카드로 — flex stretch 로 좌우 폭을 채워 잘림 없음. 톱니(FAB)가 위로 떠
+       겹치므로 오른쪽 여백(padding-right) 확보. */
+    align-self: stretch;
+    margin: 0 0 0.15rem;
+    padding-right: 3rem;
+    border: 1px solid #e6dcc3;
+    border-radius: 0.8rem;
     background: rgba(255, 253, 247, 0.95);
-    border-bottom: 1px solid #e6dcc3;
     box-shadow: 0 1px 6px rgba(120, 80, 0, 0.1);
     font-size: 0.76rem;
   }
