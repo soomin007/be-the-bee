@@ -215,6 +215,7 @@ export interface Weights {
   HIVE: number
   CENTER: number
   CONTEST: number // 상대의 발전 타일선(곧 벌집) 위에 놓은 내 말 = 선점(허리 끊기)
+  CONTEST_CUT: number // 잠길 임박한 회랑(길이 4, 또는 길이 3+연장칸 2) 위 내 말 추가 보너스. 기본 0(전문가만 켬)
   SEIZE: number // 상대 색 타일 위에 놓은 내 말 = 선점(TIP#2 "타일엔 주인이 없다")
   FORK: number // 동시 위협(살아있는 위협 2개 이상), 상대가 다 못 막음 = 주도권
   attackMul: number // 내 말 라인/포크 점수 배율(공격성)
@@ -235,6 +236,7 @@ const BASE_WEIGHTS: Weights = {
   HIVE: 40,
   CENTER: 1,
   CONTEST: 130,
+  CONTEST_CUT: 0,
   SEIZE: 45,
   FORK: 10000,
   attackMul: 1,
@@ -250,8 +252,15 @@ const BASE_WEIGHTS: Weights = {
 //  - spreadThree: 벌어진 3목(두 수면 5목) 인식 — 잠긴 벌집처럼 "사후 차단 불가"한 줄을 잠기기
 //    전에 끊게 한다(설명서 TIP#1 "허리 끊기"의 말 라인판). OPEN_3 아래로 낮춰 "타일 쫓기"
 //    함정(known_issues/A·B)을 피하고, 반대칭(공격<수비)이라 줄을 막는 쪽으로 기운다.
+//  - CONTEST_CUT: 타일 벌집(회랑)이 "잠기기 전에" 그 줄 위에 내 말을 선점하는 보너스(설명서 TIP#1
+//    "허리 끊기"의 타일 라인판). 벌집이 5칸으로 잠기면 그 위 칸은 주인만 말을 놓을 수 있어(§5) 갈색은
+//    사후 차단이 불가능하다 — 잠긴 칸을 상대 말로 채워 "막을 수 없는 5목"을 만드는 정석(backlog §2
+//    실패 기보)의 예방. 잠금 임박(길이4=한 수, 또는 길이3+연장칸2=두 수)한 회랑만 가중하고, 내 말이
+//    그 줄에 남으면 잠금 후에도 상대 말 5목을 끊는다(§5 소급 적용 없음). **말 기반·반대칭**이라
+//    known_issues 의 "말 대신 타일 쫓기"(tileDev/hiveDef) 함정과 다른 안전 레버(line 179). OPEN_3
+//    아래로 잡아 진짜 말 위협(공격·수비)이 항상 우선이게 한다.
 // (hiveDef 류 타일-견제 항은 여전히 제외 — AI 를 약화시켰던 항. 강함은 탐색 깊이 + 말 라인 인식.)
-const EXPERT_WEIGHTS: Partial<Weights> = { gapFour: 12000, spreadThree: 1500 }
+const EXPERT_WEIGHTS: Partial<Weights> = { gapFour: 12000, spreadThree: 1500, CONTEST_CUT: 450 }
 
 // 성향별 오버라이드. 즉시 승리/차단(pickMove·useBlock)은 모든 성향 공통이라 자멸하진 않고,
 // 가치 판단(공격 vs 수비 vs 벌집)만 달라져 관전 대결에 특색이 생긴다.
@@ -399,15 +408,60 @@ function centralityPenalty(phex: readonly Hex[]): number {
   return d
 }
 
-// p 가 상대의 발전 타일선(길이 3·4, 곧 벌집) 위에 놓은 p 의 말 = 선점(허리 끊기) 보너스.
-// 벌집이 잠기기 전에 그 타일을 차지하면, 잠금 후에도 내 말이 남고 상대의 그 칸 사용을 막는다.
-// p 가 상대 타일선(enemyTileLines, 길이 3+) 위에 놓은 p 의 말 = 선점(허리 끊기) 보너스.
-// 설명서 TIP#1 "허리 끊기"·TIP#2 "타일 선점". evaluate 가 미리 만든 타일선을 받아 쓴다.
+// 타일선을 그 방향으로 한 칸 더 늘릴 수 있는가(빈 칸 + 타일 배치 가능). 벌집은 타일을 더 깔아야 자란다.
+function tileExtendable(board: Board, cell: Hex): boolean {
+  return cellAt(board, cell) === undefined && isTilePlaceable(board, cell)
+}
+
+// 타일선이 5칸 벌집까지 자랄 여지(양끝으로 더 깔 수 있는 연속 빈칸 수, need 까지만 셈).
+function lineGrowRoom(board: Board, line: Line<Player>, need: number): number {
+  const dir = HEX_AXES[line.axis]!
+  let room = 0
+  let c = hexAdd(hexFromKey(line.cells[line.cells.length - 1]!), dir)
+  while (room < need && tileExtendable(board, c)) {
+    room++
+    c = hexAdd(c, dir)
+  }
+  let b = hexSubtract(hexFromKey(line.cells[0]!), dir)
+  while (room < need && tileExtendable(board, b)) {
+    room++
+    b = hexSubtract(b, dir)
+  }
+  return room
+}
+
+// 상대 회랑(타일선)이 벌집으로 잠길 임박도. 0=잠길 수 없음(연장 불가)/관심 밖, 1=두 수(길이3+연장칸2),
+// 2=한 수(길이4+연장칸1). 길이 3·4 만 본다(≤2=먼 얘기, ≥5=이미 잠김). 잠금 후엔 사후 차단이 불가하므로
+// "잠기기 전" 이 구간에서만 선점이 의미가 있다.
+function corridorImminence(board: Board, line: Line<Player>): 0 | 1 | 2 {
+  const len = line.cells.length
+  if (len < 3 || len >= LINE_LENGTH) return 0
+  const need = LINE_LENGTH - len // 5−len: 길이4 → 1, 길이3 → 2
+  if (lineGrowRoom(board, line, need) < need) return 0 // 5칸까지 못 자라면 위협 아님
+  return len === 4 ? 2 : 1
+}
+
+// p 가 상대의 타일선(곧 벌집 회랑, 또는 이미 잠긴 벌집) 위에 놓은 p 의 말 = 선점(허리 끊기) 보너스.
+// 벌집이 잠기기 전에 그 타일을 차지하면, 잠금 후에도 내 말이 남고(§5 소급 적용 없음) 상대가 그 줄로
+// "막을 수 없는 5목"을 만드는 걸 영구히 끊는다. evaluate 가 미리 만든 타일선을 받아 쓴다.
+//  - 기본 보너스(CONTEST, 모든 난이도): 잠기기 전 회랑만(길이4 = CONTEST, 길이3 = CONTEST*0.5).
+//  - 허리끊기 보너스(CONTEST_CUT>0, 전문가):
+//    ① 잠긴 벌집(길이≥5) 안의 내 말 = **영구 차단**(그 5목을 막을 다른 방법이 없으니 최고가). 이 항이
+//       없으면 깊이 탐색이 "끊어도 상대가 잠그면 CONTEST 가 증발"이라 보고 끊기를 무가치로 친다(핵심).
+//    ② 잠길 임박 회랑(길이4=한 수, 길이3+연장칸2=두 수) = 잠기기 전 선점 유도(길이4=full, 길이3=절반).
 function contestBonus(board: Board, enemyTileLines: readonly Line<Player>[], p: Player, w: Weights): number {
   let s = 0
   for (const line of enemyTileLines) {
-    if (line.cells.length >= 5) continue // 이미 벌집(잠김)
-    const weight = line.cells.length === 4 ? w.CONTEST : w.CONTEST * 0.5 // 4목 임박일수록 가치↑
+    const len = line.cells.length
+    let weight = len === 4 ? w.CONTEST : len === 3 ? w.CONTEST * 0.5 : 0 // 기본항: 잠기기 전 회랑만
+    if (w.CONTEST_CUT > 0) {
+      if (len >= LINE_LENGTH) weight += w.CONTEST_CUT // ① 잠긴 벌집 위 내 말 = 영구 차단
+      else {
+        const imm = corridorImminence(board, line) // ② 0/1/2 — 잠길 수 있는 회랑만
+        weight += imm === 2 ? w.CONTEST_CUT : imm === 1 ? w.CONTEST_CUT * 0.5 : 0
+      }
+    }
+    if (weight === 0) continue
     for (const key of line.cells) {
       const piece = board[key]!.piece
       if (piece && piece.owner === p) s += weight
@@ -822,6 +876,48 @@ function defensiveMoves(state: GameState, me: Player): Move[] {
   return out
 }
 
+// 허리 끊기(전문가): 상대 회랑(잠길 임박 타일선) 위 빈 급소에 내 말을 올리는 합법수들. 빔 강제 시딩용.
+// CONTEST_CUT 보너스가 평가에선 이 수를 높게 보지만, 1수 평가가 말 라인보다 낮아 빔에서 잘릴 수 있다
+// (known_issues 2026-06-26: 방어수가 빔 가지치기에 잘려 안 막던 문제와 같은 구조) → 항상 끼워 넣는다.
+// 회랑의 어느 칸이든 끊으면 그 줄로 만들 수 있는 모든 5칸 창을 막으므로(내 말이 모든 5-창의 내부) 빈 칸을
+// 모두 시딩하고 선택은 탐색(negamax)에 맡긴다. 전문가만(CONTEST_CUT>0). 대개 빈 배열(임박 회랑 없을 때).
+function contestMoves(state: GameState, me: Player): Move[] {
+  const board = state.board
+  const out: Move[] = []
+  const seen = new Set<string>()
+  for (const line of findLines(ownerTileMap(board, opponent(me)), 3)) {
+    if (corridorImminence(board, line) === 0) continue // 잠길 수 없는 줄은 끊을 가치 없음
+    for (const key of line.cells) {
+      const cell = hexFromKey(key)
+      if (pieceAt(board, cell) !== undefined) continue // 이미 말이 있는 칸
+      const m = placementMove(state, cell, me)
+      if (!m) continue
+      const sig = moveSig(m)
+      if (!seen.has(sig)) {
+        seen.add(sig)
+        out.push(m)
+      }
+    }
+  }
+  return out
+}
+
+// 빔에 강제 시딩할 수들: 상대 즉시-아닌 위협 차단(defensiveMoves) + 전문가 허리 끊기(contestMoves).
+// 허리 끊기 시딩은 전문가만(CONTEST_CUT>0) — 다른 난이도/성향의 검증된 동작을 건드리지 않는다.
+function forcedMoves(state: GameState, me: Player, w: Weights): Move[] {
+  const out = defensiveMoves(state, me)
+  if (w.CONTEST_CUT <= 0) return out
+  const seen = new Set(out.map((m) => moveSig(m)))
+  for (const m of contestMoves(state, me)) {
+    const sig = moveSig(m)
+    if (!seen.has(sig)) {
+      seen.add(sig)
+      out.push(m)
+    }
+  }
+  return out
+}
+
 // 후보 목록에 강제 차단수를 합친다(중복 제거). 빔 가지치기 뒤에 호출해 차단수가 살아남게 한다.
 function withForced(cands: Candidate[], forced: Move[]): Candidate[] {
   if (forced.length === 0) return cands
@@ -853,6 +949,9 @@ function scoreLeaf(state: GameState, me: Player, w: Weights): number {
 function beamCandidates(state: GameState, cfg: Cfg): Candidate[] {
   const cands = generateCandidates(state, cfg)
   const me = state.turn
+  // 내부 노드는 방어수만 강제 시딩한다(즉시-아닌 5목 위협 차단은 깊이마다 필요). 허리 끊기(contestMoves)는
+  // 루트(searchBestMove)에서만 시딩한다 — 천천히 발전하는 전략 수라 내부 노드 시딩이 불필요하고, 회랑이
+  // 많은 후반 보드에서 노드마다 후보를 불려 빔을 폭발시킬 수 있어(분기 12→30+) 비용만 든다.
   const forced = defensiveMoves(state, me)
   if (cfg.beamWidth <= 0 || cands.length <= cfg.beamWidth) return withForced(cands, forced)
   const top = cands
@@ -905,10 +1004,11 @@ function searchBestMove(
     .map((c) => ({ move: c.move, s: evaluate(resultBoard(state.board, c.move, me), me, cfg.w) }))
     .sort((a, b) => b.s - a.s)
     .slice(0, Math.max(cfg.beamWidth, 1))
-  // 상대 열린 3+목 차단수는 1수 평가가 낮아 루트에서 잘려도, 강제로 루트에 끼워 깊이 탐색한다.
+  // 상대 열린 3+목 차단수·전문가 허리 끊기 수는 1수 평가가 낮아 루트에서 잘려도, 강제로 루트에 끼워
+  // 깊이 탐색한다(평가는 탐색이 — 강제로 두진 않고 "고려는 반드시").
   const roots: { move: Move }[] = ranked.map((r) => ({ move: r.move }))
   const rootSeen = new Set(roots.map((r) => moveSig(r.move)))
-  for (const m of defensiveMoves(state, me)) {
+  for (const m of forcedMoves(state, me, cfg.w)) {
     if (!rootSeen.has(moveSig(m))) {
       rootSeen.add(moveSig(m))
       roots.push({ move: m })
