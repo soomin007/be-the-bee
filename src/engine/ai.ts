@@ -85,9 +85,13 @@ function cfgFor(difficulty: Difficulty): Omit<Cfg, 'w'> {
 
 export function createAi(opts: AiOptions = {}): Ai {
   const difficulty = opts.difficulty ?? 'medium'
+  const isExpert = difficulty === 'expert'
+  // 전문가는 "항상 최선의 수" 개념이라 성향(편향)을 적용하지 않는다 — 성향은 하위 난이도/관전 변주용.
+  // (aggressive 의 defenseMul<1 처럼 성향은 일부러 한쪽으로 기우는 것이라 "최선"과 모순된다.)
+  const persona: Persona = isExpert ? 'balanced' : (opts.persona ?? 'balanced')
   // 전문가는 난이도 오버레이를 먼저 깔고, 그 위에 명시적 weights 오버라이드를 덮는다.
-  const expertOverlay = difficulty === 'expert' ? EXPERT_WEIGHTS : {}
-  const w: Weights = { ...makeWeights(opts.persona ?? 'balanced'), ...expertOverlay, ...(opts.weights ?? {}) }
+  const expertOverlay = isExpert ? EXPERT_WEIGHTS : {}
+  const w: Weights = { ...makeWeights(persona), ...expertOverlay, ...(opts.weights ?? {}) }
   const cfg: Cfg = { ...cfgFor(difficulty), w }
   const rng = makeRng(opts.seed ?? 0xb17)
   return {
@@ -293,6 +297,15 @@ function ownerTileMap(board: Board, owner: Player): Map<string, Player> {
   const m = new Map<string, Player>()
   for (const key of Object.keys(board)) {
     if (board[key]!.tile.owner === owner) m.set(key, owner)
+  }
+  return m
+}
+
+function ownerPieceMap(board: Board, owner: Player): Map<string, Player> {
+  const m = new Map<string, Player>()
+  for (const key of Object.keys(board)) {
+    const p = board[key]!.piece
+    if (p && p.owner === owner) m.set(key, owner)
   }
   return m
 }
@@ -766,6 +779,64 @@ function findBlock(state: GameState, me: Player, w: Weights): Move | null {
   return best
 }
 
+// ---- 선제 위협 차단 후보 (빔에서 안 잘리게 강제 시딩) -----------------------
+// findBlock 은 "다음 한 수 5목"(즉시 위협)만 막는다. 그러나 상대의 **연속 열린 3목**은 한 수만 더
+// 두면 **열린 4목**(양끝 동시 위협 = 막을 수 없음)이 된다. 이 차단수를 빔 폭(1수 평가 상위 K개)이
+// 쳐내면 전문가도 안 막고 진다(known_issues/backlog §2 실패 기보). 그래서 상대 길이 3+ 말 런의
+// 열린 끝(내가 놓을 수 있는 칸)을 차단 후보로 모아, 빔 루트·내부 노드에 항상 끼워 넣는다(평가는 탐색이
+// 한다 — 강제로 막게 하진 않고, "고려는 반드시" 하게 만든다). 벌어진 4목은 winningCells/findBlock 가 이미 처리.
+function forcingBlockCells(board: Board, opp: Player): Hex[] {
+  const cells: Hex[] = []
+  const seen = new Set<string>()
+  for (const line of findLines(ownerPieceMap(board, opp), 3)) {
+    if (line.cells.length >= LINE_LENGTH) continue // 이미 5목(여기 오기 전 승패 결정)
+    const dir = HEX_AXES[line.axis]!
+    const first = hexFromKey(line.cells[0]!)
+    const last = hexFromKey(line.cells[line.cells.length - 1]!)
+    for (const end of [hexSubtract(first, dir), hexAdd(last, dir)]) {
+      if (pieceAt(board, end) !== undefined) continue // 이미 막힌 끝
+      if (cellAt(board, end) === undefined && !isTilePlaceable(board, end)) continue // 못 놓는 칸
+      const k = hexKey(end)
+      if (!seen.has(k)) {
+        seen.add(k)
+        cells.push(end)
+      }
+    }
+  }
+  return cells
+}
+
+// 상대 열린 3+목의 끝을 내 말로 막는 합법수들(빔 강제 시딩용). 대개 빈 배열(위협 없을 때).
+function defensiveMoves(state: GameState, me: Player): Move[] {
+  const out: Move[] = []
+  const seen = new Set<string>()
+  for (const cell of forcingBlockCells(state.board, opponent(me))) {
+    const m = placementMove(state, cell, me)
+    if (!m) continue
+    const sig = moveSig(m)
+    if (!seen.has(sig)) {
+      seen.add(sig)
+      out.push(m)
+    }
+  }
+  return out
+}
+
+// 후보 목록에 강제 차단수를 합친다(중복 제거). 빔 가지치기 뒤에 호출해 차단수가 살아남게 한다.
+function withForced(cands: Candidate[], forced: Move[]): Candidate[] {
+  if (forced.length === 0) return cands
+  const seen = new Set(cands.map((c) => moveSig(c.move)))
+  const out = cands.slice()
+  for (const m of forced) {
+    const sig = moveSig(m)
+    if (!seen.has(sig)) {
+      seen.add(sig)
+      out.push({ move: m })
+    }
+  }
+  return out
+}
+
 // ---- 빔 서치 (여러 수 앞) ---------------------------------------------------
 
 // 점수 종료(타일 소진) 리프 값: 점수 승은 5목 승의 절반쯤으로 평가.
@@ -777,16 +848,19 @@ function scoreLeaf(state: GameState, me: Player, w: Weights): number {
   return sign * (WIN_SCORE / 2) + diff * w.HIVE
 }
 
-// 후보를 1수 평가로 정렬해 상위 beamWidth개만 남긴다(분기 제한).
+// 후보를 1수 평가로 정렬해 상위 beamWidth개만 남긴다(분기 제한). 상대 열린 3+목 차단수는
+// 가지치기로 잘리지 않게 항상 끼워 넣는다(withForced) — 빔이 방어수를 버려 지던 문제 방지.
 function beamCandidates(state: GameState, cfg: Cfg): Candidate[] {
   const cands = generateCandidates(state, cfg)
-  if (cfg.beamWidth <= 0 || cands.length <= cfg.beamWidth) return cands
   const me = state.turn
-  return cands
+  const forced = defensiveMoves(state, me)
+  if (cfg.beamWidth <= 0 || cands.length <= cfg.beamWidth) return withForced(cands, forced)
+  const top = cands
     .map((c) => ({ c, s: evaluate(resultBoard(state.board, c.move, me), me, cfg.w) }))
     .sort((a, b) => b.s - a.s)
     .slice(0, cfg.beamWidth)
     .map((x) => x.c)
+  return withForced(top, forced)
 }
 
 // negamax + 알파-베타. 반환값은 state.turn(둘 차례) 관점의 점수.
@@ -827,10 +901,19 @@ function searchBestMove(
   candidates: Candidate[],
 ): Move | null {
   const me = state.turn
-  const roots = candidates
+  const ranked = candidates
     .map((c) => ({ move: c.move, s: evaluate(resultBoard(state.board, c.move, me), me, cfg.w) }))
     .sort((a, b) => b.s - a.s)
     .slice(0, Math.max(cfg.beamWidth, 1))
+  // 상대 열린 3+목 차단수는 1수 평가가 낮아 루트에서 잘려도, 강제로 루트에 끼워 깊이 탐색한다.
+  const roots: { move: Move }[] = ranked.map((r) => ({ move: r.move }))
+  const rootSeen = new Set(roots.map((r) => moveSig(r.move)))
+  for (const m of defensiveMoves(state, me)) {
+    if (!rootSeen.has(moveSig(m))) {
+      rootSeen.add(moveSig(m))
+      roots.push({ move: m })
+    }
+  }
 
   let bestVal = -Infinity
   let ties: Move[] = []
