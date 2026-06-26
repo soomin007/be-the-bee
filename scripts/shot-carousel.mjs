@@ -70,42 +70,28 @@ function hexPts(cx, cy) {
   }
   return p.trim()
 }
-function plusMark(cx, cy, s = 1) {
-  return `<g stroke="#e8590c" stroke-width="${8 * s}" stroke-linecap="round"><line x1="${cx - 18 * s}" y1="${cy}" x2="${cx + 18 * s}" y2="${cy}"/><line x1="${cx}" y1="${cy - 18 * s}" x2="${cx}" y2="${cy + 18 * s}"/></g>`
-}
-function padlock(cx, cy, s = 1) {
-  return `<g transform="translate(${cx} ${cy}) scale(${s})">
-    <path d="M -11 0 v -9 a 11 11 0 0 1 22 0 v 9" fill="none" stroke="#3a2408" stroke-width="6"/>
-    <rect x="-17" y="0" width="34" height="27" rx="6" fill="#5a3a10" stroke="#2e1d07" stroke-width="2.5"/>
-    <circle cx="0" cy="11" r="4" fill="#ffd86b"/><rect x="-2" y="12" width="4" height="9" rx="2" fill="#ffd86b"/>
-  </g>`
-}
-// cells: {q,r, t:'y'|'b'|'ghost', p:'y'|'b'|null, win, queen, ring, mark:'plus', lock}
+// cells: {q,r, t:'y'|'b', p:'y'|'b'|null, win(말 5목 글로우), hive(타일 5목=벌집, 꿀빛 글로우), fresh(이번 턴 갓 둠), queen}
 function board(cells, { glow = false } = {}) {
   const xs = cells.map((c) => hx(c.q, c.r)), ys = cells.map((c) => hy(c.q, c.r))
   const pad = R * 1.3
   const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad
   const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad
-  let tiles = '', pieces = '', over = '', glowLine = ''
+  let tiles = '', hives = '', pieces = '', over = '', glowLine = ''
   for (const c of cells) {
     const x = hx(c.q, c.r), y = hy(c.q, c.r)
-    if (c.t === 'ghost') {
-      tiles += `<polygon points="${hexPts(x, y)}" fill="#fff7e0" fill-opacity="0.5" stroke="#e8590c" stroke-width="4.5" stroke-dasharray="11 9"/>`
-    } else {
-      const grad = c.t === 'y' ? 'tile-y' : 'tile-b'
-      const stroke = c.win ? '#e8590c' : c.t === 'y' ? '#6e5114' : '#43280a'
-      tiles += `<polygon points="${hexPts(x, y)}" fill="url(#${grad})" stroke="${stroke}" stroke-width="${c.win ? 6 : 2.4}"/>`
-    }
-    if (c.ring) tiles += `<circle cx="${x}" cy="${y}" r="${R * 0.78}" fill="none" stroke="#e8590c" stroke-width="5" opacity="0.9"/>`
+    const grad = c.t === 'y' ? 'tile-y' : 'tile-b'
+    const stroke = c.win ? '#e8590c' : c.t === 'y' ? '#6e5114' : '#43280a'
+    tiles += `<polygon points="${hexPts(x, y)}" fill="url(#${grad})" stroke="${stroke}" stroke-width="${c.win ? 5 : 2.4}"/>`
+    // 벌집(타일 5목): 실제 게임과 동일하게 꿀빛 채움 + 금색 글로우(자물쇠 같은 가짜 요소 안 씀).
+    if (c.hive) hives += `<polygon points="${hexPts(x, y)}" fill="#ffe07a" fill-opacity="0.5" stroke="#f97316" stroke-width="5" filter="url(#hg)"/>`
     if (c.p) pieces += pieceMarkup(x, y, R * 0.62, c.p === 'y' ? 'yellow' : 'brown', c.queen)
-    if (c.mark === 'plus') over += plusMark(x, y, 1.05)
-    if (c.lock) over += padlock(x, y - R * 0.02, 1.25)
+    if (c.fresh) over += `<circle cx="${x}" cy="${y}" r="${R * 0.86}" fill="none" stroke="#e8590c" stroke-width="5" stroke-dasharray="11 8"/>`
   }
   if (glow) {
     const wc = cells.filter((c) => c.win)
     const x1 = hx(wc[0].q, wc[0].r), x2 = hx(wc[wc.length - 1].q, wc[wc.length - 1].r), yy = hy(wc[0].q, wc[0].r)
     glowLine =
-      `<line x1="${x1}" y1="${yy}" x2="${x2}" y2="${yy}" stroke="#f97316" stroke-width="${R * 1.25}" stroke-linecap="round" opacity="0.68" filter="url(#sg)"/>` +
+      `<line x1="${x1}" y1="${yy}" x2="${x2}" y2="${yy}" stroke="#f97316" stroke-width="${R * 1.25}" stroke-linecap="round" opacity="0.66" filter="url(#sg)"/>` +
       `<line x1="${x1}" y1="${yy}" x2="${x2}" y2="${yy}" stroke="#ffe39a" stroke-width="${R * 0.3}" stroke-linecap="round" opacity="0.95" filter="url(#sg)"/>`
   }
   return `<svg class="board" viewBox="${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX - minX).toFixed(1)} ${(maxY - minY).toFixed(1)}" xmlns="http://www.w3.org/2000/svg">
@@ -113,35 +99,74 @@ function board(cells, { glow = false } = {}) {
       <radialGradient id="tile-y" cx="38%" cy="30%" r="80%"><stop offset="0%" stop-color="#fcdf6e"/><stop offset="55%" stop-color="#f0c531"/><stop offset="100%" stop-color="#d3a013"/></radialGradient>
       <radialGradient id="tile-b" cx="38%" cy="30%" r="80%"><stop offset="0%" stop-color="#c4843a"/><stop offset="55%" stop-color="#97581d"/><stop offset="100%" stop-color="#744213"/></radialGradient>
       <filter id="sg" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9"/></filter>
-    </defs>${tiles}${glowLine}${pieces}${over}</svg>`
+      <filter id="hg" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#f97316" flood-opacity="0.9"/></filter>
+    </defs>${tiles}${hives}${glowLine}${pieces}${over}</svg>`
 }
 
-// ---- 슬라이드별 보드 ----
+// ---- 슬라이드별 보드(실제 게임에 나올 법한 혼합 국면) ----
+// 이 게임은 "두 겹의 오목": 타일로 5목(=벌집) + 그 위 말로 5목(=승리).
+// 말 5목(승리): 노랑 말이 한 줄로. 밑 타일 색은 섞여 있어 "말로 만드는 오목"이 타일과 별개임을 보인다.
 const HERO = [
-  { q: 0, r: 1, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'y', p: 'y', win: true }, { q: 2, r: 1, t: 'y', p: 'y', win: true },
-  { q: 3, r: 1, t: 'y', p: 'y', win: true }, { q: 4, r: 1, t: 'y', p: 'y', win: true },
-  { q: 0, r: 0, t: 'b', p: 'b' }, { q: 1, r: 0, t: 'y' }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 3, r: 0, t: 'y' },
-  { q: -1, r: 1, t: 'b', p: 'b' }, { q: 5, r: 1, t: 'y' },
-  { q: -1, r: 2, t: 'y' }, { q: 0, r: 2, t: 'b', p: 'b' }, { q: 1, r: 2, t: 'y' }, { q: 2, r: 2, t: 'b' }, { q: 3, r: 2, t: 'y', p: 'y', queen: true }, { q: 4, r: 2, t: 'b', p: 'b' },
+  { q: -1, r: 0, t: 'y' }, { q: 0, r: 0, t: 'b', p: 'b' }, { q: 1, r: 0, t: 'y' }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 3, r: 0, t: 'y' },
+  { q: -1, r: 1, t: 'b', p: 'b' },
+  { q: 0, r: 1, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'b', p: 'y', win: true }, { q: 2, r: 1, t: 'y', p: 'y', win: true }, { q: 3, r: 1, t: 'y', p: 'y', win: true }, { q: 4, r: 1, t: 'b', p: 'y', win: true },
+  { q: 0, r: 2, t: 'b' }, { q: 1, r: 2, t: 'y', p: 'b' }, { q: 2, r: 2, t: 'b' }, { q: 3, r: 2, t: 'y' },
 ]
 const WIN = [
-  { q: 0, r: 1, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'y', p: 'y', win: true }, { q: 2, r: 1, t: 'y', p: 'y', win: true },
-  { q: 3, r: 1, t: 'y', p: 'y', win: true }, { q: 4, r: 1, t: 'y', p: 'y', win: true },
-  { q: 1, r: 0, t: 'b', p: 'b' }, { q: 3, r: 0, t: 'b', p: 'b' }, { q: 2, r: 2, t: 'b', p: 'b' },
+  { q: 0, r: 0, t: 'b', p: 'b' }, { q: 1, r: 0, t: 'y' }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 3, r: 0, t: 'y' },
+  { q: 0, r: 1, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'b', p: 'y', win: true }, { q: 2, r: 1, t: 'y', p: 'y', win: true }, { q: 3, r: 1, t: 'b', p: 'y', win: true }, { q: 4, r: 1, t: 'y', p: 'y', win: true },
+  { q: 1, r: 2, t: 'y' }, { q: 2, r: 2, t: 'b', p: 'b' }, { q: 3, r: 2, t: 'y' },
 ]
+// 한 턴: ①·② 모두 같은 보드에서 시작 → 새로 둔 곳을 점선 링(fresh)으로 표시.
 const TURN_A = [
-  { q: 0, r: 0, t: 'y' }, { q: 1, r: 0, t: 'b' }, { q: 0, r: 1, t: 'y' },
-  { q: 1, r: 1, t: 'ghost', mark: 'plus' }, { q: 2, r: 0, t: 'ghost', mark: 'plus' },
+  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b' }, { q: 0, r: 1, t: 'b', p: 'b' }, { q: 1, r: 1, t: 'y' },
+  { q: 2, r: 0, t: 'y', fresh: true }, { q: 2, r: 1, t: 'y', fresh: true }, // 새 타일 2개
 ]
 const TURN_B = [
-  { q: 0, r: 0, t: 'y' }, { q: 1, r: 0, t: 'b' }, { q: 0, r: 1, t: 'y' },
-  { q: 2, r: 0, t: 'y', p: 'y', ring: true }, { q: 1, r: 1, t: 'ghost', mark: 'plus' },
+  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b' }, { q: 0, r: 1, t: 'b', p: 'b' },
+  { q: 2, r: 0, t: 'y', fresh: true }, // 새 타일 1개
+  { q: 1, r: 1, t: 'y', p: 'y', fresh: true }, // 그 위(타일)에 새 말 1개
 ]
+// 타일 5목(벌집): 같은 색 타일이 한 줄로. 꿀빛 글로우로 "벌집"임을 표현.
 const HIVE = [
-  { q: 0, r: 1, t: 'y', win: true }, { q: 1, r: 1, t: 'y', win: true }, { q: 2, r: 1, t: 'y', win: true, p: 'y' },
-  { q: 3, r: 1, t: 'y', win: true }, { q: 4, r: 1, t: 'y', win: true, lock: true },
-  { q: 0, r: 0, t: 'y' }, { q: 1, r: 0, t: 'b' }, { q: 3, r: 0, t: 'b', p: 'b' }, { q: 2, r: 2, t: 'b' },
+  { q: 0, r: 0, t: 'y' }, { q: 1, r: 0, t: 'b', p: 'b' }, { q: 2, r: 0, t: 'y' }, { q: 3, r: 0, t: 'b' },
+  { q: 0, r: 1, t: 'y', hive: true, p: 'y' }, { q: 1, r: 1, t: 'y', hive: true }, { q: 2, r: 1, t: 'y', hive: true, p: 'y' }, { q: 3, r: 1, t: 'y', hive: true }, { q: 4, r: 1, t: 'y', hive: true },
+  { q: 1, r: 2, t: 'b', p: 'b' }, { q: 2, r: 2, t: 'y' }, { q: 3, r: 2, t: 'b' },
 ]
+const WIN_MINI = [
+  { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: 0, t: 'b', p: 'y', win: true }, { q: 2, r: 0, t: 'y', p: 'y', win: true }, { q: 3, r: 0, t: 'b', p: 'y', win: true }, { q: 4, r: 0, t: 'y', p: 'y', win: true },
+]
+const HIVE_MINI = [
+  { q: 0, r: 0, t: 'y', hive: true }, { q: 1, r: 0, t: 'y', hive: true, p: 'y' }, { q: 2, r: 0, t: 'y', hive: true }, { q: 3, r: 0, t: 'y', hive: true, p: 'y' }, { q: 4, r: 0, t: 'y', hive: true }, { q: 5, r: 0, t: 'y', hive: true },
+]
+
+// ---- 모드 인게임 아이콘(이모지 대신 직접 그린 SVG, 게임 말/꿀빛 스타일) ----
+function chip(cx, cy, owner) {
+  const body = owner === 'y' ? '#e8b21e' : '#8a5418'
+  const edge = owner === 'y' ? '#9a6406' : '#3f1f17'
+  return `<g><circle cx="${cx}" cy="${cy + 2}" r="17" fill="#000" opacity="0.12"/>
+    <circle cx="${cx}" cy="${cy}" r="17" fill="${body}" stroke="${edge}" stroke-width="2"/>
+    <rect x="${cx - 11}" y="${cy - 4}" width="22" height="3.6" rx="1.8" fill="#1d150b"/>
+    <rect x="${cx - 11}" y="${cy + 3}" width="22" height="3.6" rx="1.8" fill="#1d150b"/></g>`
+}
+function robot(cx, cy) {
+  return `<g><line x1="${cx}" y1="${cy - 21}" x2="${cx}" y2="${cy - 13}" stroke="#43290a" stroke-width="2.6"/><circle cx="${cx}" cy="${cy - 23}" r="3" fill="#43290a"/>
+    <rect x="${cx - 16}" y="${cy - 13}" width="32" height="27" rx="7" fill="#5a3a10" stroke="#3a2408" stroke-width="2"/>
+    <circle cx="${cx - 7}" cy="${cy}" r="4" fill="#ffd86b"/><circle cx="${cx + 7}" cy="${cy}" r="4" fill="#ffd86b"/></g>`
+}
+function eye(cx, cy) {
+  return `<g><path d="M ${cx - 26} ${cy} Q ${cx} ${cy - 18} ${cx + 26} ${cy} Q ${cx} ${cy + 18} ${cx - 26} ${cy} Z" fill="#fffaef" stroke="#43290a" stroke-width="3"/>
+    <circle cx="${cx}" cy="${cy}" r="9" fill="#43290a"/><circle cx="${cx + 3}" cy="${cy - 3}" r="2.5" fill="#fff"/></g>`
+}
+function link2(cx, cy) {
+  return `<g fill="none" stroke="#43290a" stroke-width="4.5"><rect x="${cx - 16}" y="${cy - 7}" width="19" height="14" rx="7"/><rect x="${cx - 3}" y="${cy - 7}" width="19" height="14" rx="7" fill="#fffaef"/></g>`
+}
+const ICON = {
+  human: `<svg viewBox="0 0 78 56" xmlns="http://www.w3.org/2000/svg">${chip(24, 28, 'y')}${chip(52, 28, 'b')}</svg>`,
+  ai: `<svg viewBox="0 0 78 56" xmlns="http://www.w3.org/2000/svg">${chip(22, 30, 'y')}${robot(52, 28)}</svg>`,
+  watch: `<svg viewBox="0 0 78 56" xmlns="http://www.w3.org/2000/svg">${eye(39, 28)}</svg>`,
+  online: `<svg viewBox="0 0 78 56" xmlns="http://www.w3.org/2000/svg">${chip(20, 28, 'y')}${chip(56, 28, 'b')}${link2(38, 28)}</svg>`,
+}
 
 // ---- 공통 head(폰트·토큰) + 캐러셀 CSS ----
 const HEAD = `<meta charset="utf-8">
@@ -182,18 +207,20 @@ const HEAD = `<meta charset="utf-8">
   .opt .board{width:340px}
   .cards{display:flex;flex-direction:column;gap:30px;width:100%;max-width:880px}
   .rcard{display:flex;align-items:center;gap:28px;background:var(--cream);border:3px solid #c79a2f;border-radius:28px;padding:32px 36px;box-shadow:0 6px 0 #c79a2f}
-  .ric{font-size:66px;flex:none;line-height:1}
+  .rmini{width:240px;flex:none}
+  .rmini .board{width:100%;filter:drop-shadow(0 8px 12px rgba(95,58,8,0.22))}
   .rt{font-family:'Jua',sans-serif;font-size:42px;color:var(--ink)}
   .rd{font-size:29px;color:var(--ink-soft);margin-top:6px}
   .modes{display:grid;grid-template-columns:1fr 1fr;gap:22px;width:100%;max-width:900px}
   .mcard{background:var(--cream);border:3px solid #c79a2f;border-radius:24px;padding:24px 28px;box-shadow:0 5px 0 #c79a2f;display:flex;flex-direction:column;gap:8px}
-  .mtitle{display:flex;align-items:center;gap:0.5rem;font-family:'Jua','Malgun Gothic',sans-serif;font-size:35px;color:var(--ink)}
-  .mcard .mi{font-size:34px;line-height:1}
-  .mcard small{font-size:26px;color:var(--ink-soft)}
+  .mtitle{display:flex;align-items:center;gap:0.55rem;font-family:'Jua','Malgun Gothic',sans-serif;font-size:35px;color:var(--ink)}
+  .mtitle .ico{display:inline-flex;align-items:center;flex:none}
+  .mtitle .ico svg{width:60px;height:44px;display:block}
+  .mcard small{font-size:26px;color:var(--ink-soft);padding-left:2px}
   .pills{display:grid;grid-template-columns:repeat(3,auto);justify-content:center;justify-items:center;gap:16px 16px;max-width:940px}
   .pills span{background:#fff3cf;border:2px solid #c79a2f;border-radius:999px;padding:11px 22px;font-weight:800;font-size:25px;color:var(--ink)}
   .swipe{font-family:'Jua',sans-serif;font-size:36px;color:#b35309}
-  .ctag{font-family:'Jua','Malgun Gothic',sans-serif;font-size:36px;line-height:1.42;color:var(--ink);text-align:center}
+  .ctag{font-family:'Jua','Malgun Gothic',sans-serif;font-size:40px;line-height:1.4;color:var(--ink);text-align:center}
   .ctag b{color:var(--glow)}
   .bigbee svg{width:148px;height:148px;display:block;filter:drop-shadow(0 10px 14px rgba(90,55,5,.3))}
   .ctaurl{font-weight:800;font-size:38px;color:var(--cream);background:#43290a;border-radius:999px;padding:16px 40px;box-shadow:0 8px 0 rgba(40,24,6,.35)}
@@ -230,7 +257,7 @@ const SLIDES = [
   slide({
     n: 1, variant: 'cover',
     titleHtml: `<div class="wordmark"><span class="l1">Be the</span><span class="l2">Bee</span></div>`,
-    bodyHtml: `<div class="ctag">상대보다 빠르게, 타일 위에<br>내 말 5개를 한 줄로 이어<br><b>벌집의 주인</b>이 되세요!</div>
+    bodyHtml: `<div class="ctag">내 말 5개를 타일 위에 한 줄로 이어<br>상대보다 먼저 <b>벌집의 주인</b>이 되세요!</div>
       <div class="hero">${board(HERO, { glow: true })}</div>
       <div class="swipe">👉 넘겨서 규칙 한눈에 보기</div>`,
   }),
@@ -238,7 +265,7 @@ const SLIDES = [
   slide({
     n: 2, kicker: '목표', titleHtml: `꿀벌 <em>5개</em>를 한 줄로!`,
     bodyHtml: `<div class="hero">${board(WIN, { glow: true })}</div>
-      <p class="lead">내 말(꿀벌) <b>5개</b>가 어느 방향이든<br><b>한 줄</b>로 이어지면 <b>그 즉시 승리</b>.</p>`,
+      <p class="lead">내 말(꿀벌) <b>5개</b>를 어느 방향이든 <b>한 줄</b>로<br>먼저 이으면 <b>그 즉시 승리</b><br><b>말로 만드는 오목</b>이에요</p>`,
   }),
   // 3 — 한 턴
   slide({
@@ -247,20 +274,20 @@ const SLIDES = [
         <div class="opt"><div class="optlabel">① 타일 2개</div>${board(TURN_A)}</div>
         <div class="opt"><div class="optlabel">② 타일 1개 + 말 1개</div>${board(TURN_B)}</div>
       </div>
-      <p class="lead">타일은 <b>이미 놓인 타일 옆</b>에 붙여서 놓아요.<br>정해진 판 모양 없이, <b>전략에 따라 넓혀가요</b>.</p>`,
+      <p class="lead">타일은 <b>이미 놓인 타일 옆</b>에 붙여서 놓아요<br>정해진 판 모양 없이 <b>전략에 따라 넓혀가요</b></p>`,
   }),
   // 4 — 벌집
   slide({
-    n: 4, kicker: '벌집', titleHtml: `같은 색 타일 5개로 <em>벌집</em> 만들기`,
+    n: 4, kicker: '벌집', titleHtml: `타일로 만드는 또 하나의 오목, <em>벌집</em>`,
     bodyHtml: `<div class="hero">${board(HIVE)}</div>
-      <p class="lead">같은 색 타일 5개가 한 줄로 모이면 <b>벌집</b>!<br><b>벌집</b> 위에는 그 주인만 말을 놓을 수 있어요.<br>상대의 길목을 잠그는 <b>핵심 전략</b>이에요.</p>`,
+      <p class="lead">같은 색 타일 5개가 한 줄로 모이면 <b>벌집</b>!<br>말 5목과 별개로 <b>타일로 만드는 오목</b>이에요<br><b>벌집</b> 위엔 그 주인만 말을 놓아 길을 잠가요</p>`,
   }),
   // 5 — 승부
   slide({
     n: 5, kicker: '승부', titleHtml: `이렇게 이겨요`,
     bodyHtml: `<div class="cards">
-        <div class="rcard"><div class="ric">🏆</div><div><div class="rt">말 5개를 한 줄로</div><div class="rd">잇는 순간 바로 승리</div></div></div>
-        <div class="rcard"><div class="ric">🍯</div><div><div class="rt">타일을 다 쓰면</div><div class="rd">벌집 점수로 결정 (벌집이 길수록 높은 점수)</div></div></div>
+        <div class="rcard"><div class="rmini">${board(WIN_MINI, { glow: true })}</div><div><div class="rt">말 5개를 한 줄로</div><div class="rd">잇는 순간 바로 승리</div></div></div>
+        <div class="rcard"><div class="rmini">${board(HIVE_MINI)}</div><div><div class="rt">타일을 다 쓰면</div><div class="rd">벌집 점수로 결정 (벌집이 길수록 높은 점수)</div></div></div>
       </div>
       <div class="s-note">자세한 내용은 게임 안 상세 규칙에서 확인!</div>`,
   }),
@@ -268,10 +295,10 @@ const SLIDES = [
   slide({
     n: 6, kicker: '즐기는 법', titleHtml: `혼자서도, 친구와도`,
     bodyHtml: `<div class="modes">
-        <div class="mcard"><div class="mtitle"><span class="mi">👥</span>사람 vs 사람</div><small>한 기기에서 번갈아</small></div>
-        <div class="mcard"><div class="mtitle"><span class="mi">🤖</span>AI와 대결</div><small>난이도·성향 선택</small></div>
-        <div class="mcard"><div class="mtitle"><span class="mi">👀</span>AI 관전</div><small>두 AI의 수 구경</small></div>
-        <div class="mcard"><div class="mtitle"><span class="mi">🔗</span>온라인 초대 대전</div><small>링크로 친구와 1:1</small></div>
+        <div class="mcard"><div class="mtitle"><span class="ico">${ICON.human}</span>사람 vs 사람</div><small>한 기기에서 번갈아</small></div>
+        <div class="mcard"><div class="mtitle"><span class="ico">${ICON.ai}</span>AI와 대결</div><small>난이도·성향 선택</small></div>
+        <div class="mcard"><div class="mtitle"><span class="ico">${ICON.watch}</span>AI 관전</div><small>두 AI의 수 구경</small></div>
+        <div class="mcard"><div class="mtitle"><span class="ico">${ICON.online}</span>온라인 초대 대전</div><small>링크로 친구와 1:1</small></div>
       </div>
       <div class="pills"><span>💻📱 PC·모바일</span><span>👑 여왕벌</span><span>♾️ 무한 모드</span><span>📖 규칙 튜토리얼</span><span>↩️ 복기</span><span>🎨 테마·3D</span></div>`,
   }),
@@ -280,7 +307,7 @@ const SLIDES = [
     n: 7, variant: 'cta', titleHtml: `지금, <em>무료로</em> 플레이`,
     bodyHtml: `<div class="bigbee">${beeMascot}</div>
       <div class="ctaurl">soomin007.github.io/be-the-bee</div>
-      <p class="lead">설치 없이 <b>PC·모바일</b> 어디서나.<br>친구에게 <b>링크만 보내면</b> 온라인 1:1 대전.</p>
+      <p class="lead">설치 없이 <b>PC·모바일</b> 어디서나<br>친구에게 <b>링크만 보내면</b> 온라인 1:1 대전</p>
       <div class="rulebook">
         <div class="qr">${QR_SVG}</div>
         <div class="rb-text"><div class="rb-label">원본 보드게임 설명서</div><div class="rb-url">ischive.com/assignment/XZ1O1TIB7A</div></div>
