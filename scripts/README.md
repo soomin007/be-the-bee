@@ -48,6 +48,7 @@
 | `shot-tutorial.mjs` | 튜토리얼 표지/진행/TIP → `shots/tutorial-cover.png`·`tutorial-play.png`·`tutorial-tip.png` |
 | `shot-og.mjs` | 공유 미리보기·아이콘 생성(dev 불필요) → `public/og-cover.png`(1200×630)·`public/apple-touch-icon.png` |
 | `shot-poster.mjs` | 홍보용 포스터 4종 생성(dev 불필요, 게임 말 아트·꿀 팔레트 재사용) → `public/poster.png`(세로 2160×2800)·`poster-instagram.png`(인스타 4:5)·`poster-square.png`(1:1)·`poster-wide.png`(가로 16:9 3840×2160) |
+| `shot-carousel.mjs` | 인스타 캐러셀 7장 생성(4:5, 규칙·플레이·특징). 말투 2종 → `public/carousel/`(해요체)·`public/carousel-brief/`(개조식). 각 slide-01..07.png |
 
 ## 분석 도구 (Playwright 아님)
 | 파일 | 무엇 |

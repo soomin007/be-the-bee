@@ -270,16 +270,75 @@ const SLIDES = [
   }),
 ]
 
-mkdirSync('public/carousel', { recursive: true })
+// 개조식(짧고 명사형 종결) 버전 — 해요체 SLIDES 와 동일 레이아웃, 문구만 간결화(해요/예요 → 명사·= ·→).
+const SLIDES_BRIEF = [
+  slide({
+    n: 1, variant: 'cover',
+    titleHtml: `<div class="wordmark"><span class="l1">Be the</span><span class="l2">Bee</span></div>`,
+    bodyHtml: `<div class="ctag">같은 색 꿀벌 5개, 한 줄로</div>
+      <div class="hero">${board(HERO, { glow: true })}</div>
+      <div class="swipe">→ 넘겨서 규칙 보기</div>`,
+  }),
+  slide({
+    n: 2, kicker: '목표', titleHtml: `꿀벌 <em>5개</em>, 한 줄 = 승리`,
+    bodyHtml: `<div class="hero">${board(WIN, { glow: true })}</div>
+      <p class="lead">어느 방향이든 <b>5개 연속</b><br>= <b>그 즉시 승리</b></p>`,
+  }),
+  slide({
+    n: 3, kicker: '한 턴', titleHtml: `타일 깔고, 벌 올리기`,
+    bodyHtml: `<div class="two">
+        <div class="opt"><div class="optlabel">① 타일 2개</div>${board(TURN_A)}</div>
+        <div class="opt"><div class="optlabel">② 타일 1개 + 말 1개</div>${board(TURN_B)}</div>
+      </div>
+      <p class="lead">타일은 <b>기존 타일 옆</b>에만<br>보드는 매 판 확장</p>`,
+  }),
+  slide({
+    n: 4, kicker: '벌집', titleHtml: `같은 색 타일 <em>5개</em> = 벌집`,
+    bodyHtml: `<div class="hero">${board(HIVE)}</div>
+      <p class="lead">벌집 위엔 <b>주인만</b> 말 가능<br>상대 길목 잠그는 <b>핵심 전략</b></p>`,
+  }),
+  slide({
+    n: 5, kicker: '승부', titleHtml: `이기는 법`,
+    bodyHtml: `<div class="cards">
+        <div class="rcard"><div class="ric">🏆</div><div><div class="rt">말 5개 한 줄</div><div class="rd">→ 즉시 승리</div></div></div>
+        <div class="rcard"><div class="ric">🍯</div><div><div class="rt">타일 소진 시</div><div class="rd">→ 벌집 점수 (길수록 고득점)</div></div></div>
+      </div>`,
+  }),
+  slide({
+    n: 6, kicker: '플레이', titleHtml: `혼자서도, 친구와도`,
+    bodyHtml: `<div class="modes">
+        <div class="mcard"><span class="mi">👥</span><b>사람 vs 사람</b><small>한 기기 번갈아</small></div>
+        <div class="mcard"><span class="mi">🤖</span><b>AI와 대결</b><small>난이도·성향 선택</small></div>
+        <div class="mcard"><span class="mi">👀</span><b>AI 관전</b><small>두 AI 대국</small></div>
+        <div class="mcard"><span class="mi">🔗</span><b>온라인 대전</b><small>링크로 1:1</small></div>
+      </div>
+      <div class="pills"><span>👑 여왕벌</span><span>♾️ 무한 모드</span><span>📖 규칙 튜토리얼</span><span>↩️ 복기</span><span>🎨 테마·3D</span><span>💾 저장·이어하기</span></div>`,
+  }),
+  slide({
+    n: 7, variant: 'cta', titleHtml: `지금, <em>무료로</em>`,
+    bodyHtml: `<div class="bigbee">${beeMascot}</div>
+      <div class="ctaurl">soomin007.github.io/be-the-bee</div>
+      <p class="lead">설치 없이 바로<br>링크 한 번 = 온라인 1:1</p>
+      <div class="credit">원작 보드게임 김수민 · 김재현 · 조주현 &nbsp;|&nbsp; 프로그램 구현 김수민</div>`,
+  }),
+]
+
+const VARIANTS = [
+  { dir: 'public/carousel', slides: SLIDES }, // 해요체(기존)
+  { dir: 'public/carousel-brief', slides: SLIDES_BRIEF }, // 개조식(짧게)
+]
 const browser = await chromium.launch()
-for (let i = 0; i < SLIDES.length; i++) {
-  const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: 2 })
-  await page.setContent(SLIDES[i], { waitUntil: 'networkidle' })
-  try { await page.evaluate(() => document.fonts.ready) } catch {}
-  await page.waitForTimeout(200)
-  const name = `slide-${String(i + 1).padStart(2, '0')}`
-  await page.locator('.poster').screenshot({ path: `public/carousel/${name}.png` })
-  await page.close()
-  console.log(`saved public/carousel/${name}.png`)
+for (const v of VARIANTS) {
+  mkdirSync(v.dir, { recursive: true })
+  for (let i = 0; i < v.slides.length; i++) {
+    const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: 2 })
+    await page.setContent(v.slides[i], { waitUntil: 'networkidle' })
+    try { await page.evaluate(() => document.fonts.ready) } catch {}
+    await page.waitForTimeout(200)
+    const name = `slide-${String(i + 1).padStart(2, '0')}`
+    await page.locator('.poster').screenshot({ path: `${v.dir}/${name}.png` })
+    await page.close()
+    console.log(`saved ${v.dir}/${name}.png`)
+  }
 }
 await browser.close()
