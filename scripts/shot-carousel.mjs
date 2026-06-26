@@ -73,7 +73,7 @@ function hexPts(cx, cy) {
 // cells: {q,r, t:'y'|'b', p:'y'|'b'|null, win(말 5목 글로우), hive(타일 5목=벌집, 꿀빛 글로우), fresh(이번 턴 갓 둠), queen}
 function board(cells, { glow = false } = {}) {
   const xs = cells.map((c) => hx(c.q, c.r)), ys = cells.map((c) => hy(c.q, c.r))
-  const pad = R * 1.3
+  const pad = R * (cells.some((c) => c.fresh) ? 1.95 : 1.3) // 갓둠 배지 자리 확보
   const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad
   const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad
   let tiles = '', hives = '', pieces = '', over = '', glowLine = ''
@@ -85,14 +85,20 @@ function board(cells, { glow = false } = {}) {
     // 벌집(타일 5목): 실제 게임과 동일하게 꿀빛 채움 + 금색 글로우(자물쇠 같은 가짜 요소 안 씀).
     if (c.hive) hives += `<polygon points="${hexPts(x, y)}" fill="#ffe07a" fill-opacity="0.5" stroke="#f97316" stroke-width="5" filter="url(#hg)"/>`
     if (c.p) pieces += pieceMarkup(x, y, R * 0.62, c.p === 'y' ? 'yellow' : 'brown', c.queen)
-    if (c.fresh) over += `<circle cx="${x}" cy="${y}" r="${R * 0.86}" fill="none" stroke="#e8590c" stroke-width="5" stroke-dasharray="11 8"/>`
+    if (c.fresh) {
+      over += `<circle cx="${x}" cy="${y}" r="${R * 0.92}" fill="none" stroke="#ff7a18" stroke-width="8" filter="url(#sg)"/>`
+      over += `<circle cx="${x}" cy="${y}" r="${R * 0.92}" fill="none" stroke="#ff7a18" stroke-width="5.5"/>`
+      const by = y - R * 1.2
+      over += `<g><rect x="${(x - 54).toFixed(1)}" y="${(by - 25).toFixed(1)}" width="108" height="48" rx="24" fill="#e8590c"/><polygon points="${(x - 9).toFixed(1)},${(by + 21).toFixed(1)} ${(x + 9).toFixed(1)},${(by + 21).toFixed(1)} ${x.toFixed(1)},${(by + 35).toFixed(1)}" fill="#e8590c"/><text x="${x.toFixed(1)}" y="${by.toFixed(1)}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-family="'Jua','Malgun Gothic',sans-serif" font-size="30" font-weight="700">+${c.fresh}</text></g>`
+    }
   }
   if (glow) {
-    const wc = cells.filter((c) => c.win)
-    const x1 = hx(wc[0].q, wc[0].r), x2 = hx(wc[wc.length - 1].q, wc[wc.length - 1].r), yy = hy(wc[0].q, wc[0].r)
+    // 승리(말 5목) 라인 글로우 — 가로뿐 아니라 대각(q+r=0 등) 어느 축이든 양 끝을 잇는다.
+    const wc = cells.filter((c) => c.win).map((c) => ({ x: hx(c.q, c.r), y: hy(c.q, c.r) })).sort((a, b) => a.x - b.x)
+    const a = wc[0], z = wc[wc.length - 1]
     glowLine =
-      `<line x1="${x1}" y1="${yy}" x2="${x2}" y2="${yy}" stroke="#f97316" stroke-width="${R * 1.25}" stroke-linecap="round" opacity="0.66" filter="url(#sg)"/>` +
-      `<line x1="${x1}" y1="${yy}" x2="${x2}" y2="${yy}" stroke="#ffe39a" stroke-width="${R * 0.3}" stroke-linecap="round" opacity="0.95" filter="url(#sg)"/>`
+      `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${z.x.toFixed(1)}" y2="${z.y.toFixed(1)}" stroke="#f97316" stroke-width="${R * 1.25}" stroke-linecap="round" opacity="0.66" filter="url(#sg)"/>` +
+      `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${z.x.toFixed(1)}" y2="${z.y.toFixed(1)}" stroke="#ffe39a" stroke-width="${R * 0.3}" stroke-linecap="round" opacity="0.95" filter="url(#sg)"/>`
   }
   return `<svg class="board" viewBox="${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX - minX).toFixed(1)} ${(maxY - minY).toFixed(1)}" xmlns="http://www.w3.org/2000/svg">
     <defs>${PIECE_DEFS}
@@ -103,41 +109,34 @@ function board(cells, { glow = false } = {}) {
     </defs>${tiles}${hives}${glowLine}${pieces}${over}</svg>`
 }
 
-// ---- 슬라이드별 보드(실제 게임에 나올 법한 혼합 국면) ----
-// 이 게임은 "두 겹의 오목": 타일로 5목(=벌집) + 그 위 말로 5목(=승리).
-// 말 5목(승리): 노랑 말이 한 줄로. 밑 타일 색은 섞여 있어 "말로 만드는 오목"이 타일과 별개임을 보인다.
+// ---- 슬라이드별 보드 = 실제 대국 국면(사용자가 전문가와 둔 그 기보를 엔진으로 재생) ----
+// 이 게임은 "두 겹의 오목": 타일로 5목(=벌집) + 그 위 말로 5목(=승리). 그 판은 q+r=0 축에 둘 다 났다.
+// HERO/WIN = 최종 국면(17수, 말 5목 승리), HIVE = 6수(타일 벌집 막 완성), TURN = 4수 국면에서 ①·② 시연.
 const HERO = [
-  { q: -1, r: 0, t: 'y' }, { q: 0, r: 0, t: 'b', p: 'b' }, { q: 1, r: 0, t: 'y' }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 3, r: 0, t: 'y' },
-  { q: -1, r: 1, t: 'b', p: 'b' },
-  { q: 0, r: 1, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'b', p: 'y', win: true }, { q: 2, r: 1, t: 'y', p: 'y', win: true }, { q: 3, r: 1, t: 'y', p: 'y', win: true }, { q: 4, r: 1, t: 'b', p: 'y', win: true },
-  { q: 0, r: 2, t: 'b' }, { q: 1, r: 2, t: 'y', p: 'b' }, { q: 2, r: 2, t: 'b' }, { q: 3, r: 2, t: 'y' },
+  { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y', p: 'y', win: true }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: -1, t: 'y', p: 'y', win: true }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 2, r: -2, t: 'y', p: 'y', win: true }, { q: 3, r: -3, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'b', p: 'b' }, { q: -2, r: 2, t: 'y' }, { q: 0, r: 2, t: 'b', p: 'b' }, { q: -1, r: 3, t: 'y', p: 'y' }, { q: 3, r: -1, t: 'b', p: 'b' }, { q: 4, r: -2, t: 'y', p: 'y' }, { q: 2, r: 1, t: 'b', p: 'b' }, { q: 3, r: -2, t: 'y' }, { q: 4, r: -1, t: 'b', p: 'b' }, { q: 5, r: -2, t: 'y' }, { q: 4, r: -4, t: 'b', p: 'b' }, { q: 1, r: -2, t: 'y' },
 ]
 const WIN = [
-  { q: 0, r: 0, t: 'b', p: 'b' }, { q: 1, r: 0, t: 'y' }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 3, r: 0, t: 'y' },
-  { q: 0, r: 1, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'b', p: 'y', win: true }, { q: 2, r: 1, t: 'y', p: 'y', win: true }, { q: 3, r: 1, t: 'b', p: 'y', win: true }, { q: 4, r: 1, t: 'y', p: 'y', win: true },
-  { q: 1, r: 2, t: 'y' }, { q: 2, r: 2, t: 'b', p: 'b' }, { q: 3, r: 2, t: 'y' },
+  { q: -1, r: 1, t: 'y', p: 'y', win: true }, { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: -1, t: 'y', p: 'y', win: true }, { q: 2, r: -2, t: 'y', p: 'y', win: true }, { q: 3, r: -3, t: 'y', p: 'y', win: true },
+  { q: 1, r: 0, t: 'b', p: 'y' }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: 1, t: 'b', p: 'b' }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 3, r: -2, t: 'y' }, { q: -2, r: 2, t: 'y' }, { q: 4, r: -2, t: 'y', p: 'y' },
 ]
-// 한 턴: ①·② 모두 같은 보드에서 시작 → 새로 둔 곳을 점선 링(fresh)으로 표시.
+// 4수 국면(실제) 공통 + ①(타일 2개, 실제 5수)·②(타일 1 + 말 1)을 갓둠 배지로 시연.
 const TURN_A = [
-  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b' }, { q: 0, r: 1, t: 'b', p: 'b' }, { q: 1, r: 1, t: 'y' },
-  { q: 2, r: 0, t: 'y', fresh: true }, { q: 2, r: 1, t: 'y', fresh: true }, // 새 타일 2개
+  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y' }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: -1, t: 'y' }, { q: 2, r: 0, t: 'b', p: 'b' },
+  { q: 2, r: -2, t: 'y', fresh: '타일' }, { q: 3, r: -3, t: 'y', fresh: '타일' },
 ]
 const TURN_B = [
-  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b' }, { q: 0, r: 1, t: 'b', p: 'b' },
-  { q: 2, r: 0, t: 'y', fresh: true }, // 새 타일 1개
-  { q: 1, r: 1, t: 'y', p: 'y', fresh: true }, // 그 위(타일)에 새 말 1개
+  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y' }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 2, r: 0, t: 'b', p: 'b' },
+  { q: 2, r: -2, t: 'y', fresh: '타일' }, { q: 1, r: -1, t: 'y', p: 'y', fresh: '말' },
 ]
-// 타일 5목(벌집): 같은 색 타일이 한 줄로. 꿀빛 글로우로 "벌집"임을 표현.
+// 타일 5목(벌집) = 6수 국면(실제), q+r=0 의 노랑 타일 5개가 막 벌집이 됨.
 const HIVE = [
-  { q: 0, r: 0, t: 'y' }, { q: 1, r: 0, t: 'b', p: 'b' }, { q: 2, r: 0, t: 'y' }, { q: 3, r: 0, t: 'b' },
-  { q: 0, r: 1, t: 'y', hive: true, p: 'y' }, { q: 1, r: 1, t: 'y', hive: true }, { q: 2, r: 1, t: 'y', hive: true, p: 'y' }, { q: 3, r: 1, t: 'y', hive: true }, { q: 4, r: 1, t: 'y', hive: true },
-  { q: 1, r: 2, t: 'b', p: 'b' }, { q: 2, r: 2, t: 'y' }, { q: 3, r: 2, t: 'b' },
+  { q: 0, r: 0, t: 'y', p: 'y', hive: true }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y', hive: true }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: -1, t: 'y', hive: true }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 2, r: -2, t: 'y', hive: true }, { q: 3, r: -3, t: 'y', hive: true }, { q: 1, r: 1, t: 'b', p: 'b' },
 ]
 const WIN_MINI = [
-  { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: 0, t: 'b', p: 'y', win: true }, { q: 2, r: 0, t: 'y', p: 'y', win: true }, { q: 3, r: 0, t: 'b', p: 'y', win: true }, { q: 4, r: 0, t: 'y', p: 'y', win: true },
+  { q: -1, r: 1, t: 'y', p: 'y', win: true }, { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: -1, t: 'y', p: 'y', win: true }, { q: 2, r: -2, t: 'y', p: 'y', win: true }, { q: 3, r: -3, t: 'y', p: 'y', win: true },
 ]
 const HIVE_MINI = [
-  { q: 0, r: 0, t: 'y', hive: true }, { q: 1, r: 0, t: 'y', hive: true, p: 'y' }, { q: 2, r: 0, t: 'y', hive: true }, { q: 3, r: 0, t: 'y', hive: true, p: 'y' }, { q: 4, r: 0, t: 'y', hive: true }, { q: 5, r: 0, t: 'y', hive: true },
+  { q: -1, r: 1, t: 'y', hive: true }, { q: 0, r: 0, t: 'y', hive: true, p: 'y' }, { q: 1, r: -1, t: 'y', hive: true }, { q: 2, r: -2, t: 'y', hive: true, p: 'y' }, { q: 3, r: -3, t: 'y', hive: true },
 ]
 
 // ---- 모드 인게임 아이콘(이모지 대신 직접 그린 SVG, 게임 말/꿀빛 스타일) ----
