@@ -133,7 +133,7 @@ type Draft =
 type Mode = 'hotseat' | 'vsAi' | 'watch'
 const MODE_LABEL: Record<Mode, string> = {
   hotseat: '사람 vs 사람',
-  vsAi: 'vs AI (갈색)',
+  vsAi: 'vs AI',
   watch: 'AI 관전',
 }
 // 설정 버튼에 현재 선택값을 짧게 보여줄 라벨(드롭다운 버튼용, 그리드 폭 고려).
@@ -168,6 +168,7 @@ const AI_DELAY_MS = 350
 interface RoomSettings {
   mode: Mode
   aiDifficulty: Difficulty
+  aiSide: Player // vsAi 에서 AI 가 두는 색. 기본 'brown'(사람=노랑 선공). 'yellow' 면 사람이 후공(갈색) 연습.
   hints: boolean // 훈수(승리 힌트): 내가 5목 둘 칸·내 벌집 초읽기 등 "유리" 정보. 기본 꺼짐.
   dangerAlerts: boolean // 위험 경고: 상대가 다음 한 수로 5목·막을 수 없는 벌집(사이렌). 기본 켜짐.
   queen: boolean // 여왕벌 모드(확장, 숙련자용). 기본 꺼짐. AI 는 사용 안 함
@@ -205,6 +206,7 @@ function defaultSettings(): RoomSettings {
   return {
     mode: 'hotseat',
     aiDifficulty: 'medium',
+    aiSide: 'brown',
     hints: false,
     dangerAlerts: true, // 위험 경고는 기본 켜짐(초보가 지는 걸 놓치지 않게). 설정에서 끌 수 있음.
     queen: false,
@@ -282,6 +284,7 @@ function loadSettings(): RoomSettings {
       personaBrown: PERSONAS.includes(s.personaBrown as Persona) ? (s.personaBrown as Persona) : d.personaBrown,
       difficultyYellow: DIFFS.includes(s.difficultyYellow as Difficulty) ? (s.difficultyYellow as Difficulty) : d.difficultyYellow,
       difficultyBrown: DIFFS.includes(s.difficultyBrown as Difficulty) ? (s.difficultyBrown as Difficulty) : d.difficultyBrown,
+      aiSide: s.aiSide === 'yellow' || s.aiSide === 'brown' ? (s.aiSide as Player) : d.aiSide,
       sectionsOpen: mergeSectionsOpen(s.sectionsOpen, d.sectionsOpen),
     }
   } catch {
@@ -403,6 +406,7 @@ export function mountGame(root: HTMLElement): void {
         step: 'opponent' | 'humanWhere' | 'online' | 'ai' | 'watch'
         diff: Difficulty // vs AI 난이도
         persona: Persona // vs AI 성향
+        aiSide: Player // vs AI: AI 색(brown=내가 선공/노랑, yellow=내가 후공/갈색)
         diffY: Difficulty // 관전: 노랑
         personaY: Persona
         diffB: Difficulty // 관전: 갈색
@@ -449,7 +453,7 @@ export function mountGame(root: HTMLElement): void {
   let aiTimer: number | null = null
   let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
-    settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === 'brown')
+    settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === settings.aiSide)
   // 온라인 대전 중 지금이 "내 차례"인가(방 밖이면 항상 true). 대국 중 + 내 진영 차례여야 둘 수 있다.
   const myOnlineTurn = (): boolean =>
     online === null || (online.phase === 'playing' && state.turn === online.mySide)
@@ -469,17 +473,18 @@ export function mountGame(root: HTMLElement): void {
     settings.mode === 'watch' ? (turn === 'yellow' ? settings.difficultyYellow : settings.difficultyBrown) : settings.aiDifficulty
   const rebuildAi = (): void => {
     // 같은 시드면 두 AI 가 결정론적으로 같은 대국을 반복 → 시드를 진영별로 다르게.
-    // 관전은 색깔별 난이도·성향, vsAi(갈색)는 단일 난이도(aiDifficulty)·성향.
-    aiYellow =
-      settings.mode === 'watch'
-        ? createAi({ difficulty: settings.difficultyYellow, persona: settings.personaYellow, seed: 0x1111 })
-        : null
-    if (settings.mode === 'hotseat') {
-      aiBrown = null
-    } else {
-      const diff = settings.mode === 'watch' ? settings.difficultyBrown : settings.aiDifficulty
-      aiBrown = createAi({ difficulty: diff, persona: settings.personaBrown, seed: 0x2222 })
+    // 관전은 양색 모두 AI(색깔별 난이도·성향), vsAi 는 settings.aiSide 한 쪽만 AI(단일 난이도·성향).
+    aiYellow = null
+    aiBrown = null
+    if (settings.mode === 'watch') {
+      aiYellow = createAi({ difficulty: settings.difficultyYellow, persona: settings.personaYellow, seed: 0x1111 })
+      aiBrown = createAi({ difficulty: settings.difficultyBrown, persona: settings.personaBrown, seed: 0x2222 })
+    } else if (settings.mode === 'vsAi') {
+      const ai = createAi({ difficulty: settings.aiDifficulty, persona: settings.personaBrown, seed: 0x2222 })
+      if (settings.aiSide === 'yellow') aiYellow = ai
+      else aiBrown = ai
     }
+    // hotseat: 둘 다 null
   }
   rebuildAi() // 불러온 모드가 vs AI/관전이면 AI 준비
 
@@ -1529,6 +1534,7 @@ export function mountGame(root: HTMLElement): void {
       step: 'opponent',
       diff: settings.aiDifficulty,
       persona: settings.personaBrown,
+      aiSide: settings.aiSide,
       diffY: settings.difficultyYellow,
       personaY: settings.personaYellow,
       diffB: settings.difficultyBrown,
@@ -1557,10 +1563,11 @@ export function mountGame(root: HTMLElement): void {
     settings.mode = 'vsAi'
     settings.aiDifficulty = newGameWiz.diff
     settings.personaBrown = newGameWiz.persona
+    settings.aiSide = newGameWiz.aiSide
     watchRunning = false
     rebuildAi()
     finishNew()
-    maybeScheduleAi() // 사람(노랑) 선공이라 AI(갈색)는 안 둠 — 가드만
+    maybeScheduleAi() // 사람 후공(aiSide='yellow')이면 AI 가 선공으로 첫 수를 둔다. 사람 선공이면 가드만.
   }
   function startWatchNew(): void {
     if (!newGameWiz) return
@@ -2112,7 +2119,7 @@ export function mountGame(root: HTMLElement): void {
     const oppLabel = online
       ? ''
       : settings.mode === 'vsAi'
-        ? `vs AI · ${DIFF_LABEL[settings.aiDifficulty]}`
+        ? `vs AI · ${DIFF_LABEL[settings.aiDifficulty]} · 나 ${settings.aiSide === 'yellow' ? '🟤갈색(후공)' : '🟡노랑(선공)'}`
         : settings.mode === 'watch'
           ? `AI 관전 · 노랑 ${DIFF_LABEL[settings.difficultyYellow]} / 갈색 ${DIFF_LABEL[settings.difficultyBrown]}`
           : 'vs 사람 (로컬)'
@@ -2264,7 +2271,7 @@ export function mountGame(root: HTMLElement): void {
     // 보관함(saves)은 슬롯 목록이 동적이라 가드에서 제외(항상 갱신).
     const resK = state.result
     const modalKey = newGameWiz
-      ? `wiz:${newGameWiz.step}:${newGameWiz.diff}:${newGameWiz.persona}:${newGameWiz.diffY}:${newGameWiz.personaY}:${newGameWiz.diffB}:${newGameWiz.personaB}`
+      ? `wiz:${newGameWiz.step}:${newGameWiz.diff}:${newGameWiz.persona}:${newGameWiz.aiSide}:${newGameWiz.diffY}:${newGameWiz.personaY}:${newGameWiz.diffB}:${newGameWiz.personaB}`
       : infoModal === 'saves'
         ? `saves:${beeTapCount}:${Math.random()}` // 동적(슬롯 목록) → 가드 안 함
         : infoModal === 'undoAsk'
@@ -2590,11 +2597,22 @@ export function mountGame(root: HTMLElement): void {
         </div>
         <div class="modal-actions"><button data-act="ngBack">← 뒤로</button></div>`
     } else if (w.step === 'ai') {
+      // 내 색 = AI 색의 반대. brown=AI 면 내가 노랑(선공), yellow=AI 면 내가 갈색(후공·연습).
+      const myColorRow = `<div class="ng-opts">
+        <button data-act="ngSide:brown" class="${w.aiSide === 'brown' ? 'active' : ''}">🟡 노랑 · 선공</button>
+        <button data-act="ngSide:yellow" class="${w.aiSide === 'yellow' ? 'active' : ''}">🟤 갈색 · 후공</button>
+      </div>`
+      // 전문가는 성향을 무시(항상 최선)하므로 성향 선택을 숨기고 안내만 보여준다.
+      const personaBlock =
+        w.diff === 'expert'
+          ? `<div class="ng-desc">전문가는 늘 최선의 수를 둬서 성향(공격형·수비형 등)을 따르지 않아요.</div>`
+          : `<div class="ng-label">성향</div>${personaRow('ngPersona', w.persona)}`
       inner = `
         <div class="modal-title">🤖 AI와 대결</div>
-        <div class="modal-sub">난이도와 성향을 골라요. (당신은 노랑, 선공)</div>
+        <div class="modal-sub">내 색과 난이도를 골라요. (갈색을 고르면 후공 연습)</div>
+        <div class="ng-label">내 색</div>${myColorRow}
         <div class="ng-label">난이도</div>${diffRow('ngDiff', w.diff)}
-        <div class="ng-label">성향</div>${personaRow('ngPersona', w.persona)}
+        ${personaBlock}
         <div class="modal-actions"><button data-act="ngBack">← 뒤로</button><button class="ng-start" data-act="ngStartAi">시작 🐝</button></div>`
     } else {
       inner = `
@@ -3005,6 +3023,7 @@ export function mountGame(root: HTMLElement): void {
       else if (act.startsWith('ngPersonaY:')) newGameWiz.personaY = act.slice('ngPersonaY:'.length) as Persona
       else if (act.startsWith('ngPersonaB:')) newGameWiz.personaB = act.slice('ngPersonaB:'.length) as Persona
       else if (act.startsWith('ngPersona:')) newGameWiz.persona = act.slice('ngPersona:'.length) as Persona
+      else if (act.startsWith('ngSide:')) newGameWiz.aiSide = act.slice('ngSide:'.length) as Player
       else if (act === 'ngBack') newGameWiz.step = newGameWiz.step === 'online' ? 'humanWhere' : 'opponent'
       else if (act === 'ngCancel') newGameWiz = null
       else if (act === 'ngRematch') {

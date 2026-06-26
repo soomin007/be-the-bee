@@ -39,6 +39,14 @@
   `Get-CimInstance Win32_Process … node.exe | ? CommandLine -like '*vitest*'` 로 worker 가 실제로 죽었는지
   확인하고 남았으면 `Stop-Process -Force`(블랭킷 `vite` kill 금지 — dev 서버까지 죽는다).
 
+### 검증: verify-expert.mjs 가 코치 오버레이에 menuDifficulty 클릭이 가로채여 Timeout (기존 flaky)
+- **증상**: `node scripts/verify-expert.mjs` 가 `button[data-act="menuDifficulty"]` 클릭에서
+  `<div class="coach-layer center"> intercepts pointer events` 로 30s 타임아웃.
+- **원인**: 전문가 vsAi 에서 코치 레이어(해설/코칭)가 상단 메뉴 버튼 위를 덮어 Playwright 액셔너빌리티
+  검사가 클릭을 거부. UI 로직 변경과 무관(2026-06-27 후공모드 변경을 stash 한 깨끗한 코드에서도 동일 재현).
+- **재발 방지**: 상단 메뉴 클릭은 `.click({ force: true })` 로(known_issues 2026-06-22 "오버레이/접힘 UI"
+  와 같은 처리), 또는 클릭 전 코치 레이어가 없는 초기 상태를 기다린다. 큰 UI 변경 후 verify-* 회귀 점검 필요.
+
 ## 2026-06-26
 
 ### AI: 빔서치가 방어수(상대 열린 3·4목 차단)를 1수평가 낮다고 쳐내 안 막던 문제
