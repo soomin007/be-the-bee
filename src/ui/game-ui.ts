@@ -2247,10 +2247,10 @@ export function mountGame(root: HTMLElement): void {
       items.push(`<span class="ab-prompt">${instructionText()}</span>`)
       if (draft.stage === 'piece' && settings.queen && !state.supplies[state.turn].queenUsed) {
         items.push(
-          `<button data-act="queen" class="${pieceKind === 'queen' ? 'active' : ''}">여왕벌로 놓기 ${pieceKind === 'queen' ? '✓' : ''}<kbd>Q</kbd></button>`,
+          `<button data-act="queen" class="${pieceKind === 'queen' ? 'active' : ''}">${ICON.crown} 여왕벌로 놓기 ${pieceKind === 'queen' ? '✓' : ''}<kbd>Q</kbd></button>`,
         )
       }
-      if (draftHasSelection()) items.push(`<button data-act="cancel">취소<kbd>Esc</kbd></button>`)
+      if (draftHasSelection()) items.push(`<button data-act="cancel">${ICON.close} 취소<kbd>Esc</kbd></button>`)
     }
     actionBar.innerHTML = items.join('')
     for (const btn of Array.from(actionBar.querySelectorAll('button'))) {
@@ -2350,10 +2350,10 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-title">${title}</div>
           <div class="modal-sub">${sub}</div>
           <div class="modal-actions">
-            ${online ? `<button class="modal-share" data-act="rematchReq">🔄 한 판 더(진영 교대)</button>` : `<button data-act="new">다시 하기</button>`}
-            <button class="modal-share" data-act="shareGame" title="저장 없이 이 판 기보를 바로 공유">📤 공유하기</button>
-            <button data-act="replayEnter">복기 보기</button>
-            <button data-act="closeModal">닫기</button>
+            ${online ? `<button class="modal-share" data-act="rematchReq">${ICON.refresh} 한 판 더(진영 교대)</button>` : `<button data-act="new">${ICON.refresh} 다시 하기</button>`}
+            <button class="modal-share" data-act="shareGame" title="저장 없이 이 판 기보를 바로 공유">${ICON.share} 공유하기</button>
+            <button data-act="replayEnter">${ICON.history} 복기 보기</button>
+            <button data-act="closeModal">${ICON.close} 닫기</button>
           </div>
         </div>
       </div>
@@ -2379,8 +2379,8 @@ export function mountGame(root: HTMLElement): void {
             <li>AI는 여왕벌을 쓰지 않아요(사람 전용).</li>
           </ul>
           <div class="modal-actions">
-            <button data-act="queenConfirm">확인하고 켜기</button>
-            <button data-act="queenCancel">취소</button>
+            <button data-act="queenConfirm">${ICON.check} 확인하고 켜기</button>
+            <button data-act="queenCancel">${ICON.close} 취소</button>
           </div>
         </div>
       </div>
@@ -2408,8 +2408,8 @@ export function mountGame(root: HTMLElement): void {
       body = `
         <div class="modal-sub">매칭 성공! 선공·후공을 정해요. 누가 먼저 둘까요?</div>
         <div class="modal-actions online-side">
-          <button data-act="proposeFirst">내가 선공 · 노랑</button>
-          <button data-act="proposeSecond">내가 후공 · 갈색</button>
+          <button data-act="proposeFirst">🟡 내가 선공 · 노랑</button>
+          <button data-act="proposeSecond">🟤 내가 후공 · 갈색</button>
           <button class="modal-share" data-act="proposeToss">🪙 코인토스(무작위)</button>
         </div>
         <div class="nego-hint">또는 상대가 정할 때까지 기다려요.</div>`
@@ -2419,7 +2419,7 @@ export function mountGame(root: HTMLElement): void {
         ${p.toss ? coinHtml(myColor) : ''}
         <div class="modal-sub">${p.toss ? '🪙 코인토스 결과 — ' : '내 제안: '}<b>내가 ${sideLabel(myColor)}</b><br>상대의 응답을 기다리는 중…</div>
         <div class="modal-actions">
-          <button data-act="rejectSide">제안 취소</button>
+          <button data-act="rejectSide">${ICON.close} 제안 취소</button>
         </div>`
     } else {
       const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
@@ -2427,8 +2427,8 @@ export function mountGame(root: HTMLElement): void {
         ${p.toss ? coinHtml(myColor) : ''}
         <div class="modal-sub">${p.toss ? '🪙 상대가 코인토스했어요! 결과 — ' : '상대가 제안했어요. '}<b>당신은 ${sideLabel(myColor)}</b>.<br>이대로 시작할까요?</div>
         <div class="modal-actions">
-          <button data-act="acceptSide">예, 시작</button>
-          <button data-act="rejectSide">아니오</button>
+          <button data-act="acceptSide">${ICON.check} 예, 시작</button>
+          <button data-act="rejectSide">${ICON.close} 아니오</button>
         </div>`
     }
     modalLayer.innerHTML = `
@@ -2451,8 +2451,8 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-title">🔄 한 판 더?</div>
           <div class="modal-sub">상대가 한 판 더 두고 싶어해요. 진영을 바꿔 다시 시작할까요?</div>
           <div class="modal-actions">
-            <button data-act="rematchYes">예, 한 판 더</button>
-            <button data-act="rematchNo">아니오</button>
+            <button data-act="rematchYes">${ICON.refresh} 예, 한 판 더</button>
+            <button data-act="rematchNo">${ICON.close} 아니오</button>
           </div>
         </div>
       </div>`
@@ -2473,8 +2473,8 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-title">↩ 무르기</div>
           <div class="modal-sub">${sub}</div>
           <div class="modal-actions">
-            <button data-act="undoGrant">동의</button>
-            <button data-act="undoDeny">거절</button>
+            <button data-act="undoGrant">${ICON.check} 동의</button>
+            <button data-act="undoDeny">${ICON.close} 거절</button>
           </div>
         </div>
       </div>`
@@ -2490,7 +2490,7 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-title">↩ 무르기 요청함</div>
           <div class="modal-sub">상대에게 무르기를 요청했어요.<br>상대가 동의하면 한 수 물러요. 잠시 기다려 주세요.</div>
           <div class="modal-actions">
-            <button data-act="undoCancelReq">요청 취소</button>
+            <button data-act="undoCancelReq">${ICON.close} 요청 취소</button>
           </div>
         </div>
       </div>`
@@ -2505,8 +2505,8 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-title">방에서 나갈까요?</div>
           <div class="modal-sub">나가면 진행 중인 온라인 게임이 끝나고 상대에게도 알려져요. 내 화면은 새 게임으로 초기화됩니다.</div>
           <div class="modal-actions">
-            <button data-act="leaveYes">나가기</button>
-            <button data-act="leaveNo">계속하기</button>
+            <button data-act="leaveYes">${ICON.exit} 나가기</button>
+            <button data-act="leaveNo">${ICON.check} 계속하기</button>
           </div>
         </div>
       </div>`
@@ -2521,8 +2521,8 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-title">새 게임을 시작할까요?</div>
           <div class="modal-sub">지금 온라인 대전 중이에요. 새 게임을 시작하면 이 방에서 나가게 되고 상대에게도 알려져요.<br>다시 두려면 같은 초대 링크가 필요해요.</div>
           <div class="modal-actions">
-            <button data-act="newWarnYes">새 게임 시작</button>
-            <button data-act="newWarnNo">계속 두기</button>
+            <button data-act="newWarnYes">${ICON.refresh} 새 게임 시작</button>
+            <button data-act="newWarnNo">${ICON.check} 계속 두기</button>
           </div>
         </div>
       </div>`
@@ -2537,7 +2537,7 @@ export function mountGame(root: HTMLElement): void {
           ${BEE_SVG}
           <div class="modal-sub">${msg.replace(/\n/g, '<br>')}</div>
           <div class="modal-actions">
-            <button data-act="onlineMsgOk">확인</button>
+            <button data-act="onlineMsgOk">${ICON.check} 확인</button>
           </div>
         </div>
       </div>`
@@ -2566,11 +2566,11 @@ export function mountGame(root: HTMLElement): void {
         <div class="modal-sub">누구와 둘까요?</div>
         ${rematch}
         <div class="ng-choices">
-          <button data-act="ngOpp:human">👥 사람과</button>
-          <button data-act="ngOpp:ai">🤖 AI와 대결</button>
-          <button data-act="ngOpp:watch">👀 AI 관전</button>
+          <button data-act="ngOpp:human">${ICON.people} 사람과</button>
+          <button data-act="ngOpp:ai">${ICON.ai} AI와 대결</button>
+          <button data-act="ngOpp:watch">${ICON.view} AI 관전</button>
         </div>
-        <div class="modal-actions"><button data-act="ngCancel">취소</button></div>`
+        <div class="modal-actions"><button data-act="ngCancel">${ICON.close} 취소</button></div>`
     } else if (w.step === 'humanWhere') {
       inner = `
         <div class="modal-title">👥 사람과</div>
@@ -2585,8 +2585,8 @@ export function mountGame(root: HTMLElement): void {
         <div class="modal-title">🔗 온라인 대전</div>
         <div class="modal-sub">방을 만들어 초대하거나, 받은 코드로 입장해요.</div>
         <div class="ng-choices">
-          <button data-act="ngHost">방 만들기 (초대 링크 복사)</button>
-          <button data-act="ngJoin">초대 코드 입력</button>
+          <button data-act="ngHost">${ICON.plus} 방 만들기 (초대 링크 복사)</button>
+          <button data-act="ngJoin">${ICON.enter} 초대 코드 입력</button>
         </div>
         <div class="modal-actions"><button data-act="ngBack">← 뒤로</button></div>`
     } else if (w.step === 'ai') {
@@ -2622,7 +2622,7 @@ export function mountGame(root: HTMLElement): void {
             .map(
               (s) => `<div class="save-row">
                 <span class="save-name">${s.name}</span>
-                <button data-act="loadSlot:${s.id}" title="이 기보 불러오기">불러오기</button>
+                <button data-act="loadSlot:${s.id}" title="이 기보 불러오기">${ICON.download} 불러오기</button>
                 <button class="save-icon" data-act="exportSlot:${s.id}" title="공유 코드 복사">📋</button>
                 <button class="save-icon" data-act="delSlot:${s.id}" title="삭제">🗑</button>
               </div>`,
@@ -2701,7 +2701,7 @@ export function mountGame(root: HTMLElement): void {
     const modeMenu = menu(
       'mode',
       (['hotseat', 'vsAi', 'watch'] as Mode[]).map(
-        (m) => `<button data-act="setMode:${m}" class="${settings.mode === m ? 'active' : ''}">${MODE_LABEL[m]}</button>`,
+        (m) => `<button data-act="setMode:${m}" class="${settings.mode === m ? 'active' : ''}">${{ hotseat: ICON.people, vsAi: ICON.ai, watch: ICON.view }[m]} ${MODE_LABEL[m]}</button>`,
       ),
     )
     const diffMenu = menu(
@@ -2717,11 +2717,11 @@ export function mountGame(root: HTMLElement): void {
         ? `<div class="settings-divider"></div>
         <div class="settings-group-label">온라인 대전 · 방 ${online.roomId}</div>
         <button data-act="onlineCopyLink" title="초대 링크를 복사해 상대에게 보내기">${ICON.share} 초대 링크 복사</button>
-        <button data-act="onlineLeave">나가기</button>`
+        <button data-act="onlineLeave">${ICON.exit} 나가기</button>`
         : `<div class="settings-divider"></div>
         <div class="settings-group-label">온라인 대전</div>
-        <button data-act="onlineHost" title="방을 만들어 초대 링크로 친구를 부르기">방 만들기</button>
-        <button data-act="onlineJoin" title="받은 방 코드로 입장">코드로 입장</button>`
+        <button data-act="onlineHost" title="방을 만들어 초대 링크로 친구를 부르기">${ICON.plus} 방 만들기</button>
+        <button data-act="onlineJoin" title="받은 방 코드로 입장">${ICON.enter} 코드로 입장</button>`
     const gameGrid = `
       <div class="settings-grid">
         <div class="menu-wrap">
@@ -2730,11 +2730,11 @@ export function mountGame(root: HTMLElement): void {
         <div class="menu-wrap">
           <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' && !online ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
         </div>
-        <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">여왕벌 모드</button>
-        <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">무한 모드</button>
-        <button data-act="undo" ${undoEnabled() ? '' : 'disabled'}>무르기<kbd>U</kbd></button>
-        <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>복기</button>
-        <button data-act="new">새 게임<kbd>N</kbd></button>
+        <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">${ICON.crown} 여왕벌 모드</button>
+        <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">${ICON.infinity} 무한 모드</button>
+        <button data-act="undo" ${undoEnabled() ? '' : 'disabled'}>${ICON.undo} 무르기<kbd>U</kbd></button>
+        <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>${ICON.history} 복기</button>
+        <button data-act="new">${ICON.refresh} 새 게임<kbd>N</kbd></button>
         <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">${ICON.share} 공유하기</button>
         <button data-act="saveGame" title="지금 판을 보관함에 저장">${ICON.save} 저장</button>
         <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">${ICON.saves} 보관함</button>
@@ -2744,10 +2744,10 @@ export function mountGame(root: HTMLElement): void {
       <div class="settings-grid">
         <button data-act="cycleTheme" ${settings.board3d ? 'disabled' : ''} title="${settings.board3d ? '3D 모드에선 색 테마가 적용되지 않아요' : theme.desc}">${ICON.theme} 테마: ${theme.label}</button>
         <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D(three.js)로 표시">${ICON.cube3d} 3D 보드</button>
-        <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
-        <button data-act="toggleDanger" class="${settings.dangerAlerts ? 'active' : ''}" title="상대가 이길 위기(다음 한 수로 5목·막을 수 없는 벌집)면 알려줘요">⚠️ 위험 경고</button>
-        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}" title="내가 5목 둘 칸·내 벌집 초읽기 등 유리한 정보를 보여줘요">💡 승리 힌트</button>
-        <button data-act="resetView" title="${settings.board3d ? '3D 카메라(시점·줌)를 처음 위치로' : '보드 확대·이동을 처음 상태로'}">카메라 리셋</button>
+        <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">${ICON.keyboard} 행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
+        <button data-act="toggleDanger" class="${settings.dangerAlerts ? 'active' : ''}" title="상대가 이길 위기(다음 한 수로 5목·막을 수 없는 벌집)면 알려줘요">${ICON.warning} 위험 경고</button>
+        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}" title="내가 5목 둘 칸·내 벌집 초읽기 등 유리한 정보를 보여줘요">${ICON.bulb} 승리 힌트</button>
+        <button data-act="resetView" title="${settings.board3d ? '3D 카메라(시점·줌)를 처음 위치로' : '보드 확대·이동을 처음 상태로'}">${ICON.recenter} 카메라 리셋</button>
       </div>`
     const settingsSummary =
       settings.mode === 'hotseat'

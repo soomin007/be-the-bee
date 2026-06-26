@@ -499,6 +499,19 @@ svg.board.panning {
   color: #c2982f;
   flex: none;
 }
+/* 모든 버튼 아이콘 통일(모달·액션바·온라인 등 settings-grid 밖 포함): 아이콘+글자 정렬, 18px. */
+button .ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: #c2982f;
+}
+button:has(> .ico) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+}
 /* 패널 제목의 벌 아이콘 */
 .panel h2 {
   display: flex;
