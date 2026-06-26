@@ -148,7 +148,7 @@ const HEAD = `<meta charset="utf-8">
   html,body{width:1080px;height:1350px}
   .poster{width:1080px;height:1350px;position:relative;overflow:hidden;display:flex;flex-direction:column;
     padding:58px 70px 50px;background:radial-gradient(120% 75% at 50% 8%,#fff5cf 0%,#f7d765 42%,#efbe3a 72%,#e3a722 100%);
-    font-family:'Gothic A1','Malgun Gothic',sans-serif;color:var(--ink)}
+    font-family:'Gothic A1','Malgun Gothic',sans-serif;color:var(--ink);word-break:keep-all}
   .bg-hex{position:absolute;background:#6b4a12;opacity:0.06;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
   .bg1{width:340px;height:392px;top:-130px;left:-110px}.bg2{width:260px;height:300px;bottom:-90px;right:-90px}
   .head{display:flex;justify-content:space-between;align-items:center;z-index:2}
@@ -185,7 +185,7 @@ const HEAD = `<meta charset="utf-8">
   .mcard .mi{font-size:46px;line-height:1}
   .mcard b{font-size:33px;color:var(--ink)}
   .mcard small{font-size:24px;color:var(--ink-soft)}
-  .pills{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;max-width:900px}
+  .pills{display:grid;grid-template-columns:repeat(3,auto);justify-content:center;justify-items:center;gap:16px 16px;max-width:940px}
   .pills span{background:#fff3cf;border:2px solid #c79a2f;border-radius:999px;padding:11px 22px;font-weight:800;font-size:25px;color:var(--ink)}
   .swipe{font-family:'Jua',sans-serif;font-size:36px;color:#b35309}
   .ctag{font-family:'Jua',sans-serif;font-size:46px;color:var(--ink-soft);text-align:center}
@@ -224,7 +224,7 @@ const SLIDES = [
   slide({
     n: 2, kicker: '목표', titleHtml: `꿀벌 <em>5개</em>를 한 줄로!`,
     bodyHtml: `<div class="hero">${board(WIN, { glow: true })}</div>
-      <p class="lead">내 말(꿀벌) <b>5개</b>가 어느 방향이든 <b>한 줄</b>로 이어지면 <b>그 즉시 승리</b>예요.</p>`,
+      <p class="lead">내 말(꿀벌) <b>5개</b>가 어느 방향이든<br><b>한 줄</b>로 이어지면 <b>그 즉시 승리</b>예요.</p>`,
   }),
   // 3 — 한 턴
   slide({
@@ -233,13 +233,13 @@ const SLIDES = [
         <div class="opt"><div class="optlabel">① 타일 2개</div>${board(TURN_A)}</div>
         <div class="opt"><div class="optlabel">② 타일 1개 + 말 1개</div>${board(TURN_B)}</div>
       </div>
-      <p class="lead">타일은 <b>이미 놓인 타일 옆</b>에 붙여서 놓아요. 보드가 한 판마다 자라나요.</p>`,
+      <p class="lead">타일은 <b>이미 놓인 타일 옆</b>에 붙여서 놓아요.<br>보드가 한 판마다 자라나요.</p>`,
   }),
   // 4 — 벌집
   slide({
     n: 4, kicker: '벌집', titleHtml: `같은 색 타일 <em>5개</em> = 벌집`,
     bodyHtml: `<div class="hero">${board(HIVE)}</div>
-      <p class="lead">벌집이 완성되면 그 위에는 <b>주인만</b> 새 말을 올릴 수 있어요. 상대의 길목을 잠그는 <b>핵심 전략</b>이에요.</p>`,
+      <p class="lead">벌집이 완성되면<br>그 위에는 <b>주인만</b> 새 말을 올릴 수 있어요.<br>상대의 길목을 잠그는 <b>핵심 전략</b>이에요.</p>`,
   }),
   // 5 — 승부
   slide({
@@ -251,21 +251,21 @@ const SLIDES = [
   }),
   // 6 — 즐기는 법
   slide({
-    n: 6, kicker: '즐기는 법', titleHtml: `혼자도, 친구와도`,
+    n: 6, kicker: '즐기는 법', titleHtml: `혼자서도, 친구와도`,
     bodyHtml: `<div class="modes">
         <div class="mcard"><span class="mi">👥</span><b>사람 vs 사람</b><small>한 기기에서 번갈아</small></div>
         <div class="mcard"><span class="mi">🤖</span><b>AI와 대결</b><small>난이도·성향 선택</small></div>
         <div class="mcard"><span class="mi">👀</span><b>AI 관전</b><small>두 AI의 수 구경</small></div>
         <div class="mcard"><span class="mi">🔗</span><b>온라인 초대 대전</b><small>링크로 친구와 1:1</small></div>
       </div>
-      <div class="pills"><span>👑 여왕벌</span><span>♾️ 무한 모드</span><span>📖 규칙 튜토리얼</span><span>↩️ 복기</span><span>🎨 테마·3D</span></div>`,
+      <div class="pills"><span>👑 여왕벌</span><span>♾️ 무한 모드</span><span>📖 규칙 튜토리얼</span><span>↩️ 복기</span><span>🎨 테마·3D</span><span>💾 저장·이어하기</span></div>`,
   }),
   // 7 — CTA
   slide({
     n: 7, variant: 'cta', titleHtml: `지금, <em>무료로</em> 플레이`,
     bodyHtml: `<div class="bigbee">${beeMascot}</div>
       <div class="ctaurl">soomin007.github.io/be-the-bee</div>
-      <p class="lead">설치 없이 바로 플레이. 친구에게 <b>링크만 보내면</b> 온라인 1:1 대전.</p>
+      <p class="lead">설치 없이 바로 플레이.<br>친구에게 <b>링크만 보내면</b> 온라인 1:1 대전.</p>
       <div class="credit">원작 보드게임 김수민 · 김재현 · 조주현 &nbsp;|&nbsp; 프로그램 구현 김수민</div>`,
   }),
 ]
