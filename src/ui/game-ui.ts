@@ -2043,6 +2043,8 @@ export function mountGame(root: HTMLElement): void {
     renderModal()
     // 모달(새 게임 마법사·결과·온라인 등)이 떠 있으면 모바일 FAB·행동 버튼을 숨긴다(모달 위로 떠 글씨 가림 방지).
     gameEl.classList.toggle('modal-open', modalLayer.childElementCount > 0)
+    // 복기 중에는 모바일에서 무르기·새 게임 FAB 을 숨긴다(의미 없음). 대신 행동바에 복기 컨트롤을 띄운다.
+    gameEl.classList.toggle('replaying', replayIndex !== null)
     applyTurnTint() // 차례 색 비네트(공통)
     mobileShell.afterRender() // 모바일: 아코디언 접힘·하단 안내 배너 재맞춤(데스크탑 무동작)
   }
@@ -2188,6 +2190,24 @@ export function mountGame(root: HTMLElement): void {
 
   // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
   function renderActionBar(): void {
+    // 모바일 복기: 이 화면에서 제일 필요한 이전/재생·멈춤/다음·종료를 행동 버튼 자리(우하단 플로팅)에 둔다.
+    // (설정 시트를 열어야만 나오던 문제 수정. 복기 중엔 무르기·새 게임 FAB 은 .replaying 으로 숨긴다.)
+    if (replayIndex !== null && mobileShell.active()) {
+      const n = moveLog.length
+      const idx = replayIndex
+      const playing = replayTimer !== null
+      actionBar.innerHTML = `
+        <div class="ab-replay">
+          <button class="ab-rep" data-act="replayPrev" ${idx <= 0 ? 'disabled' : ''} title="이전 수" aria-label="이전 수">◀</button>
+          <button class="ab-rep ab-rep-play ${playing ? 'active' : ''}" data-act="replayPlay">${playing ? '⏸ 멈춤' : '▶ 재생'}</button>
+          <button class="ab-rep" data-act="replayNext" ${idx >= n ? 'disabled' : ''} title="다음 수" aria-label="다음 수">▶</button>
+          <button class="ab-rep ab-rep-exit" data-act="replayExit" title="복기 종료" aria-label="복기 종료">✕</button>
+        </div>`
+      for (const btn of Array.from(actionBar.querySelectorAll('button'))) {
+        btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+      }
+      return
+    }
     // 모바일 관전: 행동 버튼이 없는 자리(우하단 플로팅)에 ▶/⏸ 와 속도 슬라이더를 둔다(설정 시트 안 열어도 조작).
     if (settings.mode === 'watch' && mobileShell.active() && state.phase === 'playing' && replayIndex === null) {
       actionBar.innerHTML = `

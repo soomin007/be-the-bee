@@ -255,6 +255,33 @@
   .game.modal-open .m-status {
     display: none;
   }
+  /* 복기 중에는 무르기·새 게임 FAB 을 숨긴다(작동 의미 없음). 복기 컨트롤은 행동바(.ab-replay)에 뜬다. */
+  .game.replaying .m-undo,
+  .game.replaying .m-new {
+    display: none;
+  }
+  /* 복기 컨트롤(행동 버튼 자리): 이전 · 재생/멈춤 · 다음 · 종료 한 줄. */
+  .ab-replay {
+    display: flex;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+  .ab-replay .ab-rep {
+    min-height: 48px;
+    padding: 0.45rem 0.7rem;
+    border-radius: 0.8rem;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .ab-replay .ab-rep-play {
+    padding-inline: 0.9rem;
+  }
+  .ab-replay .ab-rep-exit {
+    padding-inline: 0.8rem;
+  }
+  .ab-replay .ab-rep:disabled {
+    opacity: 0.45;
+  }
 
   /* === 행동 선택 = 우하단 플로팅(FAB). 안내는 .m-status 가 보여줌 === */
   .action-bar {
@@ -283,6 +310,10 @@
   /* 관전 컨트롤(행동 버튼 자리): ▶/⏸ + 속도 슬라이더. 슬라이더 공간 위해 조금 넓게(왼쪽 FAB 와 안 겹침). */
   .action-bar:has(.ab-watch-speed) {
     max-width: 64vw;
+  }
+  /* 복기 컨트롤은 4버튼 한 줄이라 폭을 넉넉히. */
+  .action-bar:has(.ab-replay) {
+    max-width: 92vw;
   }
   .ab-watch-speed {
     display: flex;
