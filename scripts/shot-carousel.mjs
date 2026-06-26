@@ -109,34 +109,52 @@ function board(cells, { glow = false } = {}) {
     </defs>${tiles}${hives}${glowLine}${pieces}${over}</svg>`
 }
 
-// ---- 슬라이드별 보드 = 실제 대국 국면(사용자가 전문가와 둔 그 기보를 엔진으로 재생) ----
-// 이 게임은 "두 겹의 오목": 타일로 5목(=벌집) + 그 위 말로 5목(=승리). 그 판은 q+r=0 축에 둘 다 났다.
-// HERO/WIN = 최종 국면(17수, 말 5목 승리), HIVE = 6수(타일 벌집 막 완성), TURN = 4수 국면에서 ①·② 시연.
+// ---- 슬라이드별 보드: 실제 대국처럼 꽉 찬 유기적 국면(예쁘게 각색) ----
+// 대부분 칸에 벌, 색은 자연스럽게 군집. 가운데 가로줄(r=0)이 "두 겹 오목":
+// 같은 노랑 타일 5개(=벌집) 위에 노랑 말 5개(=승리)가 한 줄. HERO/WIN 은 말 글로우, HIVE 는 타일 글로우.
 const HERO = [
-  { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y', p: 'y', win: true }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: -1, t: 'y', p: 'y', win: true }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 2, r: -2, t: 'y', p: 'y', win: true }, { q: 3, r: -3, t: 'y', p: 'y', win: true }, { q: 1, r: 1, t: 'b', p: 'b' }, { q: -2, r: 2, t: 'y' }, { q: 0, r: 2, t: 'b', p: 'b' }, { q: -1, r: 3, t: 'y', p: 'y' }, { q: 3, r: -1, t: 'b', p: 'b' }, { q: 4, r: -2, t: 'y', p: 'y' }, { q: 2, r: 1, t: 'b', p: 'b' }, { q: 3, r: -2, t: 'y' }, { q: 4, r: -1, t: 'b', p: 'b' }, { q: 5, r: -2, t: 'y' }, { q: 4, r: -4, t: 'b', p: 'b' }, { q: 1, r: -2, t: 'y' },
+  { q: 1, r: -3, t: 'y', p: 'y' }, { q: 2, r: -3, t: 'b', p: 'b' },
+  { q: 0, r: -2, t: 'b', p: 'b' }, { q: 1, r: -2, t: 'y', p: 'y' }, { q: 2, r: -2, t: 'b', p: 'b' }, { q: 3, r: -2, t: 'y', p: 'y' },
+  { q: -1, r: -1, t: 'b', p: 'b' }, { q: 0, r: -1, t: 'y', p: 'y' }, { q: 1, r: -1, t: 'y', p: 'y' }, { q: 2, r: -1, t: 'b', p: 'b' }, { q: 3, r: -1, t: 'b', p: 'b' },
+  { q: -2, r: 0, t: 'y', p: 'y', win: true }, { q: -1, r: 0, t: 'y', p: 'y', win: true }, { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: 0, t: 'y', p: 'y', win: true }, { q: 2, r: 0, t: 'y', p: 'y', win: true }, { q: 3, r: 0, t: 'b', p: 'b' },
+  { q: -3, r: 1, t: 'b', p: 'b' }, { q: -2, r: 1, t: 'b', p: 'b' }, { q: -1, r: 1, t: 'y', p: 'y' }, { q: 0, r: 1, t: 'b', p: 'b' }, { q: 1, r: 1, t: 'y', p: 'y' }, { q: 2, r: 1, t: 'b', p: 'b' },
+  { q: -2, r: 2, t: 'y', p: 'y' }, { q: -1, r: 2, t: 'b', p: 'b' }, { q: 0, r: 2, t: 'y', p: 'y' }, { q: 1, r: 2, t: 'b' },
+  { q: 4, r: -2, t: 'y' }, { q: 4, r: -3, t: 'b', p: 'b' },
 ]
 const WIN = [
-  { q: -1, r: 1, t: 'y', p: 'y', win: true }, { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: -1, t: 'y', p: 'y', win: true }, { q: 2, r: -2, t: 'y', p: 'y', win: true }, { q: 3, r: -3, t: 'y', p: 'y', win: true },
-  { q: 1, r: 0, t: 'b', p: 'y' }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: 1, t: 'b', p: 'b' }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 3, r: -2, t: 'y' }, { q: -2, r: 2, t: 'y' }, { q: 4, r: -2, t: 'y', p: 'y' },
+  { q: 0, r: -1, t: 'y', p: 'y' }, { q: 1, r: -1, t: 'y', p: 'y' }, { q: 2, r: -1, t: 'b', p: 'b' }, { q: -1, r: -1, t: 'b', p: 'b' },
+  { q: -2, r: 0, t: 'y', p: 'y', win: true }, { q: -1, r: 0, t: 'y', p: 'y', win: true }, { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: 0, t: 'y', p: 'y', win: true }, { q: 2, r: 0, t: 'y', p: 'y', win: true }, { q: 3, r: 0, t: 'b', p: 'b' },
+  { q: -2, r: 1, t: 'b', p: 'b' }, { q: -1, r: 1, t: 'y', p: 'y' }, { q: 0, r: 1, t: 'b', p: 'b' }, { q: 1, r: 1, t: 'y', p: 'y' }, { q: 2, r: 1, t: 'b', p: 'b' },
 ]
-// 4수 국면(실제) 공통 + ①(타일 2개, 실제 5수)·②(타일 1 + 말 1)을 갓둠 배지로 시연.
+// 한 턴: 같은 베이스(가운데 (-1,1) 은 빈 타일)에서 시작 → 새로 둔 곳을 "+타일/+말" 배지로.
+//   ① 빈 곳 옆에 타일 2개,  ② 타일 1개 + 빈 타일 (-1,1) 위에 말 1개.
 const TURN_A = [
-  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y' }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: -1, t: 'y' }, { q: 2, r: 0, t: 'b', p: 'b' },
-  { q: 2, r: -2, t: 'y', fresh: '타일' }, { q: 3, r: -3, t: 'y', fresh: '타일' },
+  { q: 0, r: -1, t: 'y', p: 'y' }, { q: 1, r: -1, t: 'b', p: 'b' },
+  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b', p: 'b' }, { q: -1, r: 0, t: 'b', p: 'b' },
+  { q: -1, r: 1, t: 'y' }, { q: 0, r: 1, t: 'b', p: 'b' },
+  { q: 2, r: 0, t: 'y', fresh: '타일' }, { q: 2, r: -1, t: 'y', fresh: '타일' },
 ]
 const TURN_B = [
-  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y' }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 2, r: 0, t: 'b', p: 'b' },
-  { q: 2, r: -2, t: 'y', fresh: '타일' }, { q: 1, r: -1, t: 'y', p: 'y', fresh: '말' },
+  { q: 0, r: -1, t: 'y', p: 'y' }, { q: 1, r: -1, t: 'b', p: 'b' },
+  { q: 0, r: 0, t: 'y', p: 'y' }, { q: 1, r: 0, t: 'b', p: 'b' }, { q: -1, r: 0, t: 'b', p: 'b' },
+  { q: 0, r: 1, t: 'b', p: 'b' },
+  { q: -1, r: 1, t: 'y', p: 'y', fresh: '말' }, { q: 2, r: 0, t: 'y', fresh: '타일' },
 ]
-// 타일 5목(벌집) = 6수 국면(실제), q+r=0 의 노랑 타일 5개가 막 벌집이 됨.
+// 타일 5목(벌집): 꽉 찬 국면 가운데 노랑 타일 5개가 한 줄 = 벌집(꿀빛 글로우).
 const HIVE = [
-  { q: 0, r: 0, t: 'y', p: 'y', hive: true }, { q: 1, r: 0, t: 'b', p: 'y' }, { q: -1, r: 1, t: 'y', hive: true }, { q: 0, r: 1, t: 'b' }, { q: 2, r: -1, t: 'b' }, { q: 1, r: -1, t: 'y', hive: true }, { q: 2, r: 0, t: 'b', p: 'b' }, { q: 2, r: -2, t: 'y', hive: true }, { q: 3, r: -3, t: 'y', hive: true }, { q: 1, r: 1, t: 'b', p: 'b' },
+  { q: 0, r: -2, t: 'y', p: 'y' }, { q: 1, r: -2, t: 'b', p: 'b' }, { q: 2, r: -2, t: 'y', p: 'y' },
+  { q: -1, r: -1, t: 'y', p: 'y' }, { q: 0, r: -1, t: 'b', p: 'b' }, { q: 1, r: -1, t: 'y', p: 'y' }, { q: 2, r: -1, t: 'b', p: 'b' }, { q: 3, r: -1, t: 'y', p: 'y' },
+  { q: -2, r: 0, t: 'y', hive: true, p: 'y' }, { q: -1, r: 0, t: 'y', hive: true }, { q: 0, r: 0, t: 'y', hive: true, p: 'y' }, { q: 1, r: 0, t: 'y', hive: true }, { q: 2, r: 0, t: 'y', hive: true, p: 'y' }, { q: 3, r: 0, t: 'b', p: 'b' },
+  { q: -2, r: 1, t: 'b', p: 'b' }, { q: -1, r: 1, t: 'y', p: 'y' }, { q: 0, r: 1, t: 'b', p: 'b' }, { q: 1, r: 1, t: 'b', p: 'b' }, { q: 2, r: 1, t: 'y', p: 'y' },
+  { q: -1, r: 2, t: 'y', p: 'y' }, { q: 0, r: 2, t: 'b', p: 'b' },
 ]
 const WIN_MINI = [
-  { q: -1, r: 1, t: 'y', p: 'y', win: true }, { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: -1, t: 'y', p: 'y', win: true }, { q: 2, r: -2, t: 'y', p: 'y', win: true }, { q: 3, r: -3, t: 'y', p: 'y', win: true },
+  { q: -2, r: 0, t: 'y', p: 'y', win: true }, { q: -1, r: 0, t: 'y', p: 'y', win: true }, { q: 0, r: 0, t: 'y', p: 'y', win: true }, { q: 1, r: 0, t: 'y', p: 'y', win: true }, { q: 2, r: 0, t: 'y', p: 'y', win: true },
+  { q: 0, r: -1, t: 'b', p: 'b' }, { q: 1, r: -1, t: 'y', p: 'y' }, { q: -1, r: 1, t: 'b', p: 'b' }, { q: 1, r: 1, t: 'y', p: 'y' },
 ]
 const HIVE_MINI = [
-  { q: -1, r: 1, t: 'y', hive: true }, { q: 0, r: 0, t: 'y', hive: true, p: 'y' }, { q: 1, r: -1, t: 'y', hive: true }, { q: 2, r: -2, t: 'y', hive: true, p: 'y' }, { q: 3, r: -3, t: 'y', hive: true },
+  { q: -2, r: 0, t: 'y', hive: true }, { q: -1, r: 0, t: 'y', hive: true, p: 'y' }, { q: 0, r: 0, t: 'y', hive: true }, { q: 1, r: 0, t: 'y', hive: true, p: 'y' }, { q: 2, r: 0, t: 'y', hive: true },
+  { q: 0, r: -1, t: 'b', p: 'b' }, { q: 1, r: -1, t: 'y', p: 'y' }, { q: 0, r: 1, t: 'b', p: 'b' }, { q: 1, r: 1, t: 'b', p: 'b' },
 ]
 
 // ---- 모드 인게임 아이콘(이모지 대신 직접 그린 SVG, 게임 말/꿀빛 스타일) ----
