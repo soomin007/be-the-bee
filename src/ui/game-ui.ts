@@ -185,6 +185,7 @@ interface RoomSettings {
   watchDelay: number // 관전 모드 수 간격(ms)
   actionBarPos: ActionBarPos // 인게임 행동 바(턴 안내+①②) 위치
   board3d: boolean // 보드를 3D(three.js)로 표시. 기본 꺼짐 → 2D SVG.
+  darkMode: boolean // 페이지 전체 다크 모드(배경·패널·보드 배경 어둡게). 기본 꺼짐.
   board3dStyle: PieceStyle // 3D 말 스타일: 일반(스타일 토큰) / 실사(사실적 벌, 숨은 이스터에그)
   themeId: string // 컬러 테마(themes.ts COLOR_THEMES 의 id)
   personaYellow: Persona // 관전 시 노랑 AI 성향
@@ -223,6 +224,7 @@ function defaultSettings(): RoomSettings {
     watchDelay: 700,
     actionBarPos: 'top',
     board3d: false,
+    darkMode: false,
     board3dStyle: 'stylized',
     themeId: DEFAULT_THEME_ID,
     personaYellow: 'aggressive', // 관전 기본 대진을 대비되게(공격 vs 균형)
@@ -284,6 +286,7 @@ function loadSettings(): RoomSettings {
         ? (s.actionBarPos as ActionBarPos)
         : d.actionBarPos,
       board3d: typeof s.board3d === 'boolean' ? s.board3d : d.board3d,
+      darkMode: typeof s.darkMode === 'boolean' ? s.darkMode : d.darkMode,
       board3dStyle: s.board3dStyle === 'realistic' ? 'realistic' : d.board3dStyle,
       themeId: COLOR_THEMES.some((t) => t.id === s.themeId) ? (s.themeId as string) : d.themeId,
       personaYellow: PERSONAS.includes(s.personaYellow as Persona) ? (s.personaYellow as Persona) : d.personaYellow,
@@ -649,6 +652,10 @@ export function mountGame(root: HTMLElement): void {
   // 데스크탑 설정창 접기(모바일은 톱니 시트라 무관 — mobile.css 가 가림).
   function applyPanelCollapsed(): void {
     gameEl.classList.toggle('panel-collapsed', panelCollapsed)
+  }
+  // 페이지 다크 모드 — .game 에 .dark 클래스. CSS 가 배경·패널·보드 배경을 어둡게 덮는다.
+  function applyDark(): void {
+    gameEl.classList.toggle('dark', settings.darkMode)
   }
 
   // 앱 사용법 온보딩(스포트라이트 투어)에 넘길 환경 훅. 레이아웃 제어만 노출(게임 상태는 모름).
@@ -1789,13 +1796,15 @@ export function mountGame(root: HTMLElement): void {
     while (content.firstChild) content.removeChild(content.firstChild)
 
     // 0) 옅은 벌집 무늬 배경(은은한 honeycomb, 비인터랙티브). 솔리드 테두리 + 미세한 꿀빛 채움.
+    //    다크 모드면 어두운 톤으로(보드 빈 영역까지 함께 어둡게 — .game.dark 배경과 어울리게).
+    const bgDark = settings.darkMode
     for (const h of BG_HEXES) {
       content.appendChild(
         makeHexPolygon(hexToPixel(h), {
-          fill: '#fbf3de',
-          stroke: '#e3cf9c',
+          fill: bgDark ? '#221d15' : '#fbf3de',
+          stroke: bgDark ? '#39301f' : '#e3cf9c',
           strokeWidth: 1,
-          opacity: 0.5,
+          opacity: bgDark ? 0.6 : 0.5,
           interactive: false,
         }),
       )
@@ -3106,6 +3115,7 @@ export function mountGame(root: HTMLElement): void {
     const viewGrid = `
       <div class="settings-grid">
         <button data-act="cycleTheme" ${settings.board3d ? 'disabled' : ''} title="${settings.board3d ? '3D 모드에선 색 테마가 적용되지 않아요' : theme.desc}">${ICON.theme} 테마: ${theme.label}</button>
+        <button data-act="toggleDark" class="${settings.darkMode ? 'active' : ''}" title="페이지 전체를 어둡게(눈 편하게)">${ICON.moon} 다크 모드</button>
         <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D(three.js)로 표시">${ICON.cube3d} 3D 보드</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">${ICON.keyboard} 행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
         <button data-act="toggleDanger" class="${settings.dangerAlerts ? 'active' : ''}" title="상대가 이길 위기(다음 한 수로 5목·막을 수 없는 벌집)면 알려줘요">${ICON.warning} 위험 경고</button>
@@ -3567,6 +3577,10 @@ export function mountGame(root: HTMLElement): void {
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
         applyActionBarPos()
         break
+      case 'toggleDark':
+        settings.darkMode = !settings.darkMode
+        applyDark()
+        break
       case 'cycleTheme': {
         if (settings.board3d) break // 3D 모드는 색 테마 미적용(버튼도 비활성). 벌 스타일은 숨은 이스터에그.
         const i = COLOR_THEMES.findIndex((t) => t.id === theme.id)
@@ -3778,6 +3792,7 @@ export function mountGame(root: HTMLElement): void {
     startTurn()
   }
   setInitialCamera()
+  applyDark() // 저장된 다크 모드 복원
   // 미니 플레이어: 오디오 진행(timeupdate)·종료(ended)를 UI에 반영. 종료 시 반복/셔플/다음 처리.
   sound.onProgress(() => updateMiniPlayerProgress()) // 진행만 부분 갱신(전체 재렌더는 회전 애니를 끊음)
   sound.onEnded(() => {

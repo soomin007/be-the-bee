@@ -2474,3 +2474,105 @@ button:has(> .ico) {
   color: #fde9b0;
   transform: rotateY(180deg);
 }
+
+/* ── 다크 모드: .game.dark 스코프로 배경·패널·카드·텍스트를 어둡게. 보드 타일/말 색은 테마 유지. ── */
+.game.dark {
+  background: #15110b;
+  color: #e8e0d0;
+}
+.game.dark .panel {
+  background: #1e1a12;
+  border-right-color: #37301f;
+  color: #e8e0d0;
+  scrollbar-color: #6b5524 #2a2417;
+}
+.game.dark .panel h2,
+.game.dark .app-title {
+  color: #ffe39a;
+}
+.game.dark .settings-summary,
+.game.dark .help-row,
+.game.dark .help-row b,
+.game.dark .persona-desc,
+.game.dark .sc-label,
+.game.dark .pr-label,
+.game.dark .sc-val,
+.game.dark .hint,
+.game.dark .nego-hint {
+  color: #bcb094;
+}
+/* 카드형 버튼·아코디언·메뉴·셀렉트·상태 카드 */
+.game.dark .settings-grid > button,
+.game.dark .acc-head,
+.game.dark .menu-wrap button,
+.game.dark .menu-popup button,
+.game.dark .panel select,
+.game.dark .sound-ctl button,
+.game.dark .replay-nav button,
+.game.dark .replay-exit,
+.game.dark .replay-analysis,
+.game.dark .replay-analysis .ra-item {
+  background: #2a2417;
+  border-color: #3a3225;
+  color: #e4dac2;
+}
+.game.dark .settings-grid > button:hover,
+.game.dark .acc-head:hover,
+.game.dark .replay-analysis .ra-item:hover {
+  background: #332b1c;
+}
+.game.dark .acc {
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+.game.dark .settings-grid kbd,
+.game.dark .float-actions button kbd {
+  background: #3a3122;
+  border-color: #4a3f2a;
+  color: #d8cba8;
+}
+/* 새 게임·피드백은 꿀빛 강조 유지(글자만 어둡게) */
+.game.dark .settings-grid > button.cta-new,
+.game.dark .credit-feedback,
+.game.dark .help-tut {
+  color: #3a2808;
+}
+/* 보드 위 HUD·안내 카드(반투명 흰 → 반투명 어두움) */
+.game.dark .board-status .status,
+.game.dark .board-status .supplies,
+.game.dark .board-status .scores,
+.game.dark .board-status .notice,
+.game.dark .board-status .message,
+.game.dark .m-status,
+.game.dark .board-notes .coach-comment,
+.game.dark .ab-prompt {
+  background: rgba(32, 27, 17, 0.94);
+  border-color: #3a3225;
+  color: #e8e0d0;
+}
+.game.dark .scores {
+  color: #bcb094;
+}
+/* 크레딧 */
+.game.dark .credit {
+  border-top-color: #37301f;
+  color: #a99d82;
+}
+.game.dark .credit .credit-line:first-child {
+  color: #d8cba8;
+}
+/* 모달 */
+.game.dark .modal-card {
+  background: #1f1a12;
+  color: #e8e0d0;
+}
+.game.dark .modal-sub,
+.game.dark .modal-card p {
+  color: #c4b896;
+}
+/* 펼치기(☰)·플로팅 버튼 */
+.game.dark .panel-reopen,
+.game.dark .float-actions button {
+  background: #2a2417;
+  border-color: #3a3225;
+  color: #e4dac2;
+}
