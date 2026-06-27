@@ -58,7 +58,7 @@ export const COLOR_THEMES: ColorTheme[] = [
     },
     piece: {
       yellow: { body: '#ffcc00', stripe: '#241800' }, // 노랑 말은 밝은 노랑으로(어두워 보이던 문제 해결)
-      brown: { body: '#dba85c', stripe: '#2a1808' },
+      brown: { body: '#7a4a1c', stripe: '#1a0e04' }, // 베이지처럼 너무 밝지 않게 — 갈색답게 진하게
     },
     hiveFill: { yellow: '#fff3b0', brown: '#9c6228' },
     hiveStroke: { yellow: '#b58200', brown: '#1f0f04' },

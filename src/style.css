@@ -2524,6 +2524,48 @@ button:has(> .ico) {
 .game.dark .acc {
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
+/* 섹션 내용 박스(흰색이던 부분) */
+.game.dark .acc-body {
+  background: #1c180f;
+  border-color: #37301f;
+}
+.game.dark .acc-head,
+.game.dark .acc.open .acc-head {
+  background: linear-gradient(180deg, #2c2415, #241d10);
+  color: #ece0c0;
+}
+/* 음악 미니 플레이어(흰색이던 부분) */
+.game.dark .mp-pill,
+.game.dark .mp-card {
+  background: linear-gradient(180deg, #241f16, #1b170f);
+  border-color: #3a3225;
+}
+.game.dark .mp-head {
+  background: linear-gradient(180deg, #2e2615, #241d10);
+  border-bottom-color: #4a3e26;
+}
+.game.dark .mp-pill-title,
+.game.dark .mp-title,
+.game.dark .mp-head-label {
+  color: #f0e4c4;
+}
+.game.dark .mp-artist,
+.game.dark .mp-pill-sub,
+.game.dark .mp-time,
+.game.dark .mp-vol-label {
+  color: #b2a688;
+}
+.game.dark .mp-seek,
+.game.dark .mp-vol-bar {
+  background: #3a3122;
+}
+.game.dark .mp-side,
+.game.dark .mp-vbtn,
+.game.dark .mp-collapse {
+  background: #2a2417;
+  border-color: #3a3225;
+  color: #d8cba8;
+}
 .game.dark .settings-grid kbd,
 .game.dark .float-actions button kbd {
   background: #3a3122;

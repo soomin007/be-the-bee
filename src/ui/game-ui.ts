@@ -3206,7 +3206,7 @@ export function mountGame(root: HTMLElement): void {
       ${settingsSummary}
       ${section('game', '게임', gameGrid)}
       ${section('view', '화면 · 설정', viewGrid)}
-      ${settings.mode !== 'hotseat' ? section('ai', settings.mode === 'watch' ? '관전 설정' : 'AI 설정', aiCtl) : ''}
+      ${settings.mode !== 'hotseat' && !live ? section('ai', settings.mode === 'watch' ? '관전 설정' : 'AI 설정', aiCtl) : ''}
       ${section('sound', '사운드', soundCtl)}
       ${section('help', '도움말', helpRows)}
       <div class="credit">
@@ -3217,6 +3217,7 @@ export function mountGame(root: HTMLElement): void {
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
+      btn.removeAttribute('title') // 설정창 버튼 호버 시 뜨던 툴팁(각주) 제거
       if (btn.hasAttribute('disabled')) continue
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
     }
