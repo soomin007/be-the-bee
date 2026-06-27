@@ -166,16 +166,6 @@ const AI_DELAY_MS = 350
 // 사용자 피드백 설문(구글폼). 크레딧 밑 '피드백 보내기' 버튼이 새 창으로 연다.
 const FEEDBACK_URL = 'https://forms.gle/qf5VA1xytdLojHtp9'
 
-// 벌집 "만리장성" 외벽용: pointy-top 6 이웃 방향(dq,dr)과 그 방향 변의 두 꼭짓점 각도(°,
-// layout.hexPolygonPoints 와 동일 기준). 이웃이 같은 벌집이 아닌 변만 그려 덩어리 바깥 둘레만 벽으로 두른다.
-const HIVE_WALL_EDGES: { dq: number; dr: number; a1: number; a2: number }[] = [
-  { dq: 1, dr: 0, a1: -30, a2: 30 },
-  { dq: 0, dr: 1, a1: 30, a2: 90 },
-  { dq: -1, dr: 1, a1: 90, a2: 150 },
-  { dq: -1, dr: 0, a1: 150, a2: 210 },
-  { dq: 0, dr: -1, a1: 210, a2: 270 },
-  { dq: 1, dr: -1, a1: 270, a2: 330 },
-]
 
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
 // 방장이 정해 양쪽에 공통 적용되는 "방 설정"이 되도록 한 곳에 모아 둔다(직렬화 가능).
@@ -560,6 +550,9 @@ export function mountGame(root: HTMLElement): void {
             </filter>
             <radialGradient id="wax-yellow" cx="38%" cy="32%" r="75%"></radialGradient>
             <radialGradient id="wax-brown" cx="38%" cy="32%" r="75%"></radialGradient>
+            <!-- 벌집(꿀) 광택 — applyThemeColors 가 진영 hiveFill 기준으로 위 밝음→아래 진함으로 채운다. -->
+            <radialGradient id="honey-yellow" cx="42%" cy="26%" r="82%"></radialGradient>
+            <radialGradient id="honey-brown" cx="42%" cy="26%" r="82%"></radialGradient>
             <radialGradient id="bee-yellow" cx="35%" cy="28%" r="72%"></radialGradient>
             <radialGradient id="bee-brown" cx="35%" cy="28%" r="72%"></radialGradient>
             <!-- 말 입체감(테마 무관): 광원(왼쪽 위)에서 멀수록 어두워져 그림자가 오른쪽 아래에 맺힘 -->
@@ -746,6 +739,13 @@ export function mountGame(root: HTMLElement): void {
         ['0%', shade(body, 0.5)],
         ['55%', body],
         ['100%', shade(body, -0.32)],
+      ])
+      // 벌집 꿀 광택: 위쪽 밝은 하이라이트 → 아래쪽 진한 꿀(약간 입체). 진영색이라 노랑/갈색 구분 유지.
+      const honey = theme.hiveFill[owner]
+      fillGradient(`#honey-${owner}`, [
+        ['0%', shade(honey, 0.5)],
+        ['45%', honey],
+        ['100%', shade(honey, -0.28)],
       ])
     }
     const glow = svg.querySelector('#hiveGlow feDropShadow')
@@ -1757,21 +1757,6 @@ export function mountGame(root: HTMLElement): void {
     return poly
   }
 
-  // 벌집 외벽의 한 변(line). 클릭 통과.
-  function makeHiveEdge(x1: number, y1: number, x2: number, y2: number, stroke: string, width: number): SVGLineElement {
-    const ln = document.createElementNS(SVGNS, 'line')
-    ln.setAttribute('x1', x1.toFixed(2))
-    ln.setAttribute('y1', y1.toFixed(2))
-    ln.setAttribute('x2', x2.toFixed(2))
-    ln.setAttribute('y2', y2.toFixed(2))
-    ln.setAttribute('stroke', stroke)
-    ln.setAttribute('stroke-width', String(width))
-    ln.setAttribute('stroke-linecap', 'round')
-    ln.setAttribute('stroke-linejoin', 'round')
-    ln.style.pointerEvents = 'none'
-    return ln
-  }
-
   function render(): void {
     // 복기 중이면 과거 국면을 본다(보기 전용 오버레이, 실제 상태는 그대로).
     const replaying = replayIndex !== null
@@ -1842,38 +1827,23 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 3) 벌집 강조 — "만리장성" 방식. 벌집으로 이어진 칸 안쪽 경계엔 벽을 세우지 않고, 덩어리 바깥
-    //    둘레(이웃이 같은 벌집이 아닌 변)만 두꺼운 밀랍 벽으로 두른다. 벽은 어두운 본체 + 밝은 윗면
-    //    하이라이트 두 겹으로 입체감을 준다. 칸 안쪽엔 진영색 꿀이 은은히 반짝(shimmer). 말은 위에 그려져 안 가림.
+    // 3) 벌집 강조 — "꿀이 고인 한 덩어리". 진영색 꿀 광택 그라데이션(위 밝음→아래 진함 = 약간 입체) +
+    //    부드러운 글로우로 인접 칸들이 이어져 하나의 덩어리로 보인다(막대 외벽 폐기). 빛 반짝임은 칸마다
+    //    위상을 달리해 물결치듯 흐른다. 채움은 진영색이라 노랑/갈색 구분 유지. 말은 위에 그려져 안 가림.
     const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
-    // 3-a) 칸 안쪽 꿀(반짝임) — 벌집 칸 전체에 깔아 "꿀이 차 있다"를 보이게.
-    for (const [key, owner] of hiveOwner) {
-      content.appendChild(
-        makeHexPolygon(hexToPixel(hexFromKey(key)), {
-          fill: theme.hiveFill[owner],
-          stroke: 'none',
-          strokeWidth: 0,
-          opacity: 0.45,
-          cls: 'hive-shimmer',
-          interactive: false,
-        }),
-      )
-    }
-    // 3-b) 덩어리 바깥 둘레만 밀랍 벽(만리장성) — 어두운 본체 위에 밝은 윗면 하이라이트.
     for (const [key, owner] of hiveOwner) {
       const h = hexFromKey(key)
-      const center = hexToPixel(h)
-      const tc = theme.tile[owner]
-      for (const e of HIVE_WALL_EDGES) {
-        if (hiveOwner.get(hexKey(hex(h.q + e.dq, h.r + e.dr))) === owner) continue // 내부 경계는 벽 없음
-        const x1 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * e.a1)
-        const y1 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * e.a1)
-        const x2 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * e.a2)
-        const y2 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * e.a2)
-        content.appendChild(makeHiveEdge(x1, y1, x2, y2, tc.dark, 6.5)) // 벽 본체(두껍게)
-        content.appendChild(makeHiveEdge(x1, y1, x2, y2, tc.light, 2.5)) // 윗면 하이라이트(가늘게 중앙)
-      }
+      const poly = makeHexPolygon(hexToPixel(h), {
+        fill: `url(#honey-${owner})`,
+        stroke: 'none',
+        strokeWidth: 0,
+        filter: 'url(#hiveGlow)',
+        cls: 'hive-shimmer',
+        interactive: false,
+      })
+      poly.style.animationDelay = `${(h.q + h.r) * 0.22}s` // 위치별 위상차 → 빛이 물결치듯 흐름
+      content.appendChild(poly)
     }
 
     // 4) 잠정 타일(미확정), 점선
