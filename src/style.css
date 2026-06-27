@@ -1669,6 +1669,20 @@ button:has(> .ico) {
   animation: last-piece-pulse 1.25s ease-in-out infinite;
 }
 
+/* 벌집 셀 안 꿀이 은은히 반짝이는 효과(2.5D 밀랍 벽 안에서 빛나는 꿀). */
+@keyframes hive-shimmer {
+  0%,
+  100% {
+    opacity: 0.26;
+  }
+  50% {
+    opacity: 0.58;
+  }
+}
+.hive-shimmer {
+  animation: hive-shimmer 2.4s ease-in-out infinite;
+}
+
 /* 착지/승리 꽃가루 반짝, fx 레이어의 점이 바깥으로 튀며 사라진다 */
 @keyframes pollen {
   0% {
