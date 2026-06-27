@@ -563,17 +563,9 @@ export function mountGame(root: HTMLElement): void {
               <stop offset="48%" stop-color="#2a1c00" stop-opacity="0" />
               <stop offset="100%" stop-color="#2a1c00" stop-opacity="0.3" />
             </radialGradient>
-            <!-- 말(벌+원판) 에셋: design_handoff_bee_pieces 스펙. 진영=원판색, 벌 공통. -->
-            <radialGradient id="disc-gold" cx="36%" cy="30%" r="80%">
-              <stop offset="0%" stop-color="#dcb65e" />
-              <stop offset="60%" stop-color="#d2a230" />
-              <stop offset="100%" stop-color="#977523" />
-            </radialGradient>
-            <radialGradient id="disc-brown" cx="36%" cy="30%" r="80%">
-              <stop offset="0%" stop-color="#8f6158" />
-              <stop offset="60%" stop-color="#6f3529" />
-              <stop offset="100%" stop-color="#50261e" />
-            </radialGradient>
+            <!-- 말(벌+원판) 에셋: design_handoff_bee_pieces 스펙. 진영=원판색(테마 piece 색으로 채움), 벌 공통. -->
+            <radialGradient id="disc-gold" cx="36%" cy="30%" r="80%"></radialGradient>
+            <radialGradient id="disc-brown" cx="36%" cy="30%" r="80%"></radialGradient>
             <radialGradient id="bee-body" cx="38%" cy="26%" r="78%">
               <stop offset="0%" stop-color="#ffd456" />
               <stop offset="52%" stop-color="#f4b70e" />
@@ -742,6 +734,12 @@ export function mountGame(root: HTMLElement): void {
         ['0%', shade(body, 0.5)],
         ['55%', body],
         ['100%', shade(body, -0.32)],
+      ])
+      // 말 원판(진영색) — 테마 piece 색 기반(위 밝게→아래 어둡게). 테마 바꾸면 말 색도 따라간다.
+      fillGradient(`#${owner === 'yellow' ? 'disc-gold' : 'disc-brown'}`, [
+        ['0%', shade(body, 0.42)],
+        ['60%', body],
+        ['100%', shade(body, -0.4)],
       ])
       // 벌집 셀(밀랍 우물): 중심은 밝은 꿀 광택(반사) → 안쪽 진한 꿀(깊이) → 가장자리 밝은 밀랍 벽(능선).
       // radial 이라 각 칸이 "가장자리 벽 + 안에 고인 꿀"의 입체 셀처럼 보인다. 진영색이라 노랑/갈색 구분 유지.
@@ -1837,15 +1835,17 @@ export function mountGame(root: HTMLElement): void {
     //    위상을 달리해 물결치듯 흐른다. 채움은 진영색이라 노랑/갈색 구분 유지. 말은 위에 그려져 안 가림.
     const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
-    // 셀(꿀 + 입체 벽)은 정적으로 채운다. 반짝임은 아래 6.5단계에서 말 위에 광택점으로 따로 그린다.
+    // 셀(꿀 + 입체 벽)은 정적으로 채운다. 칸을 살짝 줄여(주변 타일과 안 겹치게) 진영색 두꺼운 테두리로
+    // 가시성을 확보한다. 반짝임은 아래 6.5단계에서 말 위에 광택점으로 따로 그린다.
     for (const [key, owner] of hiveOwner) {
       content.appendChild(
         makeHexPolygon(hexToPixel(hexFromKey(key)), {
           fill: `url(#honey-${owner})`,
-          stroke: 'none',
-          strokeWidth: 0,
-          opacity: 0.92,
+          stroke: theme.hiveStroke[owner],
+          strokeWidth: 5,
+          opacity: 0.95,
           filter: 'url(#hiveGlow)',
+          size: HEX_SIZE * 0.88, // 주변 타일과 겹치지 않게 살짝 줄임
           interactive: false,
         }),
       )
@@ -1985,8 +1985,9 @@ export function mountGame(root: HTMLElement): void {
       const s = DISC_R / 80 // 스펙(반지름 80) → 게임 px 스케일
       const isGold = piece.owner === 'yellow'
       const discGrad = isGold ? 'disc-gold' : 'disc-brown'
-      const discSide = isGold ? '#967216' : '#3f1f17'
-      const discRim = isGold ? '#ecc659' : '#9a5847'
+      const discBody = theme.piece[piece.owner].body
+      const discSide = shade(discBody, -0.46) // 옆면(두께) 어둡게
+      const discRim = shade(discBody, 0.34) // 안쪽 림 밝게
       const isQueen = piece.kind === 'queen'
 
       // 말 그룹: 스펙 좌표 → 셀 좌표로 매핑. 세로 기준은 원판 윗면(100)이 아니라 **바닥면(109)**을

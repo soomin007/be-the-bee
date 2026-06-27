@@ -36,14 +36,14 @@ export const COLOR_THEMES: ColorTheme[] = [
     desc: '따뜻한 벌집, 기본',
     players: { yellow: '노랑', brown: '갈색' },
     tile: {
-      yellow: { light: '#ffe85e', mid: '#ffce1a', dark: '#e6a800', stroke: '#7a5a10' }, // 더 밝고 쨍한 금빛
+      yellow: { light: '#ffe63a', mid: '#ffd400', dark: '#f0b400', stroke: '#7a5a10' }, // 더 밝고 쨍한 금빛
       brown: { light: '#c4843a', mid: '#97581d', dark: '#744213', stroke: '#43280a' },
     },
     piece: {
-      yellow: { body: '#ffc107', stripe: '#3a2600' }, // 쨍한 골드(갈색과 확실히 구분)
+      yellow: { body: '#ffd000', stripe: '#3a2600' }, // 쨍한 골드(갈색과 확실히 구분)
       brown: { body: '#8a5418', stripe: '#241200' },
     },
-    hiveFill: { yellow: '#ffe680', brown: '#c47d28' },
+    hiveFill: { yellow: '#ffe55c', brown: '#c47d28' },
     hiveStroke: { yellow: '#d98a14', brown: '#9c5212' },
     hiveGlow: '#f97316',
   },
@@ -89,14 +89,14 @@ export const COLOR_THEMES: ColorTheme[] = [
     desc: '보색 대비, 색 구분 가장 쉬움',
     players: { yellow: '노랑', brown: '남색' },
     tile: {
-      yellow: { light: '#ffe85e', mid: '#ffce1a', dark: '#e6a800', stroke: '#7a5a10' },
+      yellow: { light: '#ffe63a', mid: '#ffd400', dark: '#f0b400', stroke: '#7a5a10' },
       brown: { light: '#4664c9', mid: '#1e40af', dark: '#142a7a', stroke: '#0a1640' },
     },
     piece: {
-      yellow: { body: '#ffc107', stripe: '#3a2600' },
+      yellow: { body: '#ffd000', stripe: '#3a2600' },
       brown: { body: '#2a4fc0', stripe: '#0a1430' },
     },
-    hiveFill: { yellow: '#ffe680', brown: '#5276d8' },
+    hiveFill: { yellow: '#ffe55c', brown: '#5276d8' },
     hiveStroke: { yellow: '#d98a14', brown: '#1e3a8a' },
     hiveGlow: '#facc15',
   },
