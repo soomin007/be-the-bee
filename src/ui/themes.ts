@@ -19,8 +19,11 @@ export interface ColorTheme {
   desc: string // 설정 요약/툴팁용 한 줄
   tile: Record<Player, TileColors>
   piece: Record<Player, PieceColors>
-  hiveFill: string // 벌집(5목 타일) 강조 채움
-  hiveGlow: string // 벌집 글로우/테두리, 타일과 대비되게 주황빛
+  // 벌집(5목 타일) 강조: 진영별로 채움·테두리를 달리해 노랑 벌집과 갈색 벌집이 섞이지 않게 한다.
+  // 노랑 벌집은 밝은 꿀빛, 갈색 벌집은 어둡고 붉은 호박빛(밝아져서 노랑처럼 보이던 문제 해결).
+  hiveFill: Record<Player, string> // 벌집 채움(진영별)
+  hiveStroke: Record<Player, string> // 벌집 테두리(진영별, 채움보다 진하게)
+  hiveGlow: string // 벌집 글로우(빛 번짐) 색 — 필터 공통, 따뜻한 주황빛
 }
 
 // 기본 테마는 'honey', 노랑은 더 또렷하게(배경과 분리), 갈색은 더 깊게(명도 대비),
@@ -38,7 +41,8 @@ export const COLOR_THEMES: ColorTheme[] = [
       yellow: { body: '#e0a106', stripe: '#3a2600' },
       brown: { body: '#8a5418', stripe: '#241200' },
     },
-    hiveFill: '#ffe07a',
+    hiveFill: { yellow: '#ffdf6e', brown: '#c47d28' },
+    hiveStroke: { yellow: '#cf8410', brown: '#5e3208' },
     hiveGlow: '#f97316',
   },
   {
@@ -53,7 +57,8 @@ export const COLOR_THEMES: ColorTheme[] = [
       yellow: { body: '#a67400', stripe: '#241800' },
       brown: { body: '#dba85c', stripe: '#2a1808' },
     },
-    hiveFill: '#fff3b0',
+    hiveFill: { yellow: '#fff3b0', brown: '#9c6228' },
+    hiveStroke: { yellow: '#b58200', brown: '#3a2208' },
     hiveGlow: '#ea580c',
   },
   {
@@ -68,7 +73,8 @@ export const COLOR_THEMES: ColorTheme[] = [
       yellow: { body: '#d99405', stripe: '#3a2600' },
       brown: { body: '#b54a28', stripe: '#2a0f06' },
     },
-    hiveFill: '#ffd98a',
+    hiveFill: { yellow: '#ffd98a', brown: '#c2532a' },
+    hiveStroke: { yellow: '#c2840f', brown: '#6e2410' },
     hiveGlow: '#e2570c',
   },
 ]

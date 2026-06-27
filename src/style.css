@@ -137,18 +137,16 @@ svg.board {
   display: none;
 }
 
-/* 인게임 메시지(경고/훈수=리치, 칭찬/지적=해설·코칭)를 보드 옆, 행동 버튼과 "같은 쪽"에 붙인다.
-   행동 버튼을 보는 시선에 팁이 함께 들어오게(설정 패널이 아니라 보드 옆 시야 안). */
+/* 인게임 메시지(경고/훈수, 칭찬/지적=해설·코칭)는 행동 버튼 위치와 무관하게 항상 보드 "아래"에 둔다.
+   위(ab-top)로 올리면 좌상단 차례 HUD(.board-status, z-index:2)와 겹쳐 카운트다운 경고가 가려지므로,
+   항상 아래로 내려 가독성을 지킨다. */
 .board-notes {
-  order: 1; /* 기본: 행동 버튼이 아래 → 팁도 아래(행동 버튼 바로 밑) */
+  order: 1; /* 행동 버튼이 위/아래 어디든 메시지는 항상 보드 아래 */
   flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.45rem;
-}
-.board-wrap.ab-top .board-notes {
-  order: -1; /* 행동 버튼이 위 → 팁도 위(행동 버튼 바로 아래) */
 }
 
 /* 3D 보드(실험): board-wrap 을 채우는 절대배치 캔버스 호스트. mode-3d 면 SVG 대신 표시. */
@@ -414,6 +412,19 @@ svg.board.panning {
   margin-bottom: 0.5rem;
 }
 
+/* 게임 진행 중 설정 잠금 안내 — 게임/AI 설정 그리드 위에 한 줄로(전체폭). */
+.lock-note {
+  grid-column: 1 / -1;
+  font-size: 0.72rem;
+  color: #9a6a2a;
+  background: #fdf3dd;
+  border: 1px solid #ecd9a8;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  line-height: 1.4;
+}
+
 /* 설정 아코디언 — 기능별 섹션 펼치기/접기. 꿀빛 그라데이션 헤더 + 자체 아이콘 + 미세 그림자. */
 .acc {
   margin-bottom: 0.6rem;
@@ -559,6 +570,26 @@ button:has(> .ico) {
   box-shadow: none;
   transform: none;
   border-color: #ecdfbe;
+}
+
+/* 새 게임 = 가장 자주 쓰는 핵심 액션 → 전체폭 + 꿀빛 그라데이션으로 또렷하게 강조 */
+.settings-grid > button.cta-new {
+  grid-column: 1 / -1;
+  justify-content: center;
+  background: linear-gradient(180deg, #ffd95e, #f5b81e);
+  border-color: #e0991a;
+  color: #4a3208;
+  font-weight: 700;
+  font-size: 0.92rem;
+  box-shadow: 0 2px 8px rgba(224, 153, 26, 0.32);
+}
+.settings-grid > button.cta-new:hover {
+  background: linear-gradient(180deg, #ffe27a, #f8c32f);
+  border-color: #d18a14;
+  box-shadow: 0 5px 14px rgba(224, 153, 26, 0.4);
+}
+.settings-grid > button.cta-new svg {
+  color: #6b4a10;
 }
 
 /* 토글 = 진짜 좌우로 미끄러지는 필 스위치 (data-act 가 toggle* 인 on/off 버튼. 위치 토글
@@ -1094,6 +1125,20 @@ button:has(> .ico) {
   animation: piece-pop 0.28s ease-out;
 }
 
+/* 직전에 놓은 말의 강조 링: 부드러운 점멸로 "방금 둔 수"가 한눈에 띄게(흰 backing 링은 고정). */
+@keyframes last-piece-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.last-piece-ring {
+  animation: last-piece-pulse 1.25s ease-in-out infinite;
+}
+
 /* 착지/승리 꽃가루 반짝, fx 레이어의 점이 바깥으로 튀며 사라진다 */
 @keyframes pollen {
   0% {
@@ -1298,26 +1343,20 @@ button:has(> .ico) {
 }
 
 /* 제작자 표기(구석, 은은하게). 자세한 디자인은 설정 꾸미기 때. */
+/* 크레딧: 설정 패널 맨 아래(도움말 섹션 뒤)에 정적으로 둔다 — 보드 우하단 고정이 시야를 가리던 문제 해결. */
 .credit {
-  position: fixed;
-  right: 0.6rem;
-  bottom: 0.5rem;
+  margin-top: 1.1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #e6dcc3;
   font-size: 0.7rem;
   line-height: 1.5;
-  text-align: right;
-  color: #6b5524;
-  background: rgba(255, 253, 247, 0.94);
-  border: 1px solid #d9c89a;
-  border-radius: 8px;
-  padding: 0.4rem 0.65rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  pointer-events: none;
+  text-align: center;
+  color: #8a7344;
   user-select: none;
-  z-index: 5;
 }
 .credit .credit-line:first-child {
   font-weight: 700;
-  color: #5a3a14;
+  color: #6b4a1c;
 }
 .credit .credit-line + .credit-line {
   margin-top: 0.1rem;

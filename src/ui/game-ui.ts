@@ -579,10 +579,6 @@ export function mountGame(root: HTMLElement): void {
       <button class="panel-reopen" data-act="togglePanel" title="설정 펼치기" aria-label="설정 펼치기">☰</button>
     </div>
     <div class="modal-layer"></div>
-    <div class="credit">
-      <div class="credit-line">원본 보드게임: 김수민 · 김재현 · 조주현</div>
-      <div class="credit-line">프로그램 구현: 김수민</div>
-    </div>
   `
   const svg = root.querySelector('svg.board') as SVGSVGElement
   const content = svg.querySelector('g.content') as SVGGElement
@@ -1101,12 +1097,12 @@ export function mountGame(root: HTMLElement): void {
     })
   }
 
-  // 벌집 완성, 새로 잠긴 칸마다 꿀이 바닥부터 차오르는 연출(칸마다 시차).
-  function spawnHoneyRise(cells: Hex[]): void {
+  // 벌집 완성, 새로 잠긴 칸마다 꿀이 바닥부터 차오르는 연출(칸마다 시차). 색은 벌집 주인 진영.
+  function spawnHoneyRise(cells: Hex[], owner: Player): void {
     cells.forEach((h, i) => {
       const poly = document.createElementNS(SVGNS, 'polygon')
       poly.setAttribute('points', hexPolygonPoints(hexToPixel(h)))
-      poly.setAttribute('fill', theme.hiveFill)
+      poly.setAttribute('fill', theme.hiveFill[owner])
       poly.setAttribute('opacity', '0')
       poly.setAttribute('class', 'honey-rise')
       poly.style.animationDelay = `${i * 70}ms`
@@ -1152,7 +1148,7 @@ export function mountGame(root: HTMLElement): void {
       // 이 수로 벌집이 새로 완성/확장됐으면 꿀 차오름 + 완성음
       const hived = newlyHivedCells(prevBoard, state.board)
       if (hived.length > 0) {
-        spawnHoneyRise(hived)
+        spawnHoneyRise(hived, mover) // 새로 벌집된 칸은 직전에 둔 사람(mover) 색
         sound.hive()
       }
     }
@@ -1445,6 +1441,7 @@ export function mountGame(root: HTMLElement): void {
   // 합의 완료: 내 진영 확정 + 대국 시작. 방장은 host_side+status=playing 을 방에 저장(재접속 대비).
   function finalizeAgreement(hostSide: Side): void {
     if (!online) return
+    const wasToss = online.proposal?.toss === true // 동의 시점에 결과 공개(코인토스였으면)
     online.mySide = online.isHost ? hostSide : opposite(hostSide)
     online.proposal = null
     online.phase = 'playing'
@@ -1452,7 +1449,9 @@ export function mountGame(root: HTMLElement): void {
     // 양쪽 다 DB 에 합의를 기록 → DB(room.status=playing+host_side)가 합의의 단일 진실.
     // 신호(broadcast)가 유실돼도 상대는 onRoomUpdate 에서 이걸 보고 안전하게 시작한다.
     void agreeStart(online.roomId, hostSide)
-    onlineMsg = `선공·후공이 정해졌어요. 당신은 ${sideLabel(online.mySide)}. 시작합니다!`
+    onlineMsg = wasToss
+      ? `🪙 코인토스 결과 — 당신은 ${sideLabel(online.mySide)}! 시작합니다!`
+      : `선공·후공이 정해졌어요. 당신은 ${sideLabel(online.mySide)}. 시작합니다!`
     render()
   }
 
@@ -1684,12 +1683,13 @@ export function mountGame(root: HTMLElement): void {
       dash?: boolean
       filter?: string
       cls?: string
+      size?: number // 기본 HEX_SIZE. 작게 주면 칸 안쪽에 작은 육각(벌집 셀 윤곽 등).
       interactive?: boolean
       onClick?: () => void
     },
   ): SVGPolygonElement {
     const poly = document.createElementNS(SVGNS, 'polygon')
-    poly.setAttribute('points', hexPolygonPoints(center))
+    poly.setAttribute('points', hexPolygonPoints(center, opts.size ?? HEX_SIZE))
     poly.setAttribute('fill', opts.fill)
     poly.setAttribute('stroke', opts.stroke)
     poly.setAttribute('stroke-width', String(opts.strokeWidth))
@@ -1778,18 +1778,30 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 3) 벌집 강조, 금색 글로우 오버레이(가시성 ↑)
-    const hiveKeys = new Set<string>()
-    for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveKeys.add(k)
-    for (const key of hiveKeys) {
-      const h = hexFromKey(key)
+    // 3) 벌집 강조 — 진영별 색(노랑=밝은 꿀, 갈색=진한 호박)으로 채우고, 금색 글로우 테두리 +
+    //    칸 안쪽 작은 육각(벌집 셀 윤곽)으로 "여긴 벌집"이라는 가시성을 높인다.
+    const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
+    for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
+    for (const [key, owner] of hiveOwner) {
+      const center = hexToPixel(hexFromKey(key))
       content.appendChild(
-        makeHexPolygon(hexToPixel(h), {
-          fill: theme.hiveFill,
-          stroke: theme.hiveGlow,
-          strokeWidth: 4.5,
-          opacity: 0.55,
+        makeHexPolygon(center, {
+          fill: theme.hiveFill[owner],
+          stroke: theme.hiveStroke[owner],
+          strokeWidth: 5,
+          opacity: 0.62,
           filter: 'url(#hiveGlow)',
+          interactive: false,
+        }),
+      )
+      // 안쪽 작은 육각(벌집 셀) — 채움 없이 윤곽만, 진영 테두리색
+      content.appendChild(
+        makeHexPolygon(center, {
+          fill: 'none',
+          stroke: theme.hiveStroke[owner],
+          strokeWidth: 1.6,
+          opacity: 0.8,
+          size: HEX_SIZE * 0.5,
           interactive: false,
         }),
       )
@@ -1815,14 +1827,13 @@ export function mountGame(root: HTMLElement): void {
     const lastPieceKey = lpc ? hexKey(lpc) : null
     if (viewLast) {
       for (const c of lastTileCells(viewLast)) {
+        const px = hexToPixel(c)
+        // 직전에 놓은 타일: 흰 실선 backing 위에 굵은 파란 점선 → 어떤 타일색 위에서도 또렷하게.
         content.appendChild(
-          makeHexPolygon(hexToPixel(c), {
-            fill: 'none',
-            stroke: '#2563eb',
-            strokeWidth: 3,
-            dash: true,
-            interactive: false,
-          }),
+          makeHexPolygon(px, { fill: 'none', stroke: '#ffffff', strokeWidth: 5, opacity: 0.9, interactive: false }),
+        )
+        content.appendChild(
+          makeHexPolygon(px, { fill: 'none', stroke: '#1d4ed8', strokeWidth: 3.4, dash: true, interactive: false }),
         )
       }
     }
@@ -1955,7 +1966,12 @@ export function mountGame(root: HTMLElement): void {
       add('circle', { cx: 100, cy: 100, r: 79, fill: 'none', stroke: discRim, 'stroke-width': 2.2, opacity: 0.5 }) // 안쪽 림
       add('ellipse', { cx: 74, cy: 72, rx: 44, ry: 31, fill: '#ffffff', opacity: 0.06 }) // 좌상단 광택
       if (isQueen) add('circle', { cx: 100, cy: 100, r: 71, fill: 'none', stroke: '#cf2a1c', 'stroke-width': 2.8 }) // 여왕벌 빨간 링
-      if (key === lastPieceKey) add('circle', { cx: 100, cy: 100, r: 84, fill: 'none', stroke: '#2563eb', 'stroke-width': 3.4 }) // 직전 수 파란 링
+      if (key === lastPieceKey) {
+        // 직전에 놓은 말: 흰 링으로 대비를 주고 그 위에 굵은 파란 링 + 부드러운 점멸 → 한눈에 띄게.
+        add('circle', { cx: 100, cy: 100, r: 89, fill: 'none', stroke: '#ffffff', 'stroke-width': 7, opacity: 0.95 })
+        const lastRing = add('circle', { cx: 100, cy: 100, r: 89, fill: 'none', stroke: '#1d4ed8', 'stroke-width': 4.5 })
+        lastRing.classList.add('last-piece-ring')
+      }
 
       // --- 벌(그룹, tilt 적용) ---
       const bee = document.createElementNS(SVGNS, 'g')
@@ -2075,8 +2091,10 @@ export function mountGame(root: HTMLElement): void {
     const sc = totalHiveScores(state.board)
     const supplyLine = (p: Player): string => {
       const s = state.supplies[p]
-      const tiles = state.infiniteTiles ? '∞' : String(s.tiles)
-      return `${PLAYER_LABEL[p]}: 타일 ${tiles} · 말 ${s.pieces}${s.queenUsed ? ' · 여왕벌✓' : ''}`
+      const inf = state.infiniteTiles === true
+      const tiles = inf ? '∞' : String(s.tiles)
+      const pieces = inf ? '∞' : String(s.pieces) // 완전 무한 모드: 말도 무제한 표시
+      return `${PLAYER_LABEL[p]}: 타일 ${tiles} · 말 ${pieces}${s.queenUsed ? ' · 여왕벌✓' : ''}`
     }
     let header: string
     let instruction: string
@@ -2407,9 +2425,8 @@ export function mountGame(root: HTMLElement): void {
   function renderSideNegotiate(): void {
     if (!online) return
     const p = online.proposal
-    // 코인 플립 애니메이션(결과 색 면으로 착지). 양쪽이 같은 결과를 본다(각자 자기 색 면).
-    const coinHtml = (c: Side): string =>
-      `<div class="coin-toss"><div class="coin coin-land-${c}"><div class="coin-face coin-yellow">노랑</div><div class="coin-face coin-brown">갈색</div></div></div>`
+    // 코인토스는 "둘이 동의하면 결과 무조건 수용". 그래서 동의 전에는 결과를 양쪽 다 보여주지 않는다
+    // (결과를 보고 무르는 것을 원천 차단). 동의하면 finalizeAgreement 가 결과를 알려준다.
     let body: string
     if (p === null) {
       body = `
@@ -2422,17 +2439,28 @@ export function mountGame(root: HTMLElement): void {
         <div class="nego-hint">또는 상대가 정할 때까지 기다려요.</div>`
     } else if (p.mine) {
       const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
-      body = `
-        ${p.toss ? coinHtml(myColor) : ''}
-        <div class="modal-sub">${p.toss ? '🪙 코인토스 결과 — ' : '내 제안: '}<b>내가 ${sideLabel(myColor)}</b><br>상대의 응답을 기다리는 중…</div>
+      body = p.toss
+        ? `
+        <div class="modal-sub">🪙 코인토스를 제안했어요. 상대가 동의하면 무작위로 정해지고, 그 결과는 그대로 시작돼요.<br>상대의 응답을 기다리는 중…</div>
+        <div class="modal-actions">
+          <button data-act="rejectSide">${ICON.close} 제안 취소</button>
+        </div>`
+        : `
+        <div class="modal-sub">내 제안: <b>내가 ${sideLabel(myColor)}</b><br>상대의 응답을 기다리는 중…</div>
         <div class="modal-actions">
           <button data-act="rejectSide">${ICON.close} 제안 취소</button>
         </div>`
     } else {
       const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
-      body = `
-        ${p.toss ? coinHtml(myColor) : ''}
-        <div class="modal-sub">${p.toss ? '🪙 상대가 코인토스했어요! 결과 — ' : '상대가 제안했어요. '}<b>당신은 ${sideLabel(myColor)}</b>.<br>이대로 시작할까요?</div>
+      body = p.toss
+        ? `
+        <div class="modal-sub">🪙 상대가 코인토스를 제안했어요. 동의하면 무작위로 정해지고, <b>그 결과는 그대로 시작</b>돼요.</div>
+        <div class="modal-actions">
+          <button data-act="acceptSide">${ICON.check} 코인토스 동의</button>
+          <button data-act="rejectSide">${ICON.close} 다른 방식</button>
+        </div>`
+        : `
+        <div class="modal-sub">상대가 제안했어요. <b>당신은 ${sideLabel(myColor)}</b>.<br>이대로 시작할까요?</div>
         <div class="modal-actions">
           <button data-act="acceptSide">${ICON.check} 예, 시작</button>
           <button data-act="rejectSide">${ICON.close} 아니오</button>
@@ -2713,6 +2741,11 @@ export function mountGame(root: HTMLElement): void {
     }
     // 게임 상태(차례·안내·자원·점수)는 보드 좌상단 오버레이(renderBoardStatus)로 옮겼다 — 패널엔 설정만.
 
+    // 게임이 진행 중(첫 수 이후)이면 게임 규칙·AI 설정(모드/난이도/성향/여왕벌/무한)을 바꿀 수 없다.
+    // 진행 중 변경은 자원·승패 일관성을 깨므로(무한 모드 토글 시 타일 수가 꼬이던 문제 포함) 새 게임에서만.
+    const live = state.phase === 'playing' && state.moveNumber > 0
+    const lockTitle = '게임 중에는 바꿀 수 없어요. 새 게임에서 설정하세요'
+
     // 모드/난이도는 버튼을 누르면 그 밑에 펼쳐지는 메뉴, 나머지는 토글. (보드 아래 액션 바와 분리)
     const menu = (kind: 'mode' | 'difficulty', items: string[]): string =>
       openMenu === kind ? `<div class="menu-popup">${items.join('')}</div>` : ''
@@ -2742,17 +2775,18 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="onlineJoin" title="받은 방 코드로 입장">${ICON.enter} 코드로 입장</button>`
     const gameGrid = `
       <div class="settings-grid">
+        ${live ? `<div class="lock-note">게임 중에는 게임 설정을 바꿀 수 없어요. 새 게임에서 설정하세요.</div>` : ''}
         <div class="menu-wrap">
-          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" ${online ? 'disabled' : ''} title="플레이 모드 바꾸기">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
+          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" ${online || live ? 'disabled' : ''} title="${live ? lockTitle : '플레이 모드 바꾸기'}">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
         </div>
         <div class="menu-wrap">
-          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' && !online ? '' : 'disabled'} title="AI 난이도 바꾸기">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
+          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' && !online && !live ? '' : 'disabled'} title="${live ? lockTitle : 'AI 난이도 바꾸기'}">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
         </div>
-        <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}">${ICON.crown} 여왕벌 모드</button>
-        <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" title="타일 보유 제한 없이 플레이(말 5목으로만 결판)">${ICON.infinity} 무한 모드</button>
+        <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}" ${live ? 'disabled' : ''} title="${live ? lockTitle : '여왕벌 모드(확장)'}">${ICON.crown} 여왕벌 모드</button>
+        <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" ${live ? 'disabled' : ''} title="${live ? lockTitle : '타일·말 제한 없이 플레이(말 5목으로만 승부)'}">${ICON.infinity} 무한 모드</button>
         <button data-act="undo" ${undoEnabled() ? '' : 'disabled'}>${ICON.undo} 무르기<kbd>U</kbd></button>
         <button data-act="replayEnter" ${moveLog.length > 0 ? '' : 'disabled'}>${ICON.history} 복기</button>
-        <button data-act="new">${ICON.refresh} 새 게임<kbd>N</kbd></button>
+        <button data-act="new" class="cta-new">${ICON.refresh} 새 게임<kbd>N</kbd></button>
         <button data-act="shareGame" title="저장 없이 지금 판 기보를 바로 공유">${ICON.share} 공유하기</button>
         <button data-act="saveGame" title="지금 판을 보관함에 저장">${ICON.save} 저장</button>
         <button data-act="openSaves" title="저장한 기보 보관함(불러오기·공유·삭제)">${ICON.saves} 보관함</button>
@@ -2782,8 +2816,8 @@ export function mountGame(root: HTMLElement): void {
     const sideRow = (icon: string, diffCtl: string, persona: Persona): string => `
       <div class="persona-row">
         <span class="pr-label">${icon}</span>
-        <select data-ctl="difficulty${diffCtl}" aria-label="${icon} 난이도">${diffOpts(diffCtl === 'Yellow' ? settings.difficultyYellow : settings.difficultyBrown)}</select>
-        <select data-ctl="persona${diffCtl}" aria-label="${icon} 성향">${personaOpts(persona)}</select>
+        <select data-ctl="difficulty${diffCtl}" aria-label="${icon} 난이도" ${live ? 'disabled' : ''}>${diffOpts(diffCtl === 'Yellow' ? settings.difficultyYellow : settings.difficultyBrown)}</select>
+        <select data-ctl="persona${diffCtl}" aria-label="${icon} 성향" ${live ? 'disabled' : ''}>${personaOpts(persona)}</select>
       </div>
       <div class="persona-desc">${PERSONA_LABEL[persona]}: ${PERSONA_DESC[persona]}</div>`
     let aiCtl = ''
@@ -2802,7 +2836,8 @@ export function mountGame(root: HTMLElement): void {
     } else if (settings.mode === 'vsAi') {
       aiCtl = `
         <div class="ai-ctl">
-          <div class="persona-row"><span class="pr-label">AI 성향</span><select data-ctl="personaBrown" aria-label="AI 성향">${personaOpts(settings.personaBrown)}</select></div>
+          <div class="persona-row"><span class="pr-label">AI 성향</span><select data-ctl="personaBrown" aria-label="AI 성향" ${live ? 'disabled' : ''}>${personaOpts(settings.personaBrown)}</select></div>
+          ${live ? `<div class="lock-note">게임 중에는 바꿀 수 없어요. 새 게임에서 설정하세요.</div>` : ''}
           <div class="persona-desc">${PERSONA_LABEL[settings.personaBrown]}: ${PERSONA_DESC[settings.personaBrown]}</div>
         </div>`
     }
@@ -2853,6 +2888,10 @@ export function mountGame(root: HTMLElement): void {
       ${settings.mode !== 'hotseat' ? section('ai', settings.mode === 'watch' ? '관전 설정' : 'AI 설정', aiCtl) : ''}
       ${section('sound', '사운드', soundCtl)}
       ${section('help', '도움말', helpRows)}
+      <div class="credit">
+        <div class="credit-line">원본 보드게임: 김수민 · 김재현 · 조주현</div>
+        <div class="credit-line">프로그램 구현: 김수민</div>
+      </div>
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
@@ -3205,10 +3244,10 @@ export function mountGame(root: HTMLElement): void {
         infoModal = null
         break
       case 'toggleInfinite':
-        // 무한 모드는 현재 판에도 즉시 반영(타일이 줄지/소진되지 않게). 새 게임도 설정 반영.
+        // 게임 진행 중에는 패널에서 버튼이 잠겨(disabled) 여기 도달하지 않는다 → 첫 수 전(설정 단계)에만 반영.
         settings.infiniteTiles = !settings.infiniteTiles
         state = { ...state, infiniteTiles: settings.infiniteTiles }
-        notice = settings.infiniteTiles ? '무한 모드 ON, 타일 무제한' : '무한 모드 OFF, 타일 30개'
+        notice = settings.infiniteTiles ? '무한 모드 ON, 타일·말 무제한' : '무한 모드 OFF'
         if (online) pushOnline()
         break
       case 'toggleActionPos':
