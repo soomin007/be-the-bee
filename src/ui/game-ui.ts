@@ -980,7 +980,9 @@ export function mountGame(root: HTMLElement): void {
 
   function startTurn(): void {
     pieceKind = 'normal'
-    if (state.phase === 'finished') {
+    // 게임이 끝났거나 내가 둘 차례가 아니면(AI·온라인 상대·관전) 행동 안내(draft)를 만들지 않는다.
+    // 안 그러면 상대 차례인데도 "이번 턴 행동을 고르세요" 가 내 화면에 뜬다.
+    if (state.phase === 'finished' || inputLocked()) {
       draft = null
       return
     }

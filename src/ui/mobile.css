@@ -146,6 +146,15 @@
     display: none;
   }
 
+  /* 경고/팁(board-notes)은 모바일에선 보드 "위"(상단 HUD·안내 배너 아래)로 — 보드 아래(FAB 근처)면
+     눈에 안 띈다. 데스크탑은 좌상단 차례 HUD 가 절대배치라 겹침 회피로 아래에 두지만, 모바일 HUD 는
+     흐름(띠)이라 위에 둬도 안 겹친다. (iOS/안드로이드 동일하게 보드 위로 통일) */
+  .board-notes {
+    order: -1;
+    margin: 0 auto 0.1rem;
+    max-width: 94%;
+  }
+
   /* === 설정 시트: 톱니 → .panel 전체 오버레이로 슬라이드 인 === */
   .panel {
     position: fixed;
