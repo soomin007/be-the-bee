@@ -12,6 +12,7 @@ import {
   hex,
   hexEquals,
   hexFromKey,
+  analyzeGame,
   hexKey,
   hiveCountdowns,
   isTilePlaceable,
@@ -2694,6 +2695,34 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
+  // 복기 "이 판 분석" 요약 HTML. 기보를 analyzeGame 으로 분석해 결정적 순간을 리스트로(클릭=그 수로 점프).
+  function replayAnalysisHtml(currentIdx: number): string {
+    if (moveLog.length === 0) return ''
+    const review = analyzeGame(timeline()[0]!, moveLog)
+    const decisive = [...review.blunders, ...review.highlights].sort((a, b) => a.index - b.index)
+    const cy = review.counts.yellow
+    const cb = review.counts.brown
+    const list =
+      decisive.length === 0
+        ? `<div class="ra-empty">눈에 띄는 결정적 순간은 없었어요.</div>`
+        : `<div class="ra-list">${decisive
+            .map(
+              (r) =>
+                `<button class="ra-item ${r.polarity} ${r.index === currentIdx ? 'cur' : ''}" data-jump="${r.index}">` +
+                `<span class="ra-idx">${r.index}수</span> ${PLAYER_LABEL[r.player]} ${noteLine(r.note)}</button>`,
+            )
+            .join('')}</div>`
+    return `
+      <div class="replay-analysis">
+        <div class="ra-title">이 판 분석</div>
+        <div class="ra-counts">
+          <span>🟡 노랑 <b class="good">좋은 수 ${cy.good}</b> · <b class="bad">실수 ${cy.bad}</b></span>
+          <span>🟤 갈색 <b class="good">좋은 수 ${cb.good}</b> · <b class="bad">실수 ${cb.bad}</b></span>
+        </div>
+        ${list}
+      </div>`
+  }
+
   function renderReplayPanel(idx: number): void {
     const n = moveLog.length
     const playing = replayTimer !== null
@@ -2716,9 +2745,19 @@ export function mountGame(root: HTMLElement): void {
       </div>
       <button class="replay-exit" data-act="replayExit">복기 종료 ✕</button>
       <p class="hint">◀ ▶ 한 수씩 · ▶재생 자동 진행(관전 간격 적용) · 파란 강조 = 그 수</p>
+      ${replayAnalysisHtml(idx)}
     `
     for (const btn of Array.from(panel.querySelectorAll('button'))) {
+      if (btn.hasAttribute('data-jump')) continue // 분석 요약 항목은 아래에서 별도 처리
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+    // 분석 요약 항목 클릭 → 그 수로 점프(보기 전용)
+    for (const el of Array.from(panel.querySelectorAll('[data-jump]'))) {
+      el.addEventListener('click', () => {
+        stopReplayTimer()
+        replayIndex = Number(el.getAttribute('data-jump'))
+        render()
+      })
     }
     const seek = panel.querySelector('input[data-ctl="replaySeek"]') as HTMLInputElement | null
     if (seek) {

@@ -919,6 +919,80 @@ button:has(> .ico) {
   background: #f5efdf;
 }
 
+/* 복기 "이 판 분석" 요약: 진영별 집계 + 결정적 순간 리스트(클릭하면 그 수로 점프). */
+.replay-analysis {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid #e6dcc3;
+  border-radius: 12px;
+  background: #fffdf7;
+}
+.replay-analysis .ra-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #5a3a14;
+  margin-bottom: 0.5rem;
+}
+.replay-analysis .ra-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: #6b5524;
+  margin-bottom: 0.6rem;
+}
+.replay-analysis .ra-counts b.good {
+  color: #2f7d32;
+}
+.replay-analysis .ra-counts b.bad {
+  color: #c2410c;
+}
+.replay-analysis .ra-empty {
+  font-size: 0.8rem;
+  color: #8a7344;
+}
+.replay-analysis .ra-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.replay-analysis .ra-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #ecdfbe;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.8rem;
+  color: #5c4f33;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.replay-analysis .ra-item:hover {
+  border-color: #d2b059;
+  background: #fdf7e8;
+}
+.replay-analysis .ra-item.cur {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb inset;
+}
+.replay-analysis .ra-item .ra-idx {
+  flex: none;
+  font-weight: 700;
+  color: #6b5524;
+}
+.replay-analysis .ra-item.good {
+  border-left: 3px solid #4caf50;
+}
+.replay-analysis .ra-item.bad {
+  border-left: 3px solid #e2570c;
+}
+
 /* 설명 박스, 패널 맨 밑 도움말. 제목 + 아이콘 행으로 정리해 가독성을 높인다 */
 .help {
   margin-top: 0.9rem;

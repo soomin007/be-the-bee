@@ -1,7 +1,7 @@
 // reviewMove: 수 해설/블런더 분류. 실제 공유 기보(vsAi 35수, 노랑=사람 승)로 검증.
 // 이 판의 결정적 장면: 34수에서 AI가 상대 5목 리치를 안 막음(missBlock) → 35수 사람 승(win).
 import { describe, it, expect } from 'vitest'
-import { applyMove, createInitialState, hex, notePolarity, reviewMove } from '../src/engine/index'
+import { analyzeGame, applyMove, createInitialState, hex, notePolarity, reviewMove } from '../src/engine/index'
 import type { Board, GameState, Move } from '../src/engine/index'
 
 const MV =
@@ -72,5 +72,40 @@ describe('reviewMove — 떨어진 4목(gapped four)만 threat', () => {
     const note = reviewMove(before, place4)
     expect(note).toBe('threat')
     expect(notePolarity(note!)).toBe('good')
+  })
+})
+
+describe('analyzeGame — 기보 한 판 분석', () => {
+  const moves = MV.split(';').map(decMove)
+
+  it('실전 35수 기보를 분석: 마지막 수 win 하이라이트 + 34수 missBlock 블런더', () => {
+    const review = analyzeGame(createInitialState(), moves)
+    // 35수(승리)는 하이라이트, 34수(놓친 차단)는 블런더에 들어간다.
+    expect(review.highlights.some((r) => r.index === 35 && r.note === 'win')).toBe(true)
+    expect(review.blunders.some((r) => r.index === 34 && r.note === 'missBlock')).toBe(true)
+    // 집계 합이 reviews 수와 일치(진영별 good/bad 누락 없음).
+    const total = review.counts.yellow.good + review.counts.yellow.bad + review.counts.brown.good + review.counts.brown.bad
+    expect(total).toBe(review.reviews.length)
+  })
+
+  it('각 review 의 index 는 1-based 이고 reviewMove 결과와 일치한다', () => {
+    const review = analyzeGame(createInitialState(), moves)
+    // 처음부터 재생해 직접 검증: index i 의 note 는 (i-1)번째 수를 그 직전 국면에서 본 결과.
+    let s = createInitialState()
+    const expected = new Map<number, string>()
+    for (let i = 0; i < moves.length; i++) {
+      const note = reviewMove(s, moves[i]!)
+      if (note) expected.set(i + 1, note)
+      s = applyMove(s, moves[i]!)
+    }
+    expect(review.reviews.length).toBe(expected.size)
+    for (const r of review.reviews) expect(r.note).toBe(expected.get(r.index))
+  })
+
+  it('빈 기보는 빈 분석을 반환한다', () => {
+    const review = analyzeGame(createInitialState(), [])
+    expect(review.reviews).toEqual([])
+    expect(review.blunders).toEqual([])
+    expect(review.highlights).toEqual([])
   })
 })

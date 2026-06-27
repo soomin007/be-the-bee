@@ -203,6 +203,57 @@ export function analyzeMove(before: GameState, move: Move): MoveNote | null {
   return n === 'win' || n === 'fork' || n === 'threat' || n === 'block' || n === 'corridor' ? n : null
 }
 
+// ── 기보 전체 분석(복기 "이 판 분석" 요약용) ─────────────────────────────────
+// reviewMove 를 기보 처음부터 재생하며 적용해 수별 분류를 모은다. 순수 함수(엔진).
+// 지금은 "분류 코칭 + 결정적 순간"만. 추후 확장 계획(추천 수/점수 손해)은 backlog 참고.
+
+/** 복기 분석에서 코칭이 붙은 한 수. index = 1-based 수 번호(복기 timeline 인덱스와 동일). */
+export interface MoveReview {
+  index: number // 그 수를 둔 직후 국면의 timeline 인덱스(1-based)
+  player: Player // 그 수를 둔 사람
+  note: MoveNote
+  polarity: 'good' | 'bad'
+}
+
+/** 기보 한 판 분석. reviews=코칭 붙은 수, blunders=지적, highlights=결정적 잘한 수, counts=진영별 집계. */
+export interface GameReview {
+  reviews: MoveReview[]
+  blunders: MoveReview[] // 놓친 승리/차단(polarity bad)
+  highlights: MoveReview[] // 결정적 잘한 수(승리·이중위협·위협·차단·줄끊기)
+  counts: Record<Player, { good: number; bad: number }>
+}
+
+const DECISIVE_GOOD: MoveNote[] = ['win', 'fork', 'threat', 'block', 'corridor']
+
+/**
+ * 시작 국면 + 기보를 처음부터 재생하며 각 수를 reviewMove 로 분류해 한 판 분석을 만든다.
+ * initial 의 모드 플래그(queenEnabled/infiniteTiles)가 분석에 그대로 반영된다.
+ * 불법 수(손상된 기보)를 만나면 그 지점에서 분석을 멈춘다.
+ */
+export function analyzeGame(initial: GameState, moveLog: Move[]): GameReview {
+  let state = initial
+  const reviews: MoveReview[] = []
+  for (let i = 0; i < moveLog.length; i++) {
+    const move = moveLog[i]!
+    const player = state.turn
+    const note = reviewMove(state, move)
+    if (note) reviews.push({ index: i + 1, player, note, polarity: notePolarity(note) })
+    try {
+      state = applyMove(state, move)
+    } catch {
+      break
+    }
+  }
+  const blunders = reviews.filter((r) => r.polarity === 'bad')
+  const highlights = reviews.filter((r) => DECISIVE_GOOD.includes(r.note))
+  const counts: Record<Player, { good: number; bad: number }> = {
+    yellow: { good: 0, bad: 0 },
+    brown: { good: 0, bad: 0 },
+  }
+  for (const r of reviews) counts[r.player][r.polarity]++
+  return { reviews, blunders, highlights, counts }
+}
+
 // ---- 평가 가중치(튜닝 노브) + 성향 프로파일 --------------------------------
 
 export interface Weights {
