@@ -662,8 +662,26 @@ export function mountGame(root: HTMLElement): void {
         panelCollapsed = !open
         applyPanelCollapsed()
       },
-      openRules: () => openTutorial(root),
+      // 온보딩의 '게임 규칙 보기' → 튜토리얼, 그게 끝나면 첫 사용 마무리(테마 팁 + 새 게임 설정).
+      openRules: () => openTutorial(root, firstRunFinish),
     }
+  }
+
+  // 색 구분이 어려운 사용자를 위해 "테마(색)를 바꿀 수 있다"고 한 번만 안내(튜토리얼 직후).
+  function maybeThemeTip(): void {
+    try {
+      if (localStorage.getItem('be-the-bee/theme-told') === '1') return
+      localStorage.setItem('be-the-bee/theme-told', '1')
+    } catch {
+      return
+    }
+    notice = '색 구분이 어렵다면 설정 → 화면·설정에서 테마(색)를 바꿀 수 있어요.'
+    render()
+  }
+  // 첫 사용(온보딩/튜토리얼) 마무리: 테마 팁 + 진행 중인 판이 없으면 새 게임 설정 마법사를 띄운다.
+  function firstRunFinish(): void {
+    maybeThemeTip()
+    if (!resumed) openNewGameWizard()
   }
 
   // 무르기 실제 수행(사람 차례까지 되돌림 — vs AI 는 AI 수+내 수 함께). 동의/직접 호출 공용.
@@ -3677,7 +3695,7 @@ export function mountGame(root: HTMLElement): void {
         return
       case 'tutorial':
         if (mobileShell.active()) mobileShell.setSettings(false) // 모바일: 설정 시트를 닫아 설명이 가려지지 않게
-        openTutorial(root)
+        openTutorial(root, maybeThemeTip) // 규칙을 다시 본 뒤에도 테마 팁(처음 1회)
         return
       case 'appHelp':
         if (mobileShell.active()) mobileShell.setSettings(false)
@@ -3754,7 +3772,9 @@ export function mountGame(root: HTMLElement): void {
   }
   render()
   maybeScheduleAi() // 불러온 모드가 관전이거나, 이어한 판이 AI 차례면 바로 둔다
-  maybeShowOnboarding(onboardCtx()) // 첫 접속이면 앱 사용법 투어(한 번만) → 마지막에 게임 규칙으로 연결
+  // 첫 접속: 앱 사용법 투어 → 게임 규칙 → 끝나면 firstRunFinish(테마 팁 + 새 게임 설정).
+  // 이미 본 사용자도 저장이 없으면 firstRunFinish 로 새 게임 설정을 띄운다(maybeShowOnboarding 내부 분기).
+  maybeShowOnboarding(onboardCtx(), firstRunFinish)
   // 초대 링크(#room=코드)로 들어왔으면 그 방에 자동 입장(상대로 합류, 또는 방장 본인 재접속).
   if (typeof location !== 'undefined') {
     const m = /[#&]room=([A-Za-z0-9]+)/.exec(location.hash)

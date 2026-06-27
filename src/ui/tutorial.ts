@@ -246,7 +246,7 @@ const PAGES: Page[] = [
 ]
 
 // 튜토리얼 캐러셀을 연다(첫 접속/재열기 공용). 닫으면 seen 플래그를 기록한다.
-export function openTutorial(root: HTMLElement): void {
+export function openTutorial(root: HTMLElement, onClose?: () => void): void {
   let layer = root.querySelector('.tut-layer') as HTMLElement | null
   if (!layer) {
     layer = document.createElement('div')
@@ -281,6 +281,7 @@ export function openTutorial(root: HTMLElement): void {
     markSeen()
     document.removeEventListener('keydown', onKey)
     host.innerHTML = ''
+    onClose?.()
   }
 
   function handle(act: string | null): void {

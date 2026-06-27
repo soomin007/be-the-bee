@@ -126,7 +126,7 @@ function mobileSteps(ctx: OnboardCtx): Step[] {
   ]
 }
 
-export function openOnboarding(ctx: OnboardCtx): void {
+export function openOnboarding(ctx: OnboardCtx, onDone?: () => void): void {
   const { root } = ctx
   const mobile = ctx.isMobile()
   if (mobile) ctx.setMobileSettings(false) // 모바일: 시트를 닫아 초기 단계(보드·HUD)가 안 가리게
@@ -248,14 +248,20 @@ export function openOnboarding(ctx: OnboardCtx): void {
     repositionTimer = window.setTimeout(place, 300)
   }
 
+  // 투어를 끝까지/건너뛰어 마쳤을 때: 닫고 완료 콜백(첫 게임 설정 등). '규칙 보기'는 튜토리얼로
+  // 이어가므로 여기를 타지 않고, 완료 콜백은 그 튜토리얼이 끝난 뒤 호출된다(ctx.openRules).
+  function finish(): void {
+    close()
+    onDone?.()
+  }
   function handle(act: string | null): void {
-    if (act === 'skip') return close()
+    if (act === 'skip') return finish()
     if (act === 'prev') {
       idx = Math.max(0, idx - 1)
       return render()
     }
     if (act === 'next') {
-      if (idx === steps.length - 1) return close()
+      if (idx === steps.length - 1) return finish()
       idx += 1
       return render()
     }
@@ -276,7 +282,7 @@ export function openOnboarding(ctx: OnboardCtx): void {
       handle('prev')
     } else if (e.key === 'Escape') {
       e.stopPropagation()
-      close()
+      finish()
     }
   }
   const onResize = (): void => place()
@@ -298,6 +304,7 @@ export function openOnboarding(ctx: OnboardCtx): void {
   render()
 }
 
-export function maybeShowOnboarding(ctx: OnboardCtx): void {
-  if (!onboardingSeen()) openOnboarding(ctx)
+export function maybeShowOnboarding(ctx: OnboardCtx, onDone?: () => void): void {
+  if (!onboardingSeen()) openOnboarding(ctx, onDone)
+  else onDone?.() // 이미 온보딩을 본 사용자는 바로 완료 콜백(저장 없으면 새 게임 설정 등)
 }
