@@ -2618,3 +2618,53 @@ button:has(> .ico) {
   border-color: #3a3225;
   color: #e4dac2;
 }
+/* 행동 버튼(보드 아래 ①②·복기 컨트롤) */
+.game.dark .action-bar button {
+  background: #2a2417;
+  border-color: #3a3225;
+  color: #e4dac2;
+}
+.game.dark .action-bar button.active {
+  background: #4a3e1a;
+  border-color: #6b5a1e;
+  color: #ffe39a;
+}
+.game.dark .action-bar kbd {
+  background: #3a3122;
+  border-color: #4a3f2a;
+  color: #d8cba8;
+}
+/* 모달(새 게임 마법사·보관함·온라인·협상·결과 등) — modal-layer 가 .game 밖이라 별도 스코프 */
+.modal-layer.dark .modal-card {
+  background: #1f1a12;
+  border-color: #3a3225;
+  color: #e8e0d0;
+}
+.modal-layer.dark .modal-title {
+  color: #ffe39a;
+}
+.modal-layer.dark .modal-sub,
+.modal-layer.dark .modal-card p,
+.modal-layer.dark .nego-hint,
+.modal-layer.dark .wiz-hint,
+.modal-layer.dark .save-meta {
+  color: #c0b494;
+}
+.modal-layer.dark .modal-card button,
+.modal-layer.dark .modal-card input,
+.modal-layer.dark .modal-card select {
+  background: #2a2417;
+  border-color: #3a3225;
+  color: #e4dac2;
+}
+.modal-layer.dark .modal-card button:hover {
+  background: #332b1c;
+}
+/* 마법사·모달의 강조(꿀빛) 버튼은 그대로 유지 */
+.modal-layer.dark .modal-card button.modal-share,
+.modal-layer.dark .modal-card button.cta-new,
+.modal-layer.dark .modal-card button.wiz-primary {
+  background: linear-gradient(180deg, #ffd95e, #f5b81e);
+  border-color: #e0991a;
+  color: #3a2808;
+}

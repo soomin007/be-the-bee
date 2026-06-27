@@ -653,9 +653,10 @@ export function mountGame(root: HTMLElement): void {
   function applyPanelCollapsed(): void {
     gameEl.classList.toggle('panel-collapsed', panelCollapsed)
   }
-  // 페이지 다크 모드 — .game 에 .dark 클래스. CSS 가 배경·패널·보드 배경을 어둡게 덮는다.
+  // 페이지 다크 모드 — .game 과 .modal-layer(.game 밖) 둘 다 .dark. CSS 가 배경·패널·보드·모달을 덮는다.
   function applyDark(): void {
     gameEl.classList.toggle('dark', settings.darkMode)
+    modalLayer.classList.toggle('dark', settings.darkMode)
   }
 
   // 앱 사용법 온보딩(스포트라이트 투어)에 넘길 환경 훅. 레이아웃 제어만 노출(게임 상태는 모름).
@@ -3066,21 +3067,7 @@ export function mountGame(root: HTMLElement): void {
     const live = state.phase === 'playing' && state.moveNumber > 0
     const lockTitle = '게임 중에는 바꿀 수 없어요. 새 게임에서 설정하세요'
 
-    // 모드/난이도는 버튼을 누르면 그 밑에 펼쳐지는 메뉴, 나머지는 토글. (보드 아래 액션 바와 분리)
-    const menu = (kind: 'mode' | 'difficulty', items: string[]): string =>
-      openMenu === kind ? `<div class="menu-popup">${items.join('')}</div>` : ''
-    const modeMenu = menu(
-      'mode',
-      (['hotseat', 'vsAi', 'watch'] as Mode[]).map(
-        (m) => `<button data-act="setMode:${m}" class="${settings.mode === m ? 'active' : ''}">${{ hotseat: ICON.people, vsAi: ICON.ai, watch: ICON.view }[m]} ${MODE_LABEL[m]}</button>`,
-      ),
-    )
-    const diffMenu = menu(
-      'difficulty',
-      DIFFS.map(
-        (d) => `<button data-act="setDiff:${d}" class="${settings.aiDifficulty === d ? 'active' : ''}">${DIFF_LABEL[d]}</button>`,
-      ),
-    )
+    // 모드·난이도·AI 성향은 모두 새 게임 마법사에서만 설정한다(설정창에선 메뉴/탭 제거).
     // 온라인 대전 컨트롤: 키가 설정돼 있을 때만(mpEnabled). 방 안이면 초대 링크/나가기, 밖이면 만들기/입장.
     const onlineCtl = !mpEnabled
       ? ''
@@ -3096,12 +3083,6 @@ export function mountGame(root: HTMLElement): void {
     const gameGrid = `
       <div class="settings-grid">
         ${live ? `<div class="lock-note">게임 중에는 게임 설정을 바꿀 수 없어요. 새 게임에서 설정하세요.</div>` : ''}
-        <div class="menu-wrap">
-          <button data-act="menuMode" class="${openMenu === 'mode' ? 'open' : ''}" ${online || live ? 'disabled' : ''} title="${live ? lockTitle : '플레이 모드 바꾸기'}">${MODE_SHORT[settings.mode]} ▾</button>${modeMenu}
-        </div>
-        <div class="menu-wrap">
-          <button data-act="menuDifficulty" class="${openMenu === 'difficulty' ? 'open' : ''}" ${settings.mode === 'vsAi' && !online && !live ? '' : 'disabled'} title="${live ? lockTitle : 'AI 난이도 바꾸기'}">${settings.mode === 'vsAi' ? DIFF_LABEL[settings.aiDifficulty] : '난이도'} ▾</button>${diffMenu}
-        </div>
         <button data-act="toggleQueen" class="${settings.queen ? 'active' : ''}" ${live ? 'disabled' : ''} title="${live ? lockTitle : '여왕벌 모드(확장)'}">${ICON.crown} 여왕벌 모드</button>
         <button data-act="toggleInfinite" class="${settings.infiniteTiles ? 'active' : ''}" ${live ? 'disabled' : ''} title="${live ? lockTitle : '타일·말 제한 없이 플레이(말 5목으로만 승부)'}">${ICON.infinity} 무한 모드</button>
         <button data-act="undo" ${undoEnabled() ? '' : 'disabled'}>${ICON.undo} 무르기<kbd>U</kbd></button>
@@ -3154,14 +3135,8 @@ export function mountGame(root: HTMLElement): void {
             <span class="sc-val">${(settings.watchDelay / 1000).toFixed(1)}초</span>
           </div>
         </div>`
-    } else if (settings.mode === 'vsAi') {
-      aiCtl = `
-        <div class="ai-ctl">
-          <div class="persona-row"><span class="pr-label">AI 성향</span><select data-ctl="personaBrown" aria-label="AI 성향" ${live ? 'disabled' : ''}>${personaOpts(settings.personaBrown)}</select></div>
-          ${live ? `<div class="lock-note">게임 중에는 바꿀 수 없어요. 새 게임에서 설정하세요.</div>` : ''}
-          <div class="persona-desc">${PERSONA_LABEL[settings.personaBrown]}: ${PERSONA_DESC[settings.personaBrown]}</div>
-        </div>`
     }
+    // vs AI 성향은 새 게임 마법사에서만 설정한다(게임 중 변경 불가라 별도 탭 불필요).
 
     const trackOpts = BGM_TRACKS.map(
       (t, i) => `<option value="${i}" ${i === settings.bgmTrack ? 'selected' : ''}>${t.title}</option>`,
@@ -3206,7 +3181,7 @@ export function mountGame(root: HTMLElement): void {
       ${settingsSummary}
       ${section('game', '게임', gameGrid)}
       ${section('view', '화면 · 설정', viewGrid)}
-      ${settings.mode !== 'hotseat' && !live ? section('ai', settings.mode === 'watch' ? '관전 설정' : 'AI 설정', aiCtl) : ''}
+      ${settings.mode === 'watch' ? section('ai', '관전 설정', aiCtl) : ''}
       ${section('sound', '사운드', soundCtl)}
       ${section('help', '도움말', helpRows)}
       <div class="credit">

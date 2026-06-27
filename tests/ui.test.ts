@@ -97,12 +97,9 @@ describe('핫시트 UI (headless DOM)', () => {
   it('vs AI 모드: 사람 첫 수 후 AI(갈색)가 자동으로 둔다', () => {
     vi.useFakeTimers()
     try {
+      // 모드·난이도는 새 게임 마법사/설정에서 정한다(설정창 메뉴 제거됨) → vs AI 를 저장 설정으로 켠다.
+      localStorage.setItem('be-the-bee/settings', JSON.stringify({ mode: 'vsAi', aiDifficulty: 'easy', aiSide: 'brown' }))
       mountGame(root)
-      // 모드 메뉴 열고 vs AI 선택
-      const menuBtn = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'menuMode')!
-      click(menuBtn)
-      const vsAiOpt = Array.from(root.querySelectorAll('button')).find((b) => b.getAttribute('data-act') === 'setMode:vsAi')!
-      click(vsAiOpt)
 
       // 사람(노랑) 첫 수: 행동 선택(②) → 타일 → 말
       chooseAction(root, 'tileAndPiece')
