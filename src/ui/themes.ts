@@ -17,6 +17,7 @@ export interface ColorTheme {
   id: string
   label: string
   desc: string // 설정 요약/툴팁용 한 줄
+  players: Record<Player, string> // 진영 이름(테마 색에 맞게 — 차례/승패/안내 문구에 쓰임)
   tile: Record<Player, TileColors>
   piece: Record<Player, PieceColors>
   // 벌집(5목 타일) 강조: 진영별로 채움·테두리를 달리해 노랑 벌집과 갈색 벌집이 섞이지 않게 한다.
@@ -33,6 +34,7 @@ export const COLOR_THEMES: ColorTheme[] = [
     id: 'honey',
     label: '꿀',
     desc: '따뜻한 벌집, 기본',
+    players: { yellow: '노랑', brown: '갈색' },
     tile: {
       yellow: { light: '#ffe85e', mid: '#ffce1a', dark: '#e6a800', stroke: '#7a5a10' }, // 더 밝고 쨍한 금빛
       brown: { light: '#c4843a', mid: '#97581d', dark: '#744213', stroke: '#43280a' },
@@ -49,6 +51,7 @@ export const COLOR_THEMES: ColorTheme[] = [
     id: 'contrast',
     label: '고대비',
     desc: '명도차 큼, 색약·저시력 친화',
+    players: { yellow: '노랑', brown: '갈색' },
     tile: {
       yellow: { light: '#ffe87a', mid: '#ffce00', dark: '#e6b400', stroke: '#5c4000' },
       brown: { light: '#6a4824', mid: '#412a12', dark: '#2a1a0a', stroke: '#140c04' },
@@ -65,6 +68,7 @@ export const COLOR_THEMES: ColorTheme[] = [
     id: 'terracotta',
     label: '벽돌',
     desc: '황금 vs 적갈, 색조 대비',
+    players: { yellow: '노랑', brown: '갈색' },
     tile: {
       yellow: { light: '#f7d96a', mid: '#ecbb2e', dark: '#cf9415', stroke: '#6b4f14' },
       brown: { light: '#c8693a', mid: '#a23c1e', dark: '#7c2b13', stroke: '#491809' },
@@ -76,6 +80,25 @@ export const COLOR_THEMES: ColorTheme[] = [
     hiveFill: { yellow: '#ffd98a', brown: '#c2532a' },
     hiveStroke: { yellow: '#c2840f', brown: '#9c3a18' },
     hiveGlow: '#e2570c',
+  },
+  {
+    // 보색 대비: 노랑 ↔ 남색. 두 색의 색상·명도 차가 커서 색약·저시력에도 가장 구분이 쉽다.
+    // 진영 이름도 색에 맞춰 '노랑'/'남색'으로 바꾼다(players).
+    id: 'cobalt',
+    label: '노랑·남색',
+    desc: '보색 대비, 색 구분 가장 쉬움',
+    players: { yellow: '노랑', brown: '남색' },
+    tile: {
+      yellow: { light: '#ffe85e', mid: '#ffce1a', dark: '#e6a800', stroke: '#7a5a10' },
+      brown: { light: '#4664c9', mid: '#1e40af', dark: '#142a7a', stroke: '#0a1640' },
+    },
+    piece: {
+      yellow: { body: '#ffc107', stripe: '#3a2600' },
+      brown: { body: '#2a4fc0', stripe: '#0a1430' },
+    },
+    hiveFill: { yellow: '#ffe680', brown: '#5276d8' },
+    hiveStroke: { yellow: '#d98a14', brown: '#1e3a8a' },
+    hiveGlow: '#facc15',
   },
 ]
 export const DEFAULT_THEME_ID = 'honey'

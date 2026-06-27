@@ -69,7 +69,9 @@ const SVGNS = 'http://www.w3.org/2000/svg'
 
 // 진영 색(타일·말·벌집)은 컬러 테마에서 가져온다, themes.ts.
 // 말 = 벌: 몸통 + 줄무늬(진영 구분 + 벌 느낌), 흰 테두리로 타일과 대비.
-const PLAYER_LABEL: Record<Player, string> = { yellow: '노랑', brown: '갈색' }
+// 진영 이름. 테마에 따라 바뀐다(예: 보색 테마는 '노랑'/'남색'). applyThemeColors 가 현재 테마의
+// players 로 갱신한다 → 모든 PLAYER_LABEL[p] 참조가 자동으로 테마 라벨을 쓴다.
+let PLAYER_LABEL: Record<Player, string> = { yellow: '노랑', brown: '갈색' }
 
 // 결과 모달 벌 마스코트(인라인 SVG, 외부 에셋 없음). .wing 은 CSS 로 펄럭.
 const BEE_SVG = `
@@ -726,6 +728,7 @@ export function mountGame(root: HTMLElement): void {
     }
   }
   function applyThemeColors(): void {
+    PLAYER_LABEL = theme.players // 진영 이름을 현재 테마에 맞춤(보색 테마면 '남색' 등)
     for (const owner of ['yellow', 'brown'] as Player[]) {
       const tc = theme.tile[owner]
       fillGradient(`#wax-${owner}`, [
