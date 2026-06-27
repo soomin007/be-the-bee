@@ -153,7 +153,9 @@
     width: auto;
     z-index: 40;
     border: none;
-    padding: 3.4rem 1rem 1.2rem;
+    /* 시트는 inset:0 fixed 라 .game 의 safe-area 밖 → 노치/홈바만큼 안쪽으로 직접 확보
+       (안 그러면 iOS 노치·Dynamic Island 에서 시트 상단 내용이, 홈바에서 하단 내용이 가림). */
+    padding: calc(env(safe-area-inset-top) + 3.4rem) 1rem calc(env(safe-area-inset-bottom) + 1.2rem);
     transform: translateY(100%);
     transition: transform 0.25s ease;
   }
