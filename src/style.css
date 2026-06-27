@@ -1701,19 +1701,27 @@ button:has(> .ico) {
 }
 
 /* 벌집 셀 안 꿀이 은은히 반짝이는 효과(2.5D 밀랍 벽 안에서 빛나는 꿀). */
-/* 벌집 꿀: 칸마다 animation-delay(위치 기반, 인라인)를 달리해 빛이 물결치듯 흐른다.
-   opacity 가 늘 0.55 이상이라 꿀은 항상 차 보이고, 위로 오를 때 반짝인다. */
-@keyframes hive-shimmer {
+/* 벌집 꿀 표면 광택 반짝: 빛점이 나타났다(커지며) 사라진다. 칸마다 animation-delay(위치 기반,
+   인라인)를 달리해 물결치듯 번진다(그냥 밝아지는 펄스가 아니라 "반짝"으로 읽히게). */
+@keyframes hive-spark {
   0%,
   100% {
-    opacity: 0.58;
+    opacity: 0;
+    transform: scale(0.4);
   }
-  50% {
-    opacity: 0.92;
+  45% {
+    opacity: 0.95;
+    transform: scale(1.15);
+  }
+  65% {
+    opacity: 0.6;
+    transform: scale(1);
   }
 }
-.hive-shimmer {
-  animation: hive-shimmer 2s ease-in-out infinite;
+.hive-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hive-spark 2.2s ease-in-out infinite;
 }
 
 /* 착지/승리 꽃가루 반짝, fx 레이어의 점이 바깥으로 튀며 사라진다 */

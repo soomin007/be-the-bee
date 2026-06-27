@@ -34,14 +34,14 @@ export const COLOR_THEMES: ColorTheme[] = [
     label: '꿀',
     desc: '따뜻한 벌집, 기본',
     tile: {
-      yellow: { light: '#fcdf6e', mid: '#f0c531', dark: '#d3a013', stroke: '#6e5114' },
+      yellow: { light: '#ffe85e', mid: '#ffce1a', dark: '#e6a800', stroke: '#7a5a10' }, // 더 밝고 쨍한 금빛
       brown: { light: '#c4843a', mid: '#97581d', dark: '#744213', stroke: '#43280a' },
     },
     piece: {
-      yellow: { body: '#e0a106', stripe: '#3a2600' },
+      yellow: { body: '#ffc107', stripe: '#3a2600' }, // 쨍한 골드(갈색과 확실히 구분)
       brown: { body: '#8a5418', stripe: '#241200' },
     },
-    hiveFill: { yellow: '#ffdf6e', brown: '#c47d28' },
+    hiveFill: { yellow: '#ffe680', brown: '#c47d28' },
     hiveStroke: { yellow: '#d98a14', brown: '#9c5212' },
     hiveGlow: '#f97316',
   },

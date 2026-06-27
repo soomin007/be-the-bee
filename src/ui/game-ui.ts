@@ -740,12 +740,14 @@ export function mountGame(root: HTMLElement): void {
         ['55%', body],
         ['100%', shade(body, -0.32)],
       ])
-      // 벌집 꿀 광택: 위쪽 밝은 하이라이트 → 아래쪽 진한 꿀(약간 입체). 진영색이라 노랑/갈색 구분 유지.
+      // 벌집 셀(밀랍 우물): 중심은 밝은 꿀 광택(반사) → 안쪽 진한 꿀(깊이) → 가장자리 밝은 밀랍 벽(능선).
+      // radial 이라 각 칸이 "가장자리 벽 + 안에 고인 꿀"의 입체 셀처럼 보인다. 진영색이라 노랑/갈색 구분 유지.
       const honey = theme.hiveFill[owner]
       fillGradient(`#honey-${owner}`, [
-        ['0%', shade(honey, 0.5)],
-        ['45%', honey],
-        ['100%', shade(honey, -0.28)],
+        ['0%', shade(honey, 0.72)], // 중심 광택 반사
+        ['30%', shade(honey, -0.16)], // 진한 꿀(셀 깊이)
+        ['74%', honey],
+        ['100%', shade(honey, 0.42)], // 가장자리 밝은 밀랍 벽
       ])
     }
     const glow = svg.querySelector('#hiveGlow feDropShadow')
@@ -1832,18 +1834,18 @@ export function mountGame(root: HTMLElement): void {
     //    위상을 달리해 물결치듯 흐른다. 채움은 진영색이라 노랑/갈색 구분 유지. 말은 위에 그려져 안 가림.
     const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
+    // 셀(꿀 + 입체 벽)은 정적으로 채운다. 반짝임은 아래 6.5단계에서 말 위에 광택점으로 따로 그린다.
     for (const [key, owner] of hiveOwner) {
-      const h = hexFromKey(key)
-      const poly = makeHexPolygon(hexToPixel(h), {
-        fill: `url(#honey-${owner})`,
-        stroke: 'none',
-        strokeWidth: 0,
-        filter: 'url(#hiveGlow)',
-        cls: 'hive-shimmer',
-        interactive: false,
-      })
-      poly.style.animationDelay = `${(h.q + h.r) * 0.22}s` // 위치별 위상차 → 빛이 물결치듯 흐름
-      content.appendChild(poly)
+      content.appendChild(
+        makeHexPolygon(hexToPixel(hexFromKey(key)), {
+          fill: `url(#honey-${owner})`,
+          stroke: 'none',
+          strokeWidth: 0,
+          opacity: 0.92,
+          filter: 'url(#hiveGlow)',
+          interactive: false,
+        }),
+      )
     }
 
     // 4) 잠정 타일(미확정), 점선
@@ -2042,6 +2044,22 @@ export function mountGame(root: HTMLElement): void {
         crown.textContent = '♛'
         bee.appendChild(crown)
       }
+    }
+
+    // 6.5) 벌집 꿀 표면 광택 반짝(말 위) — 작은 빛점이 칸마다 위상을 달리해 나타났다 사라지며
+    //      물결치듯 반짝인다(밝아지기만 하는 펄스와 달리 "반짝"으로 읽히게). 셀 위쪽에 둬 벌과 덜 겹침.
+    for (const key of hiveOwner.keys()) {
+      const hk = hexFromKey(key)
+      const c = hexToPixel(hk)
+      const spark = document.createElementNS(SVGNS, 'circle')
+      spark.setAttribute('cx', c.x.toFixed(2))
+      spark.setAttribute('cy', (c.y - HEX_SIZE * 0.34).toFixed(2))
+      spark.setAttribute('r', '2.4')
+      spark.setAttribute('fill', '#fffdf2')
+      spark.setAttribute('class', 'hive-spark')
+      spark.style.animationDelay = `${(hk.q + hk.r) * 0.26}s` // 위치별 위상차 → 물결치듯 흐름
+      spark.style.pointerEvents = 'none'
+      content.appendChild(spark)
     }
 
     // 7) 승리 이펙트, 이긴 5목 라인 강조(초록 굵은 펄스). 복기에선 마지막 국면에서만.
