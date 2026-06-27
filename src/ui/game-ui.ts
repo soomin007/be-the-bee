@@ -3676,9 +3676,11 @@ export function mountGame(root: HTMLElement): void {
         else setInitialCamera()
         return
       case 'tutorial':
+        if (mobileShell.active()) mobileShell.setSettings(false) // 모바일: 설정 시트를 닫아 설명이 가려지지 않게
         openTutorial(root)
         return
       case 'appHelp':
+        if (mobileShell.active()) mobileShell.setSettings(false)
         openOnboarding(onboardCtx())
         return
       case 'new':
