@@ -965,7 +965,6 @@ svg.board.panning {
 
 /* 버튼 안 라인 아이콘 공통 (마크업에 ${ICON.xxx} 삽입) */
 .settings-grid button svg,
-.menu-wrap button svg,
 .sound-ctl svg,
 .help-tut svg,
 .help-row svg {
@@ -1100,30 +1099,7 @@ button:has(> .ico) {
   right: 10px;
 }
 
-/* 드롭다운 = 셀렉트 필드 (모드·난이도 메뉴 버튼) */
-.menu-wrap > button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid #d9c89a;
-  border-radius: 10px;
-  background: #fffdf7;
-  font-size: 0.88rem;
-  color: #5c4f33;
-  cursor: pointer;
-}
-.menu-wrap > button:hover {
-  background: #fbf3df;
-}
-.menu-wrap > button.open {
-  border-color: #c2982f;
-  box-shadow: 0 0 0 2px rgba(194, 152, 47, 0.18);
-}
-
-/* 그룹 구분: 모드/행동/설정 묶음 사이 라벨 + 얇은 구분선 */
+/* 그룹 구분: 온라인 대전 묶음 라벨 + 얇은 구분선 */
 .settings-divider {
   grid-column: 1 / -1;
   height: 1px;
@@ -1137,47 +1113,6 @@ button:has(> .ico) {
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #9a7a3a;
-}
-
-.menu-wrap {
-  position: relative;
-}
-
-.menu-popup {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 15;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.35rem;
-  background: #fffdf7;
-  border: 1px solid #c9b88f;
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-}
-
-.menu-popup button {
-  padding: 0.45rem 0.6rem;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 0.85rem;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.menu-popup button:hover {
-  background: #f5efdf;
-}
-
-.menu-popup button.active {
-  background: #fde68a;
-  border-color: #eab308;
-  font-weight: 700;
 }
 
 .sound-ctl {
@@ -2504,8 +2439,6 @@ button:has(> .ico) {
 /* 카드형 버튼·아코디언·메뉴·셀렉트·상태 카드 */
 .game.dark .settings-grid > button,
 .game.dark .acc-head,
-.game.dark .menu-wrap button,
-.game.dark .menu-popup button,
 .game.dark .panel select,
 .game.dark .sound-ctl button,
 .game.dark .replay-nav button,

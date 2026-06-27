@@ -454,7 +454,6 @@ export function mountGame(root: HTMLElement): void {
   sound.setSfxVolume(settings.sfxVolume)
   sound.setBgmVolume(settings.bgmVolume)
   sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file)
-  let openMenu: 'mode' | 'difficulty' | null = null // 모드/난이도 펼침 메뉴
   let lastBgmVolume = settings.bgmVolume || 0.35 // 뮤트 복원용
   let lastSfxVolume = settings.sfxVolume || 0.6
   // 새 게임의 초기 상태(현재 설정의 무한 모드 반영).
@@ -539,7 +538,6 @@ export function mountGame(root: HTMLElement): void {
     message = ''
     coachNote = null
     modalDismissed = false
-    openMenu = null
     clearFx()
     startTurn()
   }
@@ -709,7 +707,6 @@ export function mountGame(root: HTMLElement): void {
     coachNote = null
     lastMove = null
     modalDismissed = false
-    openMenu = null
     startTurn()
     autoSaveNow()
   }
@@ -990,16 +987,6 @@ export function mountGame(root: HTMLElement): void {
 
   window.addEventListener('resize', applyCamera)
 
-  // 메뉴(모드/난이도) 바깥을 클릭하면 닫는다
-  window.addEventListener('click', (e: MouseEvent) => {
-    if (openMenu === null) return
-    const t = e.target as Element | null
-    if (!t || !t.closest('.menu-wrap')) {
-      openMenu = null
-      render()
-    }
-  })
-
   // ---- 턴/액션 상태머신 -----------------------------------------------------
 
   function startTurn(): void {
@@ -1075,7 +1062,6 @@ export function mountGame(root: HTMLElement): void {
         clearFx()
         draft = null
         message = ''
-        openMenu = null
         modalDismissed = true
         replayIndex = 0
         break
@@ -1198,7 +1184,6 @@ export function mountGame(root: HTMLElement): void {
     notice = ''
     aiComment = '' // 새 수가 들어오면 이전 해설 지움(전문가 AI 수면 적용 후 다시 채운다)
     modalDismissed = false
-    openMenu = null
     if (state.phase === 'finished' && state.result?.kind === 'win') {
       sound.win()
       spawnWinBurst(state.board)
@@ -3390,45 +3375,7 @@ export function mountGame(root: HTMLElement): void {
       return
     }
 
-    // 모드/난이도 메뉴 선택
-    if (act.startsWith('setMode:')) {
-      stopReplayTimer()
-      replayIndex = null
-      clearAiTimer()
-      settings.mode = act.slice('setMode:'.length) as Mode
-      watchRunning = false // 관전으로 바꿔도 ▶ 를 눌러야 시작, 모드 바꿀 여유를 준다
-      rebuildAi()
-      openMenu = null
-      message = ''
-      persist()
-      startTurn()
-      render()
-      maybeScheduleAi()
-      return
-    }
-    if (act.startsWith('setDiff:')) {
-      stopReplayTimer()
-      replayIndex = null
-      clearAiTimer()
-      settings.aiDifficulty = act.slice('setDiff:'.length) as Difficulty
-      rebuildAi()
-      openMenu = null
-      persist()
-      render()
-      maybeScheduleAi()
-      return
-    }
-
-    // 메뉴 토글이 아닌 행동은 열린 메뉴를 닫는다
-    if (act !== 'menuMode' && act !== 'menuDifficulty') openMenu = null
-
     switch (act) {
-      case 'menuMode':
-        openMenu = openMenu === 'mode' ? null : 'mode'
-        break
-      case 'menuDifficulty':
-        if (settings.mode !== 'hotseat') openMenu = openMenu === 'difficulty' ? null : 'difficulty'
-        break
       case 'twoTiles':
         if (!allowedMoveTypes(state).includes('twoTiles')) break // 첫 턴·타일1개면 불가(버튼 비활성)
         draft = { stage: 'tile', action: 'twoTiles' }
