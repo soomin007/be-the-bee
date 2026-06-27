@@ -161,8 +161,9 @@ export function applyMove(state: GameState, move: Move): GameState {
 
   const infinite = state.infiniteTiles === true
   const newSupply: PlayerSupply = {
-    tiles: infinite ? supply.tiles : supply.tiles - tilesUsed, // 무한 모드: 타일 미차감
-    pieces: supply.pieces - (pieceUsed ? 1 : 0),
+    // 완전 무한 모드: 타일·말 모두 무제한(차감 없음). 여왕벌은 특수말이라 1회 제한(queenUsed)은 유지.
+    tiles: infinite ? supply.tiles : supply.tiles - tilesUsed,
+    pieces: infinite ? supply.pieces : supply.pieces - (pieceUsed ? 1 : 0),
     queenUsed,
   }
   const supplies: Record<Player, PlayerSupply> = { ...state.supplies, [player]: newSupply }
@@ -183,11 +184,8 @@ export function applyMove(state: GameState, move: Move): GameState {
 
   const other = opponent(player)
   if (infinite) {
-    // 무한 모드(디지털 변형): 타일 소진 종료가 없다. 양쪽 말이 모두 소진되면 더 둘 의미가 없어
-    // 벌집 점수로 종료, 아니면 항상 상대 차례(말이 없어도 타일은 둘 수 있어 패스가 없다).
-    if (newSupply.pieces <= 0 && supplies[other].pieces <= 0) {
-      return { ...base, turn: player, phase: 'finished', result: scoreResult(board) }
-    }
+    // 완전 무한 모드(디지털 변형): 타일·말 모두 무제한 → 소진으로 끝나는 일이 없다.
+    // 말 5목 승리로만 결판이 난다(아래 표준 모드의 소진/벌집 점수 종료를 타지 않는다).
     return { ...base, turn: other, phase: 'playing' }
   }
 
