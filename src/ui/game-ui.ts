@@ -164,17 +164,6 @@ function noteLine(note: MoveNote): string {
 }
 const AI_DELAY_MS = 350
 
-// 벌집 셀의 2.5D 밀랍 벽용: pointy-top 6 변의 두 꼭짓점 각도(°, layout.hexPolygonPoints 와 동일 기준)
-// + 광원(위)에 따른 명암 단계. 위쪽 변=light(밝은 벽 윗면), 아래쪽 변=dark(그림자), 좌우=mid.
-const HIVE_WALL_EDGES: { a1: number; a2: number; shade: 'light' | 'mid' | 'dark' }[] = [
-  { a1: -30, a2: 30, shade: 'mid' }, // 오른쪽
-  { a1: 30, a2: 90, shade: 'dark' }, // 우하
-  { a1: 90, a2: 150, shade: 'dark' }, // 좌하
-  { a1: 150, a2: 210, shade: 'mid' }, // 왼쪽
-  { a1: 210, a2: 270, shade: 'light' }, // 좌상
-  { a1: 270, a2: 330, shade: 'light' }, // 우상
-]
-
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
 // 방장이 정해 양쪽에 공통 적용되는 "방 설정"이 되도록 한 곳에 모아 둔다(직렬화 가능).
 interface RoomSettings {
@@ -1735,20 +1724,6 @@ export function mountGame(root: HTMLElement): void {
     return poly
   }
 
-  // 벌집 밀랍 벽의 한 변(line). 클릭 통과.
-  function makeHiveEdge(x1: number, y1: number, x2: number, y2: number, stroke: string, width: number): SVGLineElement {
-    const ln = document.createElementNS(SVGNS, 'line')
-    ln.setAttribute('x1', x1.toFixed(2))
-    ln.setAttribute('y1', y1.toFixed(2))
-    ln.setAttribute('x2', x2.toFixed(2))
-    ln.setAttribute('y2', y2.toFixed(2))
-    ln.setAttribute('stroke', stroke)
-    ln.setAttribute('stroke-width', String(width))
-    ln.setAttribute('stroke-linecap', 'round')
-    ln.style.pointerEvents = 'none'
-    return ln
-  }
-
   function render(): void {
     // 복기 중이면 과거 국면을 본다(보기 전용 오버레이, 실제 상태는 그대로).
     const replaying = replayIndex !== null
@@ -1819,35 +1794,35 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 3) 벌집 강조 — 2.5D 밀랍 벌집 셀. 셀 안에는 진영색 꿀이 은은히 반짝이고(shimmer 애니), 칸 6변에
-    //    변 방향별 명암(위 밝음/아래 어둠)으로 얕은 밀랍 벽을 둘러 입체로 보이게 한다. 채움을 밝히지 않아
-    //    노랑/갈색 진영 구분이 유지되고, 입체 벽으로 일반 타일과 또렷이 구별된다. 말은 위에 그려져 안 가림.
+    // 3) 벌집 강조 — "꿀이 고인 우물 셀"(2.5D 밀랍 벽). 셀 바닥에 진영색 꿀이 반짝이고(shimmer), 그
+    //    둘레를 밀랍 벽이 감싼다: 바깥은 밝은 윗면(빛), 안쪽은 어두운 그림자(우물 깊이) → 안으로 들어간
+    //    입체. 채움을 밝히지 않아 노랑/갈색 구분이 유지되고, 벽으로 일반 타일과 구별된다. 말은 위에 그려져 안 가림.
     const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
+    const WALL_INNER = HEX_SIZE * 0.78
     for (const [key, owner] of hiveOwner) {
       const center = hexToPixel(hexFromKey(key))
       const tc = theme.tile[owner]
-      // 3-a) 셀 안 꿀 — 진영색, 반짝임(shimmer) 애니. 밝히지 않아 진영색을 그대로 읽게 한다.
+      // 셀 바닥의 꿀 — 진영색, 반짝임(shimmer). 벽 안쪽에 고이게 작게.
       content.appendChild(
         makeHexPolygon(center, {
           fill: theme.hiveFill[owner],
           stroke: 'none',
           strokeWidth: 0,
           opacity: 0.4,
-          size: HEX_SIZE * 0.92, // 벽 안쪽에 고이게 살짝 작게
+          size: WALL_INNER,
           cls: 'hive-shimmer',
           interactive: false,
         }),
       )
-      // 3-b) 밀랍 벽 — 6변, 방향별 명암으로 얕은 2.5D. 위 변은 밝게(빛), 아래 변은 어둡게(그림자).
-      for (const e of HIVE_WALL_EDGES) {
-        const col = e.shade === 'light' ? tc.light : e.shade === 'dark' ? tc.dark : tc.mid
-        const x1 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * e.a1)
-        const y1 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * e.a1)
-        const x2 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * e.a2)
-        const y2 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * e.a2)
-        content.appendChild(makeHiveEdge(x1, y1, x2, y2, col, 4.5))
-      }
+      // 벽 안쪽 그림자(우물 발치, 어두운) — 안으로 들어간 깊이감.
+      content.appendChild(
+        makeHexPolygon(center, { fill: 'none', stroke: tc.dark, strokeWidth: 2.5, opacity: 0.85, size: WALL_INNER, interactive: false }),
+      )
+      // 벽 윗면(칸 경계, 밝은 밀랍) — 빛 받는 벽 꼭대기. 굵게 둘러 입체 벽.
+      content.appendChild(
+        makeHexPolygon(center, { fill: 'none', stroke: tc.light, strokeWidth: 5, size: HEX_SIZE, interactive: false }),
+      )
     }
 
     // 4) 잠정 타일(미확정), 점선
@@ -2102,6 +2077,13 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
+    renderChrome()
+  }
+
+  // 보드 SVG 가 아닌 "주변 UI"(패널·상태·행동바·메시지·플로팅·미니 플레이어·모달)만 다시 그린다.
+  // 보드와 무관한 변경(음악·사운드·섹션 펼침)은 이것만 호출 → 보드 재생성으로 직전 수/반짝임 애니가
+  // 리셋되지 않는다. dangerCells 등 보드 분석값은 보드가 안 바뀌면 이전 값이 그대로 유효하다.
+  function renderChrome(): void {
     renderPanel()
     renderBoardStatus()
     renderActionBar()
@@ -3207,6 +3189,7 @@ export function mountGame(root: HTMLElement): void {
         settings.bgmTrack = Number(trackSel.value)
         sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file)
         persist()
+        renderChrome() // 미니 플레이어 곡명 동기화(보드는 안 건드림)
       })
     }
     const bgmVol = panel.querySelector('input[data-ctl="bgmVol"]') as HTMLInputElement | null
@@ -3245,7 +3228,7 @@ export function mountGame(root: HTMLElement): void {
         settings[which] = sel.value as Persona
         rebuildAi()
         persist()
-        render()
+        renderChrome() // AI 성향은 보드와 무관 — 주변 UI 만 갱신
       })
     }
     const wireDifficulty = (which: 'difficultyYellow' | 'difficultyBrown'): void => {
@@ -3255,7 +3238,7 @@ export function mountGame(root: HTMLElement): void {
         settings[which] = sel.value as Difficulty
         rebuildAi()
         persist()
-        render()
+        renderChrome() // AI 난이도는 보드와 무관 — 주변 UI 만 갱신
       })
     }
     wirePersona('personaYellow')
@@ -3304,7 +3287,7 @@ export function mountGame(root: HTMLElement): void {
       if (mobileShell.handleSectionClick(k)) return // 모바일: 드릴다운(접힘·하나씩)이 처리
       settings.sectionsOpen[k] = !settings.sectionsOpen[k]
       persist()
-      render()
+      renderChrome() // 섹션 펼침/접힘은 패널만 — 보드 재생성 불필요
       return
     }
 
@@ -3723,8 +3706,19 @@ export function mountGame(root: HTMLElement): void {
         return
     }
     persist()
-    render()
-    maybeScheduleAi()
+    // 보드와 무관한 변경(음악·사운드)은 주변 UI 만 갱신 → 보드 재생성으로 직전 수/반짝임 애니가 안 끊김.
+    const chromeOnly =
+      act === 'toggleMusic' ||
+      act === 'muteBgm' ||
+      act === 'muteSfx' ||
+      act.startsWith('bgm') ||
+      act.startsWith('music')
+    if (chromeOnly) {
+      renderChrome()
+    } else {
+      render()
+      maybeScheduleAi()
+    }
   }
 
   // 진행 중이던 판이 있으면 자동 복원(이어하기). 없으면 현재 설정으로 새 게임 시작.
