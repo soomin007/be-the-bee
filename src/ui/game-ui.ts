@@ -586,6 +586,7 @@ export function mountGame(root: HTMLElement): void {
           <g class="fx" pointer-events="none"></g>
         </svg>
         <div class="board-status"></div>
+        <div class="hud-float"></div>
         <div class="action-bar"></div>
         <div class="board-notes"></div>
       </div>
@@ -601,6 +602,7 @@ export function mountGame(root: HTMLElement): void {
   const actionBar = root.querySelector('.action-bar') as HTMLElement
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const boardStatus = root.querySelector('.board-status') as HTMLElement
+  const hudFloat = root.querySelector('.hud-float') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
   const gameEl = root.querySelector('.game') as HTMLElement // 데스크탑 설정창 접기 클래스 토글용
   // 설정창 펼치기 버튼(셸 정적 요소라 직접 배선; onPanelAction 은 함수선언 hoist).
@@ -878,6 +880,12 @@ export function mountGame(root: HTMLElement): void {
     if (!online && (e.key === 'n' || e.key === 'N')) {
       e.preventDefault()
       onPanelAction('new')
+      return
+    }
+    // 배경음악 재생/정지(M)
+    if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault()
+      onPanelAction('toggleMusic')
       return
     }
 
@@ -2094,6 +2102,7 @@ export function mountGame(root: HTMLElement): void {
     renderBoardStatus()
     renderActionBar()
     renderBoardNotes()
+    renderHudFloat()
     renderModal()
     // 모달(새 게임 마법사·결과·온라인 등)이 떠 있으면 모바일 FAB·행동 버튼을 숨긴다(모달 위로 떠 글씨 가림 방지).
     gameEl.classList.toggle('modal-open', modalLayer.childElementCount > 0)
@@ -2101,6 +2110,35 @@ export function mountGame(root: HTMLElement): void {
     gameEl.classList.toggle('replaying', replayIndex !== null)
     applyTurnTint() // 차례 색 비네트(공통)
     mobileShell.afterRender() // 모바일: 아코디언 접힘·하단 안내 배너 재맞춤(데스크탑 무동작)
+  }
+
+  // 게임 화면 위 플로팅 HUD: 배경음악 미니 플레이어(항상) + 새 게임·무르기(설정창 접힘 시).
+  // 설정창을 펼치지 않고도 자주 쓰는 동작/음악을 바로 다루게 한다. (모달 중엔 CSS .modal-open 이 숨김)
+  function renderHudFloat(): void {
+    const t = BGM_TRACKS[settings.bgmTrack]!
+    const on = sound.musicOn()
+    const muted = settings.bgmVolume <= 0
+    const playerHtml = `
+      <div class="mini-player">
+        <button class="mp-play" data-act="toggleMusic" title="배경음악 ${on ? '정지' : '재생'} (M)">${on ? '⏸' : '▶'}</button>
+        <div class="mp-title" title="${t.title}"><span>${t.title}</span></div>
+        <button data-act="bgmPrev" title="이전 곡">⏮</button>
+        <button data-act="bgmNext" title="다음 곡">⏭</button>
+        <button data-act="muteBgm" title="${muted ? '음소거 해제' : '음소거'}">${muted ? '🔇' : '🔊'}</button>
+      </div>`
+    // 설정창 접힘 + 복기 아님 → 새 게임·무르기를 플로팅으로(설정창을 펼치지 않고도 누르게).
+    const showActions = panelCollapsed && replayIndex === null
+    const actionsHtml = showActions
+      ? `<div class="float-actions">
+          <button class="cta-new" data-act="new" title="새 게임 (N)">${ICON.refresh}</button>
+          <button data-act="undo" ${undoEnabled() ? '' : 'disabled'} title="무르기 (U)">${ICON.undo}</button>
+        </div>`
+      : ''
+    hudFloat.innerHTML = playerHtml + actionsHtml
+    for (const btn of Array.from(hudFloat.querySelectorAll('button'))) {
+      if (btn.hasAttribute('disabled')) continue
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
   }
 
   // 게임 상태(누구 차례·안내·자원·점수)를 설정 패널이 아니라 보드 화면 좌상단 오버레이에 띄운다.
@@ -3434,6 +3472,13 @@ export function mountGame(root: HTMLElement): void {
       case 'toggleMusic':
         sound.toggleMusic()
         break
+      case 'bgmNext':
+      case 'bgmPrev': {
+        const dir = act === 'bgmNext' ? 1 : -1
+        settings.bgmTrack = (settings.bgmTrack + dir + BGM_TRACKS.length) % BGM_TRACKS.length
+        sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file) // 재생 중이면 새 곡으로 즉시 전환(persist/render 는 아래 공통)
+        break
+      }
       case 'muteBgm':
         if (settings.bgmVolume > 0) {
           lastBgmVolume = settings.bgmVolume
@@ -3481,6 +3526,7 @@ export function mountGame(root: HTMLElement): void {
       case 'togglePanel': // 데스크탑 설정창 접기/펼치기
         panelCollapsed = !panelCollapsed
         applyPanelCollapsed()
+        renderHudFloat() // 접힘 상태에 따라 플로팅 새 게임·무르기 표시를 갱신
         return
       default:
         return

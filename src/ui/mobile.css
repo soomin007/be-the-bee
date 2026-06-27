@@ -26,7 +26,9 @@
     padding: 0.4rem; /* HUD·안내는 이제 흐름 안에 쌓임(아래 order) */
   }
   .panel .app-title,
-  .credit {
+  .credit,
+  .hud-float {
+    /* hud-float(데스크탑 플로팅 HUD)는 모바일에선 숨김 — 음악/새 게임/무르기는 톱니 시트·FAB로 제공. */
     display: none;
   }
 

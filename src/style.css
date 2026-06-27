@@ -149,6 +149,103 @@ svg.board {
   gap: 0.45rem;
 }
 
+/* 게임 화면 위 플로팅 HUD: 음악 미니 플레이어(항상) + 새 게임·무르기(설정창 접힘 시).
+   board-wrap 우상단(좌상단 차례 HUD와 안 겹침). 빈 영역은 클릭 통과, 버튼만 입력 받음. */
+.hud-float {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 3; /* 차례 HUD(2) 위, 모달 아래 */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+.hud-float > * {
+  pointer-events: auto;
+}
+.game.modal-open .hud-float {
+  display: none; /* 모달 떠 있으면 숨김(모달 위로 떠 글씨 가림 방지) */
+}
+
+/* 음악 미니 플레이어 — 알약형 바(재생/정지 · 곡명 · 이전/다음 · 음소거) */
+.mini-player {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.28rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid #e6dcc3;
+  background: rgba(255, 253, 247, 0.96);
+  box-shadow: 0 2px 8px rgba(120, 80, 0, 0.16);
+}
+.mini-player button {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  font-size: 0.92rem;
+  line-height: 1;
+  color: #6b5524;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mini-player button:hover {
+  background: #f1e4c5;
+}
+.mini-player .mp-play {
+  background: linear-gradient(180deg, #ffd95e, #f5b81e);
+  color: #4a3208;
+}
+.mini-player .mp-title {
+  max-width: 116px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.74rem;
+  color: #6b5524;
+  padding: 0 0.25rem;
+}
+
+/* 플로팅 새 게임·무르기(설정창 접힘 시) */
+.float-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.float-actions button {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid #e6dcc3;
+  background: rgba(255, 253, 247, 0.96);
+  box-shadow: 0 2px 8px rgba(120, 80, 0, 0.16);
+  color: #6b5524;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.float-actions button.cta-new {
+  background: linear-gradient(180deg, #ffd95e, #f5b81e);
+  border-color: #e0991a;
+  color: #4a3208;
+}
+.float-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.float-actions button svg {
+  width: 20px;
+  height: 20px;
+  color: inherit;
+}
+
 /* 3D 보드(실험): board-wrap 을 채우는 절대배치 캔버스 호스트. mode-3d 면 SVG 대신 표시. */
 .board-wrap {
   position: relative;
