@@ -403,7 +403,7 @@ export function mountGame(root: HTMLElement): void {
   // 음악 미니 플레이어 상태(세션 한정 — 영속 불필요). expanded=펼침 카드/접힘 알약, shuffle/repeat 토글.
   let musicExpanded = false
   let musicShuffle = false
-  let musicRepeat = false
+  let musicRepeat = true // 기본 한 곡 반복(배경음악이 끊기지 않게)
   // 새 게임 설정 마법사(상대 선택 → 분기). null=닫힘. 임시 설정을 들고 있다가 "시작" 때 settings 에 반영
   // (취소하면 settings 는 안 바뀐다). 온라인 경기를 마친 뒤면 '상대와 재대결' 버튼을 추가로 보여준다.
   let newGameWiz:
@@ -541,11 +541,14 @@ export function mountGame(root: HTMLElement): void {
       <div class="board-wrap">
         <svg class="board" xmlns="${SVGNS}" tabindex="0">
           <defs>
-            <filter id="hiveGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f59e0b" flood-opacity="0.95" />
+            <filter id="hiveGlow" x="-60%" y="-60%" width="220%" height="220%">
+              <feDropShadow dx="0" dy="0" stdDeviation="4.5" flood-color="#f59e0b" flood-opacity="1" />
             </filter>
             <radialGradient id="wax-yellow" cx="38%" cy="32%" r="75%"></radialGradient>
             <radialGradient id="wax-brown" cx="38%" cy="32%" r="75%"></radialGradient>
+            <!-- 벌집(꿀 고인 셀) 광택 그라데이션 — applyThemeColors 가 진영 hiveFill 기준으로 채운다. -->
+            <radialGradient id="honey-yellow" cx="40%" cy="28%" r="80%"></radialGradient>
+            <radialGradient id="honey-brown" cx="40%" cy="28%" r="80%"></radialGradient>
             <radialGradient id="bee-yellow" cx="35%" cy="28%" r="72%"></radialGradient>
             <radialGradient id="bee-brown" cx="35%" cy="28%" r="72%"></radialGradient>
             <!-- 말 입체감(테마 무관): 광원(왼쪽 위)에서 멀수록 어두워져 그림자가 오른쪽 아래에 맺힘 -->
@@ -714,6 +717,13 @@ export function mountGame(root: HTMLElement): void {
         ['0%', shade(body, 0.5)],
         ['55%', body],
         ['100%', shade(body, -0.32)],
+      ])
+      // 벌집(꿀 고인 셀): 위쪽 밝은 꿀 광택 → 아래쪽 진한 꿀(2.5D). 일반 타일보다 밝아 또렷하다.
+      const honey = theme.hiveFill[owner]
+      fillGradient(`#honey-${owner}`, [
+        ['0%', shade(honey, 0.6)],
+        ['50%', honey],
+        ['100%', shade(honey, -0.22)],
       ])
     }
     const glow = svg.querySelector('#hiveGlow feDropShadow')
@@ -1793,19 +1803,30 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 3) 벌집 강조 — "꿀이 찬 벌집" 컨셉. 진영색 꿀 채움 + 빛 번짐(글로우) + 얇은 진영 테두리.
-    //    말은 채움 위에 그려져(렌더 순서) 가려지지 않고, 말 주변 칸 가장자리에 빛나는 꿀색이 남아
-    //    말이 놓인 벌집 칸도 "빛나는 칸"으로 알아볼 수 있다. (노랑=밝은 꿀, 갈색=진한 호박)
+    // 3) 벌집 강조 — "꿀이 고인 셀"(2.5D 광택 꿀 채움 + 강한 글로우 + 밝은 금 테두리).
+    //    말은 채움 위에 그려져(렌더 순서) 가려지지 않고, 글로우가 칸 밖으로 새어 말과 무관하게 빛난다.
+    //    진영 구분은 채움 색(노랑=밝은 꿀, 갈색=호박), 공통 밝은 금 테두리로 어느 타일색 위에서도 또렷.
     const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
     for (const [key, owner] of hiveOwner) {
+      const center = hexToPixel(hexFromKey(key))
+      // 3-a) 글로우 후광(칸 둘레 빛 번짐) — 살짝 작은 채움에 글로우만, 말과 무관하게 "이 칸 빛남".
       content.appendChild(
-        makeHexPolygon(hexToPixel(hexFromKey(key)), {
-          fill: theme.hiveFill[owner],
-          stroke: theme.hiveStroke[owner],
-          strokeWidth: 2.5,
-          opacity: 0.72,
+        makeHexPolygon(center, {
+          fill: `url(#honey-${owner})`,
+          stroke: 'none',
+          strokeWidth: 0,
+          opacity: 0.9,
           filter: 'url(#hiveGlow)',
+          interactive: false,
+        }),
+      )
+      // 3-b) 밝은 금 테두리(칸 경계 — 말 안 가림). 타일색과 대비되는 밝은 금으로 또렷하게.
+      content.appendChild(
+        makeHexPolygon(center, {
+          fill: 'none',
+          stroke: '#ffe48a',
+          strokeWidth: 3,
           interactive: false,
         }),
       )
@@ -2185,21 +2206,69 @@ export function mountGame(root: HTMLElement): void {
       })
     }
     const seekBar = miniHost.querySelector('[data-seek]') as HTMLElement | null
-    seekBar?.addEventListener('click', (e) => {
-      const r = seekBar.getBoundingClientRect()
-      const f = Math.min(1, Math.max(0, ((e as MouseEvent).clientX - r.left) / r.width))
-      sound.seek(f * sound.duration())
-      renderMiniPlayer()
-    })
+    if (seekBar)
+      dragBar(seekBar, (f) => {
+        sound.seek(f * sound.duration())
+        updateMiniPlayerProgress() // 부분 갱신 — 디스크 회전 애니가 리셋되지 않게
+      })
     const volBar = miniHost.querySelector('[data-vol]') as HTMLElement | null
-    volBar?.addEventListener('click', (e) => {
-      const r = volBar.getBoundingClientRect()
-      const f = Math.min(1, Math.max(0, ((e as MouseEvent).clientX - r.left) / r.width))
-      settings.bgmVolume = f
-      sound.setBgmVolume(f)
-      persist()
-      renderMiniPlayer()
+    if (volBar)
+      dragBar(volBar, (f) => {
+        settings.bgmVolume = f
+        sound.setBgmVolume(f)
+        persist()
+        updateMiniPlayerVolume()
+      })
+  }
+
+  // 슬라이더(진행바·볼륨) 클릭+드래그 공용. 누른 채 움직이면 비율이 계속 따라온다(pointer capture).
+  function dragBar(bar: HTMLElement, onFrac: (f: number) => void): void {
+    const apply = (clientX: number): void => {
+      const r = bar.getBoundingClientRect()
+      onFrac(Math.min(1, Math.max(0, (clientX - r.left) / r.width)))
+    }
+    bar.addEventListener('pointerdown', (e: PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      bar.setPointerCapture(e.pointerId)
+      apply(e.clientX)
+      const move = (ev: PointerEvent): void => apply(ev.clientX)
+      const up = (): void => {
+        bar.removeEventListener('pointermove', move)
+        bar.removeEventListener('pointerup', up)
+        bar.removeEventListener('pointercancel', up)
+      }
+      bar.addEventListener('pointermove', move)
+      bar.addEventListener('pointerup', up)
+      bar.addEventListener('pointercancel', up)
     })
+  }
+
+  // 진행바/시간만 부분 갱신(timeupdate 마다 — 전체 재렌더는 디스크 회전 애니를 끊는다).
+  function updateMiniPlayerProgress(): void {
+    const dur = sound.duration()
+    const cur = sound.currentTime()
+    const pct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0
+    const fill = miniHost.querySelector('.mp-seek-fill') as HTMLElement | null
+    const handle = miniHost.querySelector('.mp-seek-handle') as HTMLElement | null
+    if (fill) fill.style.width = pct + '%'
+    if (handle) handle.style.left = pct + '%'
+    const times = miniHost.querySelectorAll('.mp-time span')
+    if (times.length === 2) {
+      times[0]!.textContent = fmtTime(cur)
+      times[1]!.textContent = fmtTime(dur)
+    }
+  }
+  // 볼륨 막대/라벨만 부분 갱신(드래그 중 전체 재렌더 방지).
+  function updateMiniPlayerVolume(): void {
+    const muted = settings.bgmVolume <= 0
+    const volPct = Math.round((muted ? 0 : settings.bgmVolume) * 100)
+    const fill = miniHost.querySelector('.mp-vol-fill') as HTMLElement | null
+    const handle = miniHost.querySelector('.mp-vol-handle') as HTMLElement | null
+    const label = miniHost.querySelector('.mp-vol-label') as HTMLElement | null
+    if (fill) fill.style.width = volPct + '%'
+    if (handle) handle.style.left = volPct + '%'
+    if (label) label.textContent = muted ? '음소거' : volPct + '%'
   }
 
   // 게임 상태(누구 차례·안내·자원·점수)를 설정 패널이 아니라 보드 화면 좌상단 오버레이에 띄운다.
@@ -3618,7 +3687,7 @@ export function mountGame(root: HTMLElement): void {
   }
   setInitialCamera()
   // 미니 플레이어: 오디오 진행(timeupdate)·종료(ended)를 UI에 반영. 종료 시 반복/셔플/다음 처리.
-  sound.onProgress(() => renderMiniPlayer())
+  sound.onProgress(() => updateMiniPlayerProgress()) // 진행만 부분 갱신(전체 재렌더는 회전 애니를 끊음)
   sound.onEnded(() => {
     if (musicRepeat) {
       sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file) // 같은 곡 처음부터(재로드+재생)
