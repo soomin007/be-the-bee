@@ -1521,6 +1521,14 @@ button:has(> .ico) {
 .help-tut:hover {
   background: #fcd34d;
 }
+/* 피드백 보내기: 도움말 첫 줄에서 살짝 더 진한 꿀빛 그라데이션으로 눈에 띄게(응답 유도). */
+.help-tut.cta-feedback {
+  background: linear-gradient(180deg, #ffe07a, #f3b81a);
+  border-color: #e0991a;
+}
+.help-tut.cta-feedback:hover {
+  background: linear-gradient(180deg, #ffe890, #f7c12e);
+}
 
 /* 복기 패널 등에서 쓰는 단순 힌트(박스 밖) */
 .hint {

@@ -16,6 +16,7 @@ export const ICON: Record<string, string> = {
 
   // ── 버튼 · 포인트 (14)
   share: svg('<path d="M12 14.5V4"/><path d="M8.2 7.8 12 4l3.8 3.8"/><path d="M6 12.5V18a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 18v-5.5"/>'),
+  message: svg('<path d="M20 11.4a7.4 7.4 0 0 1-10.7 6.6L4.5 19l1-4.1A7.4 7.4 0 1 1 20 11.4Z"/><path d="M9 11.4h.01"/><path d="M12 11.4h.01"/><path d="M15 11.4h.01"/>'),
   save: svg('<path d="M5.5 5h9.7L19 8.8V18a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="M8 5v4.5h6.5V5"/><path d="M8 19v-4.5h8V19"/>'),
   saves: svg('<path d="M3.5 8h17v10.5a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1Z"/><path d="M3 5h18v3H3Z"/><path d="M10 12h4"/>'),
   theme: svg('<circle cx="9.3" cy="10" r="4.4"/><circle cx="14.7" cy="10" r="4.4"/><circle cx="12" cy="14.8" r="4.4"/>'),

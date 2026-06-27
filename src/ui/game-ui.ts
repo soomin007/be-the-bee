@@ -163,6 +163,8 @@ function noteLine(note: MoveNote): string {
   return `${notePolarity(note) === 'bad' ? '✗' : '✓'} ${NOTE_TEXT[note]}`
 }
 const AI_DELAY_MS = 350
+// 사용자 피드백 설문(구글폼). 설정 도움말의 '피드백 보내기' 버튼이 새 창으로 연다.
+const FEEDBACK_URL = 'https://forms.gle/qf5VA1xytdLojHtp9'
 
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
 // 방장이 정해 양쪽에 공통 적용되는 "방 설정"이 되도록 한 곳에 모아 둔다(직렬화 가능).
@@ -3160,6 +3162,7 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     }
     const helpRows = `
+      <button class="help-tut cta-feedback" data-act="feedback" title="의견·버그를 보내 주세요(설문이 새 창으로 열려요)">${ICON.message} 피드백 보내기</button>
       <button class="help-tut" data-act="appHelp" title="이 앱 사용법(수 두기·설정·온라인)을 다시 봐요">${ICON.mouse} 앱 사용법 다시 보기</button>
       <button class="help-tut" data-act="tutorial" title="게임 방법을 처음부터 다시 봐요">${ICON.tutorial} 게임 규칙 다시 보기</button>
       <div class="help-row"><span class="help-ico">${ICON.trophy}</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
@@ -3691,6 +3694,9 @@ export function mountGame(root: HTMLElement): void {
         }
         sound.setSfxVolume(settings.sfxVolume)
         break
+      case 'feedback':
+        window.open(FEEDBACK_URL, '_blank', 'noopener') // 피드백 설문(구글폼)을 새 창으로
+        return
       case 'resetView':
         if (settings.board3d) board3dApi?.resetCamera()
         else setInitialCamera()
