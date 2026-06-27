@@ -5,6 +5,8 @@
 
 * {
   box-sizing: border-box;
+  /* iOS Safari: 버튼·타일 탭 시 회색 하이라이트 박스가 깜빡이지 않게(직접 만든 hover/active 로 대체). */
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -652,6 +654,7 @@ svg.board {
 .board-status .status {
   margin: 0;
   box-shadow: 0 2px 10px rgba(120, 80, 0, 0.18);
+  -webkit-backdrop-filter: blur(2px); /* iOS Safari 는 -webkit 접두사 필수(없으면 블러 미적용) */
   backdrop-filter: blur(2px);
 }
 .board-status .supplies,
@@ -661,6 +664,7 @@ svg.board {
   border-radius: 8px;
   padding: 0.4rem 0.6rem;
   box-shadow: 0 2px 8px rgba(120, 80, 0, 0.12);
+  -webkit-backdrop-filter: blur(2px); /* iOS Safari 는 -webkit 접두사 필수(없으면 블러 미적용) */
   backdrop-filter: blur(2px);
 }
 /* 온라인 대전 상태 배너(방 코드 · 내 차례/상대 차례/대기) */
@@ -672,6 +676,7 @@ svg.board {
   border-radius: 8px;
   border: 1px solid;
   box-shadow: 0 2px 8px rgba(120, 80, 0, 0.14);
+  -webkit-backdrop-filter: blur(2px); /* iOS Safari 는 -webkit 접두사 필수(없으면 블러 미적용) */
   backdrop-filter: blur(2px);
 }
 .board-status .online-status.my-turn {
@@ -1896,6 +1901,7 @@ button:has(> .ico) {
   line-height: 1.5;
   text-align: center;
   color: #8a7344;
+  -webkit-user-select: none; /* iOS Safari */
   user-select: none;
 }
 .credit .credit-line:first-child {
