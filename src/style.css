@@ -213,23 +213,27 @@ svg.board {
   padding: 0 0.25rem;
 }
 
-/* 플로팅 새 게임·무르기(설정창 접힘 시) */
+/* 플로팅 새 게임·무르기(설정창 접힘 시) — 아이콘 + 글씨 + 단축키(kbd)로 무슨 버튼인지 분명히. */
 .float-actions {
   display: flex;
+  flex-direction: column;
   gap: 0.5rem;
+  align-items: stretch;
 }
 .float-actions button {
-  width: 46px;
-  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 42px;
+  padding: 0 0.7rem;
   border-radius: 12px;
   border: 1px solid #e6dcc3;
   background: rgba(255, 253, 247, 0.96);
   box-shadow: 0 2px 8px rgba(120, 80, 0, 0.16);
   color: #6b5524;
+  font-size: 0.86rem;
+  font-weight: 600;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .float-actions button.cta-new {
   background: linear-gradient(180deg, #ffd95e, #f5b81e);
@@ -243,6 +247,18 @@ svg.board {
 .float-actions button svg {
   width: 20px;
   height: 20px;
+  flex: none;
+  color: inherit;
+}
+.float-actions button kbd {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: rgba(107, 85, 36, 0.12);
+  border: 1px solid rgba(107, 85, 36, 0.25);
+  border-radius: 5px;
+  padding: 0.05rem 0.35rem;
   color: inherit;
 }
 
