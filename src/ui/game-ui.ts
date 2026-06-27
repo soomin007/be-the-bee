@@ -164,6 +164,18 @@ function noteLine(note: MoveNote): string {
 }
 const AI_DELAY_MS = 350
 
+// 벌집 덩어리 외곽선용: pointy-top 6 이웃 방향(dq,dr)과 그 방향 변의 두 꼭짓점 각도(°).
+// 각도 기준은 layout.hexPolygonPoints 와 동일(60*i-30°). 이웃이 같은 벌집이 아닌 변만 그려
+// "벌집 덩어리"를 하나의 윤곽으로 감싼다(칸 경계라 말이 칸을 채워도 가려지지 않는다).
+const HIVE_EDGE_DIRS: { dq: number; dr: number; a1: number; a2: number }[] = [
+  { dq: 1, dr: 0, a1: -30, a2: 30 },
+  { dq: 0, dr: 1, a1: 30, a2: 90 },
+  { dq: -1, dr: 1, a1: 90, a2: 150 },
+  { dq: -1, dr: 0, a1: 150, a2: 210 },
+  { dq: 0, dr: -1, a1: 210, a2: 270 },
+  { dq: 1, dr: -1, a1: 270, a2: 330 },
+]
+
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
 // 방장이 정해 양쪽에 공통 적용되는 "방 설정"이 되도록 한 곳에 모아 둔다(직렬화 가능).
 interface RoomSettings {
@@ -1709,6 +1721,21 @@ export function mountGame(root: HTMLElement): void {
     return poly
   }
 
+  // 벌집 덩어리 외곽선의 한 변(line). 클릭 통과.
+  function makeHiveEdge(x1: number, y1: number, x2: number, y2: number, stroke: string, width: number, filter?: string): SVGLineElement {
+    const ln = document.createElementNS(SVGNS, 'line')
+    ln.setAttribute('x1', x1.toFixed(2))
+    ln.setAttribute('y1', y1.toFixed(2))
+    ln.setAttribute('x2', x2.toFixed(2))
+    ln.setAttribute('y2', y2.toFixed(2))
+    ln.setAttribute('stroke', stroke)
+    ln.setAttribute('stroke-width', String(width))
+    ln.setAttribute('stroke-linecap', 'round')
+    if (filter) ln.setAttribute('filter', filter)
+    ln.style.pointerEvents = 'none'
+    return ln
+  }
+
   function render(): void {
     // 복기 중이면 과거 국면을 본다(보기 전용 오버레이, 실제 상태는 그대로).
     const replaying = replayIndex !== null
@@ -1779,33 +1806,36 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 3) 벌집 강조 — 진영별 색(노랑=밝은 꿀, 갈색=진한 호박)으로 채우고, 금색 글로우 테두리 +
-    //    칸 안쪽 작은 육각(벌집 셀 윤곽)으로 "여긴 벌집"이라는 가시성을 높인다.
+    // 3) 벌집 강조 — 진영색 채움(반투명, 진영 구분) + "벌집 덩어리 외곽선". 외곽선은 이웃이 같은
+    //    벌집이 아닌 칸 경계 변만 그려 덩어리 전체를 감싼다. 칸 경계라 말이 칸을 채워도 가려지지 않고,
+    //    밝은 크림색 backing(+글로우)으로 타일색과 대비를 줘 또렷하다. (말에 가리던 작은 육각은 제거)
     const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
+    // 3-a) 채움(진영 구분색)
     for (const [key, owner] of hiveOwner) {
-      const center = hexToPixel(hexFromKey(key))
       content.appendChild(
-        makeHexPolygon(center, {
+        makeHexPolygon(hexToPixel(hexFromKey(key)), {
           fill: theme.hiveFill[owner],
-          stroke: theme.hiveStroke[owner],
-          strokeWidth: 5,
-          opacity: 0.62,
-          filter: 'url(#hiveGlow)',
+          stroke: 'none',
+          strokeWidth: 0,
+          opacity: 0.5,
           interactive: false,
         }),
       )
-      // 안쪽 작은 육각(벌집 셀) — 채움 없이 윤곽만, 진영 테두리색
-      content.appendChild(
-        makeHexPolygon(center, {
-          fill: 'none',
-          stroke: theme.hiveStroke[owner],
-          strokeWidth: 1.6,
-          opacity: 0.8,
-          size: HEX_SIZE * 0.5,
-          interactive: false,
-        }),
-      )
+    }
+    // 3-b) 덩어리 외곽선(밝은 backing + 진영 금색)
+    for (const [key, owner] of hiveOwner) {
+      const h = hexFromKey(key)
+      const center = hexToPixel(h)
+      for (const d of HIVE_EDGE_DIRS) {
+        if (hiveOwner.get(hexKey(hex(h.q + d.dq, h.r + d.dr))) === owner) continue // 내부 변은 생략
+        const x1 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * d.a1)
+        const y1 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * d.a1)
+        const x2 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * d.a2)
+        const y2 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * d.a2)
+        content.appendChild(makeHiveEdge(x1, y1, x2, y2, '#fff8e1', 6, 'url(#hiveGlow)')) // 크림 backing + 글로우
+        content.appendChild(makeHiveEdge(x1, y1, x2, y2, theme.hiveStroke[owner], 3)) // 진영 금색(구분)
+      }
     }
 
     // 4) 잠정 타일(미확정), 점선

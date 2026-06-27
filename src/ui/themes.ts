@@ -42,7 +42,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#8a5418', stripe: '#241200' },
     },
     hiveFill: { yellow: '#ffdf6e', brown: '#c47d28' },
-    hiveStroke: { yellow: '#cf8410', brown: '#5e3208' },
+    hiveStroke: { yellow: '#d98a14', brown: '#9c5212' },
     hiveGlow: '#f97316',
   },
   {
@@ -58,7 +58,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#dba85c', stripe: '#2a1808' },
     },
     hiveFill: { yellow: '#fff3b0', brown: '#9c6228' },
-    hiveStroke: { yellow: '#b58200', brown: '#3a2208' },
+    hiveStroke: { yellow: '#b58200', brown: '#6e3a0e' },
     hiveGlow: '#ea580c',
   },
   {
@@ -74,7 +74,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#b54a28', stripe: '#2a0f06' },
     },
     hiveFill: { yellow: '#ffd98a', brown: '#c2532a' },
-    hiveStroke: { yellow: '#c2840f', brown: '#6e2410' },
+    hiveStroke: { yellow: '#c2840f', brown: '#9c3a18' },
     hiveGlow: '#e2570c',
   },
 ]

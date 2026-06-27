@@ -572,15 +572,12 @@ button:has(> .ico) {
   border-color: #ecdfbe;
 }
 
-/* 새 게임 = 가장 자주 쓰는 핵심 액션 → 전체폭 + 꿀빛 그라데이션으로 또렷하게 강조 */
+/* 새 게임 = 가장 자주 쓰는 핵심 액션 → 한 칸 크기 유지하되 꿀빛 그라데이션으로 또렷하게 강조 */
 .settings-grid > button.cta-new {
-  grid-column: 1 / -1;
-  justify-content: center;
   background: linear-gradient(180deg, #ffd95e, #f5b81e);
   border-color: #e0991a;
   color: #4a3208;
   font-weight: 700;
-  font-size: 0.92rem;
   box-shadow: 0 2px 8px rgba(224, 153, 26, 0.32);
 }
 .settings-grid > button.cta-new:hover {
