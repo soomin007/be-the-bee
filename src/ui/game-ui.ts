@@ -163,8 +163,19 @@ function noteLine(note: MoveNote): string {
   return `${notePolarity(note) === 'bad' ? '✗' : '✓'} ${NOTE_TEXT[note]}`
 }
 const AI_DELAY_MS = 350
-// 사용자 피드백 설문(구글폼). 설정 도움말의 '피드백 보내기' 버튼이 새 창으로 연다.
+// 사용자 피드백 설문(구글폼). 크레딧 밑 '피드백 보내기' 버튼이 새 창으로 연다.
 const FEEDBACK_URL = 'https://forms.gle/qf5VA1xytdLojHtp9'
+
+// 벌집 "만리장성" 외벽용: pointy-top 6 이웃 방향(dq,dr)과 그 방향 변의 두 꼭짓점 각도(°,
+// layout.hexPolygonPoints 와 동일 기준). 이웃이 같은 벌집이 아닌 변만 그려 덩어리 바깥 둘레만 벽으로 두른다.
+const HIVE_WALL_EDGES: { dq: number; dr: number; a1: number; a2: number }[] = [
+  { dq: 1, dr: 0, a1: -30, a2: 30 },
+  { dq: 0, dr: 1, a1: 30, a2: 90 },
+  { dq: -1, dr: 1, a1: 90, a2: 150 },
+  { dq: -1, dr: 0, a1: 150, a2: 210 },
+  { dq: 0, dr: -1, a1: 210, a2: 270 },
+  { dq: 1, dr: -1, a1: 270, a2: 330 },
+]
 
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
 // 방장이 정해 양쪽에 공통 적용되는 "방 설정"이 되도록 한 곳에 모아 둔다(직렬화 가능).
@@ -1746,6 +1757,21 @@ export function mountGame(root: HTMLElement): void {
     return poly
   }
 
+  // 벌집 외벽의 한 변(line). 클릭 통과.
+  function makeHiveEdge(x1: number, y1: number, x2: number, y2: number, stroke: string, width: number): SVGLineElement {
+    const ln = document.createElementNS(SVGNS, 'line')
+    ln.setAttribute('x1', x1.toFixed(2))
+    ln.setAttribute('y1', y1.toFixed(2))
+    ln.setAttribute('x2', x2.toFixed(2))
+    ln.setAttribute('y2', y2.toFixed(2))
+    ln.setAttribute('stroke', stroke)
+    ln.setAttribute('stroke-width', String(width))
+    ln.setAttribute('stroke-linecap', 'round')
+    ln.setAttribute('stroke-linejoin', 'round')
+    ln.style.pointerEvents = 'none'
+    return ln
+  }
+
   function render(): void {
     // 복기 중이면 과거 국면을 본다(보기 전용 오버레이, 실제 상태는 그대로).
     const replaying = replayIndex !== null
@@ -1816,35 +1842,38 @@ export function mountGame(root: HTMLElement): void {
       )
     }
 
-    // 3) 벌집 강조 — "꿀이 고인 우물 셀"(2.5D 밀랍 벽). 셀 바닥에 진영색 꿀이 반짝이고(shimmer), 그
-    //    둘레를 밀랍 벽이 감싼다: 바깥은 밝은 윗면(빛), 안쪽은 어두운 그림자(우물 깊이) → 안으로 들어간
-    //    입체. 채움을 밝히지 않아 노랑/갈색 구분이 유지되고, 벽으로 일반 타일과 구별된다. 말은 위에 그려져 안 가림.
+    // 3) 벌집 강조 — "만리장성" 방식. 벌집으로 이어진 칸 안쪽 경계엔 벽을 세우지 않고, 덩어리 바깥
+    //    둘레(이웃이 같은 벌집이 아닌 변)만 두꺼운 밀랍 벽으로 두른다. 벽은 어두운 본체 + 밝은 윗면
+    //    하이라이트 두 겹으로 입체감을 준다. 칸 안쪽엔 진영색 꿀이 은은히 반짝(shimmer). 말은 위에 그려져 안 가림.
     const hiveOwner = new Map<string, Player>() // 타일 색은 칸마다 하나라 한 칸의 주인은 유일
     for (const hive of detectHives(viewState.board)) for (const k of hive.cells) hiveOwner.set(k, hive.owner)
-    const WALL_INNER = HEX_SIZE * 0.78
+    // 3-a) 칸 안쪽 꿀(반짝임) — 벌집 칸 전체에 깔아 "꿀이 차 있다"를 보이게.
     for (const [key, owner] of hiveOwner) {
-      const center = hexToPixel(hexFromKey(key))
-      const tc = theme.tile[owner]
-      // 셀 바닥의 꿀 — 진영색, 반짝임(shimmer). 벽 안쪽에 고이게 작게.
       content.appendChild(
-        makeHexPolygon(center, {
+        makeHexPolygon(hexToPixel(hexFromKey(key)), {
           fill: theme.hiveFill[owner],
           stroke: 'none',
           strokeWidth: 0,
-          opacity: 0.4,
-          size: WALL_INNER,
+          opacity: 0.45,
           cls: 'hive-shimmer',
           interactive: false,
         }),
       )
-      // 벽 안쪽 그림자(우물 발치, 어두운) — 안으로 들어간 깊이감.
-      content.appendChild(
-        makeHexPolygon(center, { fill: 'none', stroke: tc.dark, strokeWidth: 2.5, opacity: 0.85, size: WALL_INNER, interactive: false }),
-      )
-      // 벽 윗면(칸 경계, 밝은 밀랍) — 빛 받는 벽 꼭대기. 굵게 둘러 입체 벽.
-      content.appendChild(
-        makeHexPolygon(center, { fill: 'none', stroke: tc.light, strokeWidth: 5, size: HEX_SIZE, interactive: false }),
-      )
+    }
+    // 3-b) 덩어리 바깥 둘레만 밀랍 벽(만리장성) — 어두운 본체 위에 밝은 윗면 하이라이트.
+    for (const [key, owner] of hiveOwner) {
+      const h = hexFromKey(key)
+      const center = hexToPixel(h)
+      const tc = theme.tile[owner]
+      for (const e of HIVE_WALL_EDGES) {
+        if (hiveOwner.get(hexKey(hex(h.q + e.dq, h.r + e.dr))) === owner) continue // 내부 경계는 벽 없음
+        const x1 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * e.a1)
+        const y1 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * e.a1)
+        const x2 = center.x + HEX_SIZE * Math.cos((Math.PI / 180) * e.a2)
+        const y2 = center.y + HEX_SIZE * Math.sin((Math.PI / 180) * e.a2)
+        content.appendChild(makeHiveEdge(x1, y1, x2, y2, tc.dark, 6.5)) // 벽 본체(두껍게)
+        content.appendChild(makeHiveEdge(x1, y1, x2, y2, tc.light, 2.5)) // 윗면 하이라이트(가늘게 중앙)
+      }
     }
 
     // 4) 잠정 타일(미확정), 점선
@@ -3162,7 +3191,6 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     }
     const helpRows = `
-      <button class="help-tut cta-feedback" data-act="feedback" title="의견·버그를 보내 주세요(설문이 새 창으로 열려요)">${ICON.message} 피드백 보내기</button>
       <button class="help-tut" data-act="appHelp" title="이 앱 사용법(수 두기·설정·온라인)을 다시 봐요">${ICON.mouse} 앱 사용법 다시 보기</button>
       <button class="help-tut" data-act="tutorial" title="게임 방법을 처음부터 다시 봐요">${ICON.tutorial} 게임 규칙 다시 보기</button>
       <div class="help-row"><span class="help-ico">${ICON.trophy}</span><span>같은 진영 말 <b>5개</b>를 일렬로 연결하면 승리</span></div>
@@ -3183,6 +3211,7 @@ export function mountGame(root: HTMLElement): void {
         <div class="credit-line">원본 보드게임: 김수민 · 김재현 · 조주현</div>
         <div class="credit-line">프로그램 구현: 김수민</div>
       </div>
+      <button class="credit-feedback" data-act="feedback" title="의견·버그를 보내 주세요(설문이 새 창으로 열려요)">${ICON.message} 피드백 보내기</button>
     `
 
     for (const btn of Array.from(panel.querySelectorAll('button'))) {

@@ -1521,13 +1521,31 @@ button:has(> .ico) {
 .help-tut:hover {
   background: #fcd34d;
 }
-/* 피드백 보내기: 도움말 첫 줄에서 살짝 더 진한 꿀빛 그라데이션으로 눈에 띄게(응답 유도). */
-.help-tut.cta-feedback {
+/* 피드백 보내기: 설정창 맨 아래 크레딧 밑에 두는 꿀빛 버튼(응답 유도). */
+.credit-feedback {
+  margin-top: 0.7rem;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #e0991a;
+  border-radius: 9px;
   background: linear-gradient(180deg, #ffe07a, #f3b81a);
-  border-color: #e0991a;
+  color: #6b4a10;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
 }
-.help-tut.cta-feedback:hover {
+.credit-feedback:hover {
   background: linear-gradient(180deg, #ffe890, #f7c12e);
+}
+.credit-feedback svg {
+  width: 17px;
+  height: 17px;
+  color: #6b4a10;
+  flex: none;
 }
 
 /* 복기 패널 등에서 쓰는 단순 힌트(박스 밖) */
