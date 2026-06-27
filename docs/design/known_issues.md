@@ -335,3 +335,12 @@
 - **재발 방지**: ① `joinOnline` 에 만석 가드 — `host_id!==me && guest_id!==me && guest_id!=null` 면 입장
   거절(메시지+해시 정리). ② `joinRoom` 슬롯 차지를 `.is('guest_id', null)` 원자적 update + `maybeSingle`,
   0행이면(그 찰나 누가 차지) 방을 다시 읽어 반환 → 호출 측이 만석으로 거절. 방은 2인 전용(관전 미지원).
+
+## CI 배포 실패 — expert AI 테스트 타임아웃(flaky) (2026-06-27)
+- **증상**: GitHub Pages 배포(deploy.yml)가 2026-06-26 14:39부터 대부분 실패. 가끔만 성공.
+  로컬 `npm test`는 통과하는데 CI만 실패 → "새로고침해도 라이브에 변경 미반영".
+- **원인**: `tests/ai-defense.test.ts`의 expert AI 테스트가 it별 타임아웃 없이 기본 5000ms.
+  expert 탐색이 무거워 CI 러너(로컬보다 느림)에서 5초를 넘겨 timeout 실패(특히 chooseMove 2회 호출 ②).
+- **재발 방지**: expert/hard 등 무거운 AI를 호출하는 테스트는 **반드시 it별 타임아웃**을 준다
+  (`it('...', () => {...}, 30000)`). ai.test.ts가 이미 이 패턴(30000/60000). vitest 전역 testTimeout은 5000.
+  CI 실패 메일이 오면 `gh run view <id> --log-failed` 로 원인부터 확인(로컬 통과 ≠ CI 통과).
