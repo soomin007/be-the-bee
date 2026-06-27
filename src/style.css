@@ -170,47 +170,393 @@ svg.board {
 }
 
 /* 음악 미니 플레이어 — 알약형 바(재생/정지 · 곡명 · 이전/다음 · 음소거) */
-.mini-player {
+/* ── 배경음악 미니 플레이어(우하단) — design_handoff_mini_player 스펙 ── */
+.mini-player-host {
+  position: absolute;
+  bottom: 1.1rem;
+  right: 1.1rem;
+  z-index: 4;
+}
+.game.modal-open .mini-player-host {
+  display: none;
+}
+
+/* 펼침 카드 */
+.mp-card {
+  width: 300px;
+  background: linear-gradient(180deg, #fffdf7, #fdf6e6);
+  border: 1px solid #e6dcc3;
+  border-radius: 18px;
+  box-shadow: 0 14px 44px rgba(120, 90, 20, 0.2);
+  overflow: hidden;
+}
+.mp-head {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.28rem 0.4rem;
-  border-radius: 999px;
-  border: 1px solid #e6dcc3;
-  background: rgba(255, 253, 247, 0.96);
-  box-shadow: 0 2px 8px rgba(120, 80, 0, 0.16);
+  gap: 7px;
+  padding: 0.6rem 0.8rem;
+  background: linear-gradient(180deg, #fdeecb, #f6dfa3);
+  border-bottom: 1px solid #ecd9a6;
+  box-shadow: inset 0 1px 0 #fffdf8;
 }
-.mini-player button {
+.mp-head .mp-ico {
+  width: 16px;
+  height: 16px;
+  color: #b8860b;
   flex: none;
-  width: 30px;
-  height: 30px;
-  padding: 0;
+}
+.mp-head-label {
+  flex: 1;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #7a560a;
+}
+.mp-collapse {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
   border: none;
-  background: none;
-  border-radius: 50%;
-  font-size: 0.92rem;
-  line-height: 1;
-  color: #6b5524;
+  border-radius: 7px;
+  background: rgba(122, 86, 10, 0.12);
+  color: #7a560a;
   cursor: pointer;
+}
+.mp-collapse:hover {
+  background: rgba(122, 86, 10, 0.22);
+}
+.mp-collapse svg {
+  width: 14px;
+  height: 14px;
+}
+.mp-body {
+  padding: 0.95rem 1rem 1.05rem;
+}
+.mp-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.9rem;
+}
+.mp-art {
+  position: relative;
+  width: 60px;
+  height: 66px;
+  flex: none;
+}
+.mp-art-hex {
+  display: block;
+  width: 60px;
+  height: 66px;
+  filter: drop-shadow(0 4px 8px rgba(150, 110, 30, 0.28));
+  transform-origin: 30px 33px;
+}
+.mp-art.mp-spin .mp-art-hex {
+  animation: spinhex 9s linear infinite;
+}
+.mp-art-bee {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.mp-art-bee svg {
+  width: 24px;
+  height: 24px;
+}
+.mp-meta {
+  min-width: 0;
+  flex: 1;
+}
+.mp-meta .mp-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #3a2c0c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mp-meta .mp-artist {
+  font-size: 0.8rem;
+  color: #9a7a3a;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 이퀄라이저 바 */
+.mp-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 13px;
+  margin-top: 7px;
+}
+.mp-eq i {
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: #e0a92a;
+  transform-origin: bottom;
+  animation: bardance 0.9s ease-in-out infinite;
+}
+.mp-eq i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.mp-eq i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.mp-eq i:nth-child(4) {
+  animation-delay: 0.45s;
+}
+/* 진행바 */
+.mp-seek {
+  position: relative;
+  height: 6px;
+  border-radius: 99px;
+  background: #ece0c2;
+  cursor: pointer;
+  box-shadow: inset 0 1px 2px rgba(120, 90, 20, 0.18);
+}
+.mp-seek-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #f3c34a, #e0a92a);
+}
+.mp-seek-handle {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #e0a92a;
+  box-shadow: 0 1px 3px rgba(120, 90, 20, 0.35);
+  transform: translate(-50%, -50%);
+}
+.mp-time {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #9a7a3a;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+/* 트랜스포트 */
+.mp-transport {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
 }
-.mini-player button:hover {
-  background: #f1e4c5;
+.mp-tbtn {
+  display: grid;
+  place-items: center;
+  border: none;
+  cursor: pointer;
+  color: #5c4f33;
 }
-.mini-player .mp-play {
-  background: linear-gradient(180deg, #ffd95e, #f5b81e);
-  color: #4a3208;
+.mp-tbtn svg {
+  width: 17px;
+  height: 17px;
 }
-.mini-player .mp-title {
-  max-width: 116px;
-  overflow: hidden;
+.mp-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: transparent;
+  color: #b89a55;
+}
+.mp-toggle.on {
+  background: linear-gradient(180deg, #f3c34a, #e0a92a);
+  color: #5a3a14;
+}
+.mp-side {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  border: 1px solid #ecdfbe;
+  background: linear-gradient(180deg, #fffdf7, #fdf5e4);
+}
+.mp-side svg {
+  width: 18px;
+  height: 18px;
+}
+.mp-side:hover {
+  border-color: #d9c89a;
+}
+.mp-main {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  border: 1px solid #eab308;
+  background: linear-gradient(180deg, #fde68a, #f3c34a);
+  color: #7a560a;
+  box-shadow: 0 5px 14px rgba(200, 150, 20, 0.34);
+}
+.mp-main svg {
+  width: 22px;
+  height: 22px;
+}
+.mp-main:hover {
+  filter: brightness(1.04);
+}
+/* 볼륨 */
+.mp-vol {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.95rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid #efe3c6;
+}
+.mp-vbtn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #ecdfbe;
+  border-radius: 9px;
+  background: #fffdf7;
+  color: #c2982f;
+  cursor: pointer;
+  flex: none;
+}
+.mp-vbtn svg {
+  width: 17px;
+  height: 17px;
+}
+.mp-vol-bar {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  border-radius: 99px;
+  background: #ece0c2;
+  cursor: pointer;
+  box-shadow: inset 0 1px 2px rgba(120, 90, 20, 0.18);
+}
+.mp-vol-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #f3c34a, #e0a92a);
+}
+.mp-vol-handle {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #e0a92a;
+  box-shadow: 0 1px 2px rgba(120, 90, 20, 0.3);
+  transform: translate(-50%, -50%);
+}
+.mp-vol-label {
+  font-size: 0.7rem;
+  color: #9a7a3a;
+  width: 2.1rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 접힘 알약 */
+.mp-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.85rem 0.5rem 0.5rem;
+  border: 1px solid #e6dcc3;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #fffdf7, #fdf6e6);
+  box-shadow: 0 10px 30px rgba(120, 90, 20, 0.2);
+  cursor: pointer;
+}
+.mp-pill:hover {
+  box-shadow: 0 12px 34px rgba(120, 90, 20, 0.28);
+}
+.mp-pill-disc {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f9d666, #e0a92a);
+  flex: none;
+}
+.mp-pill-disc.mp-spin {
+  animation: spinhex 9s linear infinite;
+}
+.mp-pill-disc svg {
+  width: 20px;
+  height: 20px;
+}
+.mp-pill-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 120px;
+}
+.mp-pill-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #3a2c0c;
   white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.74rem;
-  color: #6b5524;
-  padding: 0 0.25rem;
+  max-width: 120px;
+}
+.mp-pill-sub {
+  font-size: 0.68rem;
+  color: #9a7a3a;
+}
+.mp-pill .mp-eq {
+  height: 9px;
+  margin-top: 2px;
+  gap: 2px;
+}
+.mp-pill .mp-eq i {
+  width: 2.5px;
+  height: 9px;
+}
+.mp-pill-play {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #fde68a;
+  color: #7a560a;
+  flex: none;
+}
+.mp-pill-play svg {
+  width: 15px;
+  height: 15px;
+}
+
+@keyframes bardance {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+@keyframes spinhex {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 플로팅 새 게임·무르기(설정창 접힘 시) — 아이콘 + 글씨 + 단축키(kbd)로 무슨 버튼인지 분명히. */

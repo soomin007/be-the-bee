@@ -400,6 +400,10 @@ export function mountGame(root: HTMLElement): void {
   let infoModal: 'queen' | 'saves' | 'leaveConfirm' | 'rematchAsk' | 'undoAsk' | 'newOnlineWarn' | null = null
   // 데스크탑 설정창 접기(모바일은 톱니 시트라 무관).
   let panelCollapsed = false
+  // 음악 미니 플레이어 상태(세션 한정 — 영속 불필요). expanded=펼침 카드/접힘 알약, shuffle/repeat 토글.
+  let musicExpanded = false
+  let musicShuffle = false
+  let musicRepeat = false
   // 새 게임 설정 마법사(상대 선택 → 분기). null=닫힘. 임시 설정을 들고 있다가 "시작" 때 settings 에 반영
   // (취소하면 settings 는 안 바뀐다). 온라인 경기를 마친 뒤면 '상대와 재대결' 버튼을 추가로 보여준다.
   let newGameWiz:
@@ -575,6 +579,7 @@ export function mountGame(root: HTMLElement): void {
         </svg>
         <div class="board-status"></div>
         <div class="hud-float"></div>
+        <div class="mini-player-host"></div>
         <div class="action-bar"></div>
         <div class="board-notes"></div>
       </div>
@@ -591,6 +596,7 @@ export function mountGame(root: HTMLElement): void {
   const boardNotes = root.querySelector('.board-notes') as HTMLElement
   const boardStatus = root.querySelector('.board-status') as HTMLElement
   const hudFloat = root.querySelector('.hud-float') as HTMLElement
+  const miniHost = root.querySelector('.mini-player-host') as HTMLElement
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
   const gameEl = root.querySelector('.game') as HTMLElement // 데스크탑 설정창 접기 클래스 토글용
   // 설정창 펼치기 버튼(셸 정적 요소라 직접 배선; onPanelAction 은 함수선언 hoist).
@@ -2062,6 +2068,7 @@ export function mountGame(root: HTMLElement): void {
     renderActionBar()
     renderBoardNotes()
     renderHudFloat()
+    renderMiniPlayer()
     renderModal()
     // 모달(새 게임 마법사·결과·온라인 등)이 떠 있으면 모바일 FAB·행동 버튼을 숨긴다(모달 위로 떠 글씨 가림 방지).
     gameEl.classList.toggle('modal-open', modalLayer.childElementCount > 0)
@@ -2071,33 +2078,128 @@ export function mountGame(root: HTMLElement): void {
     mobileShell.afterRender() // 모바일: 아코디언 접힘·하단 안내 배너 재맞춤(데스크탑 무동작)
   }
 
-  // 게임 화면 위 플로팅 HUD: 배경음악 미니 플레이어(항상) + 새 게임·무르기(설정창 접힘 시).
-  // 설정창을 펼치지 않고도 자주 쓰는 동작/음악을 바로 다루게 한다. (모달 중엔 CSS .modal-open 이 숨김)
+  // 게임 화면 우상단 플로팅 버튼: 새 게임·무르기(설정창 접힘 시). 미니 플레이어는 renderMiniPlayer(우하단).
   function renderHudFloat(): void {
-    const t = BGM_TRACKS[settings.bgmTrack]!
-    const on = sound.musicOn()
-    const muted = settings.bgmVolume <= 0
-    const playerHtml = `
-      <div class="mini-player">
-        <button class="mp-play" data-act="toggleMusic" title="배경음악 ${on ? '정지' : '재생'} (M)">${on ? '⏸' : '▶'}</button>
-        <div class="mp-title" title="${t.title}"><span>${t.title}</span></div>
-        <button data-act="bgmPrev" title="이전 곡">⏮</button>
-        <button data-act="bgmNext" title="다음 곡">⏭</button>
-        <button data-act="muteBgm" title="${muted ? '음소거 해제' : '음소거'}">${muted ? '🔇' : '🔊'}</button>
-      </div>`
-    // 설정창 접힘 + 복기 아님 → 새 게임·무르기를 플로팅으로(설정창을 펼치지 않고도 누르게).
     const showActions = panelCollapsed && replayIndex === null
-    const actionsHtml = showActions
+    hudFloat.innerHTML = showActions
       ? `<div class="float-actions">
           <button class="cta-new" data-act="new" title="새 게임 (단축키 N)">${ICON.refresh}<span>새 게임</span><kbd>N</kbd></button>
           <button data-act="undo" ${undoEnabled() ? '' : 'disabled'} title="무르기 (단축키 U)">${ICON.undo}<span>무르기</span><kbd>U</kbd></button>
         </div>`
       : ''
-    hudFloat.innerHTML = playerHtml + actionsHtml
     for (const btn of Array.from(hudFloat.querySelectorAll('button'))) {
       if (btn.hasAttribute('disabled')) continue
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
     }
+  }
+
+  function fmtTime(s: number): string {
+    const v = Math.max(0, Math.round(s))
+    return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`
+  }
+  // 셔플용: 현재와 다른 무작위 트랙 인덱스(곡 1개면 그대로). UI 계층이라 Math.random 허용.
+  function randomTrackIdx(): number {
+    if (BGM_TRACKS.length <= 1) return settings.bgmTrack
+    let n = settings.bgmTrack
+    while (n === settings.bgmTrack) n = Math.floor(Math.random() * BGM_TRACKS.length)
+    return n
+  }
+
+  // 배경음악 미니 플레이어(우하단). design_handoff_mini_player 스펙. 펼침=카드, 접힘=알약.
+  // 실제 오디오(sound.currentTime/duration/seek)와 BGM 설정(볼륨/음소거/트랙)에 연결.
+  function renderMiniPlayer(): void {
+    const t = BGM_TRACKS[settings.bgmTrack]!
+    const playing = sound.musicOn()
+    const muted = settings.bgmVolume <= 0
+    const cur = sound.currentTime()
+    const dur = sound.duration()
+    const pct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0
+    const volPct = Math.round((muted ? 0 : settings.bgmVolume) * 100)
+    const spin = playing ? 'mp-spin' : ''
+    // SVG 아이콘(핸드오프 path). 색은 currentColor 로 CSS 가 정한다(벌 글리프만 고정 갈색).
+    const I = {
+      music: `<svg class="mp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 16.5V6l9-2v10.5"/><circle cx="6.6" cy="16.5" r="2.5"/><circle cx="15.6" cy="14.5" r="2.5"/></svg>`,
+      chevron: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`,
+      bee: `<svg viewBox="0 0 24 24" fill="none" stroke="#7a560a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="14" rx="3.6" ry="4.8"/><path d="M8.6 12.6h6.8"/><path d="M9 15.8h6"/><path d="M10.1 9.6C8 7.7 6 8.2 6 9.8c0 1.4 1.9 2 3.4 1"/><path d="M13.9 9.6c2.1-1.9 4.1-1.4 4.1.2 0 1.4-1.9 2-3.4 1"/></svg>`,
+      beePill: `<svg viewBox="0 0 24 24" fill="none" stroke="#7a560a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="14" rx="3.4" ry="4.6"/><path d="M8.8 12.6h6.4"/><path d="M9.2 15.6h5.6"/></svg>`,
+      shuffle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h3.5l3 4"/><path d="M14.5 18H18"/><path d="M3 18h3.5l8-12H18"/><path d="M16 4l2 2-2 2"/><path d="M16 16l2 2-2 2"/></svg>`,
+      prev: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 5h2v14H7z"/><path d="M19 5v14l-9-7z"/></svg>`,
+      next: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M15 5h2v14h-2z"/><path d="M5 5v14l9-7z"/></svg>`,
+      play: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 5v14l12-7z"/></svg>`,
+      pause: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6.5" y="5" width="3.6" height="14" rx="1"/><rect x="13.9" y="5" width="3.6" height="14" rx="1"/></svg>`,
+      repeat: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V9a3 3 0 0 1 3-3h10"/><path d="M14 3l3 3-3 3"/><path d="M20 13v2a3 3 0 0 1-3 3H7"/><path d="M10 21l-3-3 3-3"/></svg>`,
+      spkOn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3l4.5 3.5V6L7 9.5Z"/><path d="M15 10a3.5 3.5 0 0 1 0 4"/><path d="M17.5 8a6.5 6.5 0 0 1 0 8"/></svg>`,
+      spkX: `<svg viewBox="0 0 24 24" fill="none" stroke="#b89a55" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3l4.5 3.5V6L7 9.5Z"/><path d="M16 10l4 4"/><path d="M20 10l-4 4"/></svg>`,
+    }
+    const eqBars = (n: number): string => `<span class="mp-eq">${'<i></i>'.repeat(n)}</span>`
+    if (musicExpanded) {
+      miniHost.innerHTML = `
+        <div class="mp-card">
+          <div class="mp-head">
+            ${I.music}<span class="mp-head-label">지금 재생 중</span>
+            <button class="mp-collapse" data-act="musicCollapse" title="접기">${I.chevron}</button>
+          </div>
+          <div class="mp-body">
+            <div class="mp-row">
+              <div class="mp-art ${spin}">
+                <svg viewBox="0 0 60 66" class="mp-art-hex"><polygon points="30,2 56,17 56,49 30,64 4,49 4,17" fill="url(#mphg)" stroke="#c2982f" stroke-width="2"/><polygon points="30,16 44,24.5 44,41.5 30,50 16,41.5 16,24.5" fill="none" stroke="#fff7df" stroke-width="2" opacity=".7"/><defs><linearGradient id="mphg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9d666"/><stop offset="1" stop-color="#e0a92a"/></linearGradient></defs></svg>
+                <span class="mp-art-bee">${I.bee}</span>
+              </div>
+              <div class="mp-meta">
+                <div class="mp-title">${t.title}</div>
+                <div class="mp-artist">${t.artist}</div>
+                ${playing ? eqBars(4) : ''}
+              </div>
+            </div>
+            <div class="mp-seek" data-seek><div class="mp-seek-fill" style="width:${pct}%"></div><div class="mp-seek-handle" style="left:${pct}%"></div></div>
+            <div class="mp-time"><span>${fmtTime(cur)}</span><span>${fmtTime(dur)}</span></div>
+            <div class="mp-transport">
+              <button class="mp-tbtn mp-toggle ${musicShuffle ? 'on' : ''}" data-act="musicShuffle" title="셔플">${I.shuffle}</button>
+              <button class="mp-tbtn mp-side" data-act="bgmPrev" title="이전 곡">${I.prev}</button>
+              <button class="mp-tbtn mp-main" data-act="toggleMusic" title="재생/정지 (M)">${playing ? I.pause : I.play}</button>
+              <button class="mp-tbtn mp-side" data-act="bgmNext" title="다음 곡">${I.next}</button>
+              <button class="mp-tbtn mp-toggle ${musicRepeat ? 'on' : ''}" data-act="musicRepeat" title="한 곡 반복">${I.repeat}</button>
+            </div>
+            <div class="mp-vol">
+              <button class="mp-vbtn" data-act="muteBgm" title="${muted ? '음소거 해제' : '음소거'}">${muted ? I.spkX : I.spkOn}</button>
+              <div class="mp-vol-bar" data-vol><div class="mp-vol-fill" style="width:${volPct}%"></div><div class="mp-vol-handle" style="left:${volPct}%"></div></div>
+              <span class="mp-vol-label">${muted ? '음소거' : volPct + '%'}</span>
+            </div>
+          </div>
+        </div>`
+    } else {
+      miniHost.innerHTML = `
+        <button class="mp-pill" data-act="musicExpand" title="음악 플레이어 펼치기">
+          <span class="mp-pill-disc ${spin}">${I.beePill}</span>
+          <span class="mp-pill-meta">
+            <span class="mp-pill-title">${t.title}</span>
+            ${playing ? eqBars(3) : `<span class="mp-pill-sub">일시정지</span>`}
+          </span>
+          <span class="mp-pill-play" data-act="toggleMusic" title="재생/정지 (M)">${playing ? I.pause : I.play}</span>
+        </button>`
+    }
+    for (const el of Array.from(miniHost.querySelectorAll('[data-act]'))) {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation() // 알약 안 재생버튼이 펼침을 트리거하지 않게
+        onPanelAction(el.getAttribute('data-act'))
+      })
+    }
+    const seekBar = miniHost.querySelector('[data-seek]') as HTMLElement | null
+    seekBar?.addEventListener('click', (e) => {
+      const r = seekBar.getBoundingClientRect()
+      const f = Math.min(1, Math.max(0, ((e as MouseEvent).clientX - r.left) / r.width))
+      sound.seek(f * sound.duration())
+      renderMiniPlayer()
+    })
+    const volBar = miniHost.querySelector('[data-vol]') as HTMLElement | null
+    volBar?.addEventListener('click', (e) => {
+      const r = volBar.getBoundingClientRect()
+      const f = Math.min(1, Math.max(0, ((e as MouseEvent).clientX - r.left) / r.width))
+      settings.bgmVolume = f
+      sound.setBgmVolume(f)
+      persist()
+      renderMiniPlayer()
+    })
   }
 
   // 게임 상태(누구 차례·안내·자원·점수)를 설정 패널이 아니라 보드 화면 좌상단 오버레이에 띄운다.
@@ -3438,6 +3540,18 @@ export function mountGame(root: HTMLElement): void {
         sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file) // 재생 중이면 새 곡으로 즉시 전환(persist/render 는 아래 공통)
         break
       }
+      case 'musicExpand':
+        musicExpanded = true
+        break
+      case 'musicCollapse':
+        musicExpanded = false
+        break
+      case 'musicShuffle':
+        musicShuffle = !musicShuffle
+        break
+      case 'musicRepeat':
+        musicRepeat = !musicRepeat
+        break
       case 'muteBgm':
         if (settings.bgmVolume > 0) {
           lastBgmVolume = settings.bgmVolume
@@ -3503,6 +3617,18 @@ export function mountGame(root: HTMLElement): void {
     startTurn()
   }
   setInitialCamera()
+  // 미니 플레이어: 오디오 진행(timeupdate)·종료(ended)를 UI에 반영. 종료 시 반복/셔플/다음 처리.
+  sound.onProgress(() => renderMiniPlayer())
+  sound.onEnded(() => {
+    if (musicRepeat) {
+      sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file) // 같은 곡 처음부터(재로드+재생)
+    } else {
+      settings.bgmTrack = musicShuffle ? randomTrackIdx() : (settings.bgmTrack + 1) % BGM_TRACKS.length
+      sound.setBgmTrack(BGM_TRACKS[settings.bgmTrack]!.file)
+      persist()
+    }
+    renderMiniPlayer()
+  })
   // 위험 경고가 기본 켜짐을 한 번 알린다(끌 수 있다고). 새/기존 사용자 모두 1회(전용 플래그).
   try {
     if (localStorage.getItem('be-the-bee/danger-told') !== '1') {

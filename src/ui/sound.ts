@@ -8,18 +8,20 @@ import type { Player } from '../engine/index'
 export interface BgmTrack {
   file: string
   title: string
+  artist: string
 }
 
 // public/bgm/ 의 곡들. 빌드 시 dist/bgm/ 로 포함되어 배포 URL에서도 동작.
+const OST = 'Be the Bee OST'
 export const BGM_TRACKS: BgmTrack[] = [
-  { file: 'board-game-lounge.mp3', title: 'Board Game Lounge' },
-  { file: 'board-game-lounge-2.mp3', title: 'Board Game Lounge II' },
-  { file: 'puzzle-quest.mp3', title: 'Puzzle Quest' },
-  { file: 'puzzle-quest-2.mp3', title: 'Puzzle Quest II' },
-  { file: 'midnight-study.mp3', title: 'Midnight Study' },
-  { file: 'midnight-study-2.mp3', title: 'Midnight Study II' },
-  { file: 'bonus-1.mp3', title: 'Hive Gambit' }, // Suno 제목 "벌집의 한 수"
-  { file: 'bonus-2.mp3', title: 'Hive Gambit II' },
+  { file: 'board-game-lounge.mp3', title: 'Board Game Lounge', artist: OST },
+  { file: 'board-game-lounge-2.mp3', title: 'Board Game Lounge II', artist: OST },
+  { file: 'puzzle-quest.mp3', title: 'Puzzle Quest', artist: OST },
+  { file: 'puzzle-quest-2.mp3', title: 'Puzzle Quest II', artist: OST },
+  { file: 'midnight-study.mp3', title: 'Midnight Study', artist: OST },
+  { file: 'midnight-study-2.mp3', title: 'Midnight Study II', artist: OST },
+  { file: 'bonus-1.mp3', title: 'Hive Gambit', artist: OST }, // Suno 제목 "벌집의 한 수"
+  { file: 'bonus-2.mp3', title: 'Hive Gambit II', artist: OST },
 ]
 
 type OscType = 'sine' | 'triangle' | 'square' | 'sawtooth'
@@ -35,6 +37,12 @@ export interface Sound {
   setBgmVolume(v: number): void
   toggleMusic(): boolean // 재생/정지 토글, 토글 후 켜짐 여부 반환
   musicOn(): boolean
+  // 미니 플레이어용 — 실제 오디오 진행/길이/탐색 + 진행·종료 콜백.
+  currentTime(): number // 현재 재생 위치(초). 미재생/미로드면 0.
+  duration(): number // 현재 곡 길이(초). 미로드/무한이면 0.
+  seek(t: number): void // 재생 위치 이동(초).
+  onProgress(cb: () => void): void // timeupdate/메타로드 시 호출(진행바 갱신용).
+  onEnded(cb: () => void): void // 곡이 끝났을 때 호출(다음 곡/반복은 호출자가 결정).
 }
 
 export function createSound(): Sound {
@@ -44,6 +52,8 @@ export function createSound(): Sound {
   let music: HTMLAudioElement | null = null
   let wantMusic = false
   let bgmVolume = 0.35
+  let progressCb: () => void = () => {} // 미니 플레이어 진행바 갱신 콜백(timeupdate/메타로드)
+  let endedCb: () => void = () => {} // 곡 종료 콜백(다음 곡/반복은 호출자가 결정)
   let currentFile = BGM_TRACKS[0]!.file
 
   function audio(): AudioContext | null {
@@ -110,8 +120,11 @@ export function createSound(): Sound {
   function ensureMusic(): HTMLAudioElement {
     if (!music) {
       music = new Audio(bgmUrl(currentFile))
-      music.loop = true
+      music.loop = false // 반복/다음 곡은 onEnded 로 호출자(미니 플레이어)가 결정
       music.volume = bgmVolume
+      music.addEventListener('timeupdate', () => progressCb())
+      music.addEventListener('loadedmetadata', () => progressCb())
+      music.addEventListener('ended', () => endedCb())
     }
     return music
   }
@@ -172,6 +185,21 @@ export function createSound(): Sound {
     },
     musicOn(): boolean {
       return wantMusic
+    },
+    currentTime(): number {
+      return music ? music.currentTime : 0
+    },
+    duration(): number {
+      return music && isFinite(music.duration) ? music.duration : 0
+    },
+    seek(t: number): void {
+      if (music) music.currentTime = Math.max(0, t)
+    },
+    onProgress(cb: () => void): void {
+      progressCb = cb
+    },
+    onEnded(cb: () => void): void {
+      endedCb = cb
     },
   }
 }

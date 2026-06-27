@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  @keyframes bardance{0%,100%{transform:scaleY(.35);}50%{transform:scaleY(1);}}
+  @keyframes spinhex{to{transform:rotate(360deg);}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:linear-gradient(160deg,#fdf8ec 0%,#f4ead0 100%);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#2b2b2b;position:relative;overflow:hidden;">
+
+  <!-- faux game backdrop so the corner pin reads in context -->
+  <div style="position:absolute;inset:0;opacity:.5;background-image:radial-gradient(circle at 1px 1px,#e6dcc3 1.4px,transparent 0);background-size:34px 34px;"></div>
+  <div style="position:absolute;top:26px;left:28px;display:flex;align-items:center;gap:9px;opacity:.55;">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2982f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="14" rx="4.3" ry="5.6"/><path d="M7.9 12.4h8.2"/><path d="M8.3 16h7.4"/><path d="M9.6 9.2C7 6.8 4.4 7.4 4.4 9.4c0 1.7 2.3 2.4 4.2 1.2"/><path d="M14.4 9.2c2.6-2.4 5.2-1.8 5.2.2 0 1.7-2.3 2.4-4.2 1.2"/><path d="M10.7 8.7 9.5 5.7"/><path d="M13.3 8.7 14.5 5.7"/></svg>
+    <span style="font-size:1.3rem;font-weight:800;color:#5a3a14;">Be the Bee</span>
+  </div>
+
+  <!-- ── EXPANDED PLAYER (corner-pinned) ─────────────── -->
+  <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+  <div style="position:absolute;bottom:26px;right:26px;width:300px;background:linear-gradient(180deg,#fffdf7,#fdf6e6);border:1px solid #e6dcc3;border-radius:18px;box-shadow:0 14px 44px rgba(120,90,20,.2);overflow:hidden;">
+
+    <!-- top bar -->
+    <div style="display:flex;align-items:center;gap:7px;padding:.6rem .8rem;background:linear-gradient(180deg,#fdeecb,#f6dfa3);border-bottom:1px solid #ecd9a6;box-shadow:inset 0 1px 0 #fffdf8;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b8860b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 16.5V6l9-2v10.5"/><circle cx="6.6" cy="16.5" r="2.5"/><circle cx="15.6" cy="14.5" r="2.5"/></svg>
+      <span style="flex:1;font-size:.74rem;font-weight:800;letter-spacing:.1em;color:#7a560a;">지금 재생 중</span>
+      <button onClick="{{ collapse }}" title="접기" style="display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:7px;background:rgba(122,86,10,.12);color:#7a560a;cursor:pointer;" style-hover="background:rgba(122,86,10,.22);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+
+    <div style="padding:.95rem 1rem 1.05rem;">
+
+      <!-- artwork + meta -->
+      <div style="display:flex;align-items:center;gap:.85rem;margin-bottom:.9rem;">
+        <div style="position:relative;width:60px;height:66px;flex:none;">
+          <!-- hex honeycomb tile artwork -->
+          <svg width="60" height="66" viewBox="0 0 60 66" style="display:block;filter:drop-shadow(0 4px 8px rgba(150,110,30,.28));animation:{{ spinAnim }};transform-origin:30px 33px;" aria-hidden="true">
+            <polygon points="30,2 56,17 56,49 30,64 4,49 4,17" fill="url(#hg)" stroke="#c2982f" stroke-width="2"/>
+            <polygon points="30,16 44,24.5 44,41.5 30,50 16,41.5 16,24.5" fill="none" stroke="#fff7df" stroke-width="2" opacity=".7"/>
+            <defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9d666"/><stop offset="1" stop-color="#e0a92a"/></linearGradient></defs>
+          </svg>
+          <div style="position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7a560a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="14" rx="3.6" ry="4.8"/><path d="M8.6 12.6h6.8"/><path d="M9 15.8h6"/><path d="M10.1 9.6C8 7.7 6 8.2 6 9.8c0 1.4 1.9 2 3.4 1"/><path d="M13.9 9.6c2.1-1.9 4.1-1.4 4.1.2 0 1.4-1.9 2-3.4 1"/></svg>
+          </div>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:1rem;font-weight:700;color:#3a2c0c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ track.title }}</div>
+          <div style="font-size:.8rem;color:#9a7a3a;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ track.artist }}</div>
+          <!-- equalizer bars -->
+          <sc-if value="{{ playing }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:flex-end;gap:2.5px;height:13px;margin-top:7px;">
+            <span style="width:3px;height:13px;border-radius:2px;background:#e0a92a;animation:bardance .9s ease-in-out infinite;transform-origin:bottom;"></span>
+            <span style="width:3px;height:13px;border-radius:2px;background:#e0a92a;animation:bardance .9s ease-in-out infinite .15s;transform-origin:bottom;"></span>
+            <span style="width:3px;height:13px;border-radius:2px;background:#e0a92a;animation:bardance .9s ease-in-out infinite .3s;transform-origin:bottom;"></span>
+            <span style="width:3px;height:13px;border-radius:2px;background:#e0a92a;animation:bardance .9s ease-in-out infinite .45s;transform-origin:bottom;"></span>
+          </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- progress -->
+      <div onClick="{{ seek }}" style="position:relative;height:6px;border-radius:99px;background:#ece0c2;cursor:pointer;box-shadow:inset 0 1px 2px rgba(120,90,20,.18);">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:{{ pct }};border-radius:99px;background:linear-gradient(90deg,#f3c34a,#e0a92a);"></div>
+        <div style="position:absolute;top:50%;left:{{ pct }};width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #e0a92a;box-shadow:0 1px 3px rgba(120,90,20,.35);transform:translate(-50%,-50%);"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.7rem;color:#9a7a3a;margin-top:6px;font-variant-numeric:tabular-nums;">
+        <span>{{ curLabel }}</span><span>{{ durLabel }}</span>
+      </div>
+
+      <!-- transport -->
+      <div style="display:flex;align-items:center;justify-content:center;gap:.6rem;margin-top:.85rem;">
+        <button onClick="{{ toggleShuffle }}" title="셔플" style="display:grid;place-items:center;width:34px;height:34px;border:none;border-radius:10px;background:{{ shuf.bg }};color:{{ shuf.col }};cursor:pointer;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h3.5l3 4"/><path d="M14.5 18H18"/><path d="M3 18h3.5l8-12H18"/><path d="M16 4l2 2-2 2"/><path d="M16 16l2 2-2 2"/></svg>
+        </button>
+        <button onClick="{{ prev }}" title="이전" style="display:grid;place-items:center;width:38px;height:38px;border:1px solid #ecdfbe;border-radius:11px;background:linear-gradient(180deg,#fffdf7,#fdf5e4);color:#5c4f33;cursor:pointer;" style-hover="border-color:#d9c89a;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M7 5h2v14H7z"/><path d="M19 5v14l-9-7z"/></svg>
+        </button>
+        <button onClick="{{ togglePlay }}" title="재생/정지" style="display:grid;place-items:center;width:54px;height:54px;border:1px solid #eab308;border-radius:16px;background:linear-gradient(180deg,#fde68a,#f3c34a);color:#7a560a;cursor:pointer;box-shadow:0 5px 14px rgba(200,150,20,.34);" style-hover="filter:brightness(1.04);">
+          <sc-if value="{{ playing }}" hint-placeholder-val="{{ true }}">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6.5" y="5" width="3.6" height="14" rx="1"/><rect x="13.9" y="5" width="3.6" height="14" rx="1"/></svg>
+          </sc-if>
+          <sc-if value="{{ paused }}" hint-placeholder-val="{{ false }}">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" style="margin-left:2px;"><path d="M7 5v14l12-7z"/></svg>
+          </sc-if>
+        </button>
+        <button onClick="{{ next }}" title="다음" style="display:grid;place-items:center;width:38px;height:38px;border:1px solid #ecdfbe;border-radius:11px;background:linear-gradient(180deg,#fffdf7,#fdf5e4);color:#5c4f33;cursor:pointer;" style-hover="border-color:#d9c89a;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M15 5h2v14h-2z"/><path d="M5 5v14l9-7z"/></svg>
+        </button>
+        <button onClick="{{ toggleRepeat }}" title="반복" style="display:grid;place-items:center;width:34px;height:34px;border:none;border-radius:10px;background:{{ rep.bg }};color:{{ rep.col }};cursor:pointer;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V9a3 3 0 0 1 3-3h10"/><path d="M14 3l3 3-3 3"/><path d="M20 13v2a3 3 0 0 1-3 3H7"/><path d="M10 21l-3-3 3-3"/></svg>
+        </button>
+      </div>
+
+      <!-- volume -->
+      <div style="display:flex;align-items:center;gap:.55rem;margin-top:.95rem;padding-top:.85rem;border-top:1px solid #efe3c6;">
+        <button onClick="{{ toggleMute }}" title="음소거" style="display:grid;place-items:center;width:30px;height:30px;border:1px solid #ecdfbe;border-radius:9px;background:#fffdf7;color:#c2982f;cursor:pointer;flex:none;">
+          <sc-if value="{{ muted }}" hint-placeholder-val="{{ false }}">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#b89a55" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3l4.5 3.5V6L7 9.5Z"/><path d="M16 10l4 4"/><path d="M20 10l-4 4"/></svg>
+          </sc-if>
+          <sc-if value="{{ unmuted }}" hint-placeholder-val="{{ true }}">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3l4.5 3.5V6L7 9.5Z"/><path d="M15 10a3.5 3.5 0 0 1 0 4"/><path d="M17.5 8a6.5 6.5 0 0 1 0 8"/></svg>
+          </sc-if>
+        </button>
+        <div onClick="{{ setVol }}" style="position:relative;flex:1;height:5px;border-radius:99px;background:#ece0c2;cursor:pointer;box-shadow:inset 0 1px 2px rgba(120,90,20,.18);">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:{{ volPct }};border-radius:99px;background:linear-gradient(90deg,#f3c34a,#e0a92a);"></div>
+          <div style="position:absolute;top:50%;left:{{ volPct }};width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #e0a92a;box-shadow:0 1px 2px rgba(120,90,20,.3);transform:translate(-50%,-50%);"></div>
+        </div>
+        <span style="font-size:.7rem;color:#9a7a3a;width:2.1rem;text-align:right;font-variant-numeric:tabular-nums;">{{ volLabel }}</span>
+      </div>
+
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ── COLLAPSED PILL ──────────────────────────────── -->
+  <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
+  <button onClick="{{ expand }}" style="position:absolute;bottom:26px;right:26px;display:flex;align-items:center;gap:.6rem;padding:.5rem .85rem .5rem .5rem;border:1px solid #e6dcc3;border-radius:99px;background:linear-gradient(180deg,#fffdf7,#fdf6e6);box-shadow:0 10px 30px rgba(120,90,20,.2);cursor:pointer;" style-hover="box-shadow:0 12px 34px rgba(120,90,20,.28);">
+    <span style="position:relative;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:linear-gradient(180deg,#f9d666,#e0a92a);flex:none;animation:{{ spinAnim }};">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7a560a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="14" rx="3.4" ry="4.6"/><path d="M8.8 12.6h6.4"/><path d="M9.2 15.6h5.6"/></svg>
+    </span>
+    <span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:120px;">
+      <span style="font-size:.82rem;font-weight:700;color:#3a2c0c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">{{ track.title }}</span>
+      <sc-if value="{{ playing }}" hint-placeholder-val="{{ true }}">
+        <span style="display:flex;align-items:flex-end;gap:2px;height:9px;margin-top:2px;">
+          <span style="width:2.5px;height:9px;border-radius:2px;background:#e0a92a;animation:bardance .9s ease-in-out infinite;transform-origin:bottom;"></span>
+          <span style="width:2.5px;height:9px;border-radius:2px;background:#e0a92a;animation:bardance .9s ease-in-out infinite .15s;transform-origin:bottom;"></span>
+          <span style="width:2.5px;height:9px;border-radius:2px;background:#e0a92a;animation:bardance .9s ease-in-out infinite .3s;transform-origin:bottom;"></span>
+        </span>
+      </sc-if>
+      <sc-if value="{{ paused }}" hint-placeholder-val="{{ false }}">
+        <span style="font-size:.68rem;color:#9a7a3a;">일시정지</span>
+      </sc-if>
+    </span>
+    <span onClick="{{ togglePlayStop }}" title="재생/정지" style="display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#fde68a;color:#7a560a;flex:none;">
+      <sc-if value="{{ playing }}" hint-placeholder-val="{{ true }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6.5" y="5" width="3.6" height="14" rx="1"/><rect x="13.9" y="5" width="3.6" height="14" rx="1"/></svg>
+      </sc-if>
+      <sc-if value="{{ paused }}" hint-placeholder-val="{{ false }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" style="margin-left:1px;"><path d="M7 5v14l12-7z"/></svg>
+      </sc-if>
+    </span>
+  </button>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1100,&quot;height&quot;:620}}">
+class Component extends DCLogic {
+  state = {
+    expanded: true,
+    playing: true,
+    muted: false,
+    vol: 0.55,
+    cur: 78,      // seconds
+    idx: 0,
+    shuffle: false,
+    repeat: false,
+  };
+
+  tracks = [
+    { title: '꿀벌의 춤', artist: 'Be the Bee OST', dur: 165 },
+    { title: '벌집 자장가', artist: 'Be the Bee OST', dur: 142 },
+    { title: '황금 들판', artist: 'Be the Bee OST', dur: 198 },
+  ];
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      if (!this.state.playing) return;
+      this.setState(s => {
+        const dur = this.tracks[s.idx].dur;
+        if (s.cur >= dur) {
+          if (s.repeat) return { cur: 0 };
+          return { cur: 0, idx: (s.idx + 1) % this.tracks.length };
+        }
+        return { cur: s.cur + 1 };
+      });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  fmt(s) {
+    s = Math.max(0, Math.round(s));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  renderVals() {
+    const s = this.state;
+    const track = this.tracks[s.idx];
+    const pct = Math.min(100, (s.cur / track.dur) * 100) + '%';
+    const volPct = Math.round(s.vol * 100) + '%';
+    const accent = { bg: 'linear-gradient(180deg,#f3c34a,#e0a92a)', col: '#5a3a14' };
+    const off = { bg: 'transparent', col: '#b89a55' };
+
+    return {
+      expanded: s.expanded,
+      collapsed: !s.expanded,
+      playing: s.playing,
+      paused: !s.playing,
+      muted: s.muted,
+      unmuted: !s.muted,
+      track,
+      pct, volPct,
+      volLabel: s.muted ? '음소거' : Math.round(s.vol * 100) + '%',
+      curLabel: this.fmt(s.cur),
+      durLabel: this.fmt(track.dur),
+      spinAnim: s.playing ? 'spinhex 9s linear infinite' : 'none',
+      shuf: s.shuffle ? accent : off,
+      rep: s.repeat ? accent : off,
+
+      collapse: () => this.setState({ expanded: false }),
+      expand: () => this.setState({ expanded: true }),
+      togglePlay: () => this.setState(p => ({ playing: !p.playing })),
+      togglePlayStop: (e) => { e.stopPropagation(); this.setState(p => ({ playing: !p.playing })); },
+      next: () => this.setState(p => ({ idx: (p.idx + 1) % this.tracks.length, cur: 0 })),
+      prev: () => this.setState(p => ({ idx: (p.idx - 1 + this.tracks.length) % this.tracks.length, cur: 0 })),
+      toggleMute: () => this.setState(p => ({ muted: !p.muted })),
+      toggleShuffle: () => this.setState(p => ({ shuffle: !p.shuffle })),
+      toggleRepeat: () => this.setState(p => ({ repeat: !p.repeat })),
+      seek: (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        this.setState({ cur: f * track.dur });
+      },
+      setVol: (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        this.setState({ vol: f, muted: false });
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>
