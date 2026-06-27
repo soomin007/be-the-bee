@@ -44,7 +44,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#8a5418', stripe: '#241200' },
     },
     hiveFill: { yellow: '#ffe55c', brown: '#c47d28' },
-    hiveStroke: { yellow: '#d98a14', brown: '#9c5212' },
+    hiveStroke: { yellow: '#c27a10', brown: '#2e1808' }, // 갈색 테두리는 아주 어둡게(갈색 셀과 구분↑)
     hiveGlow: '#f97316',
   },
   {
@@ -57,11 +57,11 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { light: '#6a4824', mid: '#412a12', dark: '#2a1a0a', stroke: '#140c04' },
     },
     piece: {
-      yellow: { body: '#a67400', stripe: '#241800' },
+      yellow: { body: '#ffcc00', stripe: '#241800' }, // 노랑 말은 밝은 노랑으로(어두워 보이던 문제 해결)
       brown: { body: '#dba85c', stripe: '#2a1808' },
     },
     hiveFill: { yellow: '#fff3b0', brown: '#9c6228' },
-    hiveStroke: { yellow: '#b58200', brown: '#6e3a0e' },
+    hiveStroke: { yellow: '#b58200', brown: '#1f0f04' },
     hiveGlow: '#ea580c',
   },
   {
@@ -78,7 +78,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#b54a28', stripe: '#2a0f06' },
     },
     hiveFill: { yellow: '#ffd98a', brown: '#c2532a' },
-    hiveStroke: { yellow: '#c2840f', brown: '#9c3a18' },
+    hiveStroke: { yellow: '#c2840f', brown: '#3f1407' },
     hiveGlow: '#e2570c',
   },
   {
@@ -97,7 +97,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#2a4fc0', stripe: '#0a1430' },
     },
     hiveFill: { yellow: '#ffe55c', brown: '#5276d8' },
-    hiveStroke: { yellow: '#d98a14', brown: '#1e3a8a' },
+    hiveStroke: { yellow: '#c27a10', brown: '#0c1c4a' }, // 남색 셀과 구분되게 더 짙은 남색
     hiveGlow: '#facc15',
   },
 ]
