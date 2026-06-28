@@ -182,6 +182,17 @@ svg.board {
 .game.modal-open .mini-player-host {
   display: none;
 }
+/* 드래그 이동 중(롱프레스로 집은 상태) 시각 피드백 — 톱니 FAB · 음악 미니 플레이어 공통. */
+.m-gear.dragging,
+.mini-player-host.dragging {
+  z-index: 100;
+  cursor: grabbing;
+  transform: scale(1.06);
+  filter: drop-shadow(0 8px 18px rgba(120, 80, 0, 0.4));
+  opacity: 0.94;
+  transition: transform 0.12s ease;
+  user-select: none;
+}
 
 /* 펼침 카드 */
 .mp-card {

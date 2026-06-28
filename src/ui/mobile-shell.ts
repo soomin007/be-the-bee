@@ -7,6 +7,8 @@
 // 책임: 설정 시트 열고닫기(톱니/✕), 설정 아코디언 모바일 드릴다운(접힘 시작·하나씩),
 //       좌하단 빠른 FAB(무르기·새 게임), 하단 안내 배너(상단 HUD 의 긴 안내를 아래로).
 
+import { makeDraggable } from './draggable'
+
 const MOBILE_QUERY = '(max-width: 720px)'
 
 export interface MobileShellCtx {
@@ -65,84 +67,9 @@ export function initMobileShell(ctx: MobileShellCtx): MobileShell {
     settingsOpen = !settingsOpen
     applySettingsOpen()
   }
-  // 톱니(설정) FAB 를 드래그로 옮길 수 있게 — 보드의 중요한 곳(말·벌집)을 가리면 비켜둔다. 위치는 기억.
-  // 살짝 누르면(거의 안 움직임) 설정 열기, 일정 거리(DRAG_THRESH) 이상 끌면 이동으로 본다.
-  const GEAR_POS_KEY = 'be-the-bee/gear-pos'
-  const DRAG_THRESH = 6
-  let gearPos: { x: number; y: number } | null = (() => {
-    try {
-      const p = JSON.parse(localStorage.getItem(GEAR_POS_KEY) ?? 'null')
-      return p && typeof p.x === 'number' && typeof p.y === 'number' ? { x: p.x, y: p.y } : null
-    } catch {
-      return null
-    }
-  })()
-  // 톱니가 화면 밖으로 나가지 않게 가둔다(여백 m + safe-area 는 CSS 가 아닌 픽셀로 단순 처리).
-  function clampGear(x: number, y: number): { x: number; y: number } {
-    const m = 6
-    const w = gear.offsetWidth || 46
-    const h = gear.offsetHeight || 46
-    return {
-      x: Math.min(Math.max(x, m), Math.max(m, window.innerWidth - w - m)),
-      y: Math.min(Math.max(y, m), Math.max(m, window.innerHeight - h - m)),
-    }
-  }
-  // 저장된 위치가 있으면 left/top 으로 배치(CSS 의 right 기본을 무효화), 없으면 CSS 기본(우상단).
-  function applyGearPos(): void {
-    if (!gearPos) {
-      gear.style.left = gear.style.top = gear.style.right = ''
-      return
-    }
-    const p = clampGear(gearPos.x, gearPos.y)
-    gear.style.left = `${p.x}px`
-    gear.style.top = `${p.y}px`
-    gear.style.right = 'auto'
-  }
-  let gDown: { x: number; y: number; left: number; top: number } | null = null
-  let gMoved = 0
-  gear.addEventListener('pointerdown', (ev: PointerEvent) => {
-    const r = gear.getBoundingClientRect()
-    gDown = { x: ev.clientX, y: ev.clientY, left: r.left, top: r.top }
-    gMoved = 0
-    gear.setPointerCapture(ev.pointerId)
-  })
-  gear.addEventListener('pointermove', (ev: PointerEvent) => {
-    if (!gDown) return
-    gMoved = Math.max(gMoved, Math.hypot(ev.clientX - gDown.x, ev.clientY - gDown.y))
-    if (gMoved > DRAG_THRESH) {
-      gearPos = clampGear(gDown.left + (ev.clientX - gDown.x), gDown.top + (ev.clientY - gDown.y))
-      applyGearPos()
-    }
-  })
-  const endGearDrag = (ev: PointerEvent): void => {
-    if (!gDown) return
-    if (gear.hasPointerCapture(ev.pointerId)) gear.releasePointerCapture(ev.pointerId)
-    const wasDrag = gMoved > DRAG_THRESH
-    gDown = null
-    if (wasDrag && gearPos) {
-      try {
-        localStorage.setItem(GEAR_POS_KEY, JSON.stringify(gearPos))
-      } catch {
-        /* 영속 실패(프라이빗 모드 등)는 무시 — 이번 세션 이동은 유효 */
-      }
-    }
-  }
-  gear.addEventListener('pointerup', endGearDrag)
-  gear.addEventListener('pointercancel', endGearDrag)
-  // 탭이면 설정 토글(터치 합성 click·키보드 enter 모두 커버), 드래그 직후의 합성 click 은 무시.
-  gear.addEventListener('click', (ev: MouseEvent) => {
-    if (gMoved > DRAG_THRESH) {
-      ev.stopImmediatePropagation()
-      gMoved = 0
-      return
-    }
-    toggleSettings()
-  })
-  // 화면 회전·리사이즈로 톱니가 화면 밖에 남지 않게 다시 가둔다.
-  window.addEventListener('resize', () => {
-    if (gearPos) applyGearPos()
-  })
-  applyGearPos()
+  // 톱니(설정) FAB: 꾹 눌러(롱프레스) 옮기고, 더블탭으로 원위치. 짧은 탭은 설정 열기. 위치는 기억.
+  // 보드의 중요한 곳(말·벌집)을 가릴 때 비켜둘 수 있게 한다. 로직은 공통 유틸(draggable) 재사용.
+  makeDraggable(gear, { storageKey: 'be-the-bee/gear-pos', onTap: toggleSettings })
 
   closeBtn.addEventListener('click', toggleSettings)
   undoFab.addEventListener('click', () => onAction('undo'))

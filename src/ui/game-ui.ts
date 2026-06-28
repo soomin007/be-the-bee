@@ -47,6 +47,7 @@ import { ICON } from './icons'
 import type { Board3D, BoardHints, PieceStyle } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
 import { mpEnabled } from '../mp/supabase'
 import { initMobileShell } from './mobile-shell'
+import { makeDraggable } from './draggable'
 import {
   createRoom,
   joinRoom,
@@ -599,6 +600,13 @@ export function mountGame(root: HTMLElement): void {
   const boardStatus = root.querySelector('.board-status') as HTMLElement
   const hudFloat = root.querySelector('.hud-float') as HTMLElement
   const miniHost = root.querySelector('.mini-player-host') as HTMLElement
+  // 음악 미니 플레이어(데스크탑): 꾹 눌러 옮기고 더블탭으로 원위치. 재생·이전·다음·슬라이더는 그대로.
+  // 펼침/접힘(알약·헤더)은 onTap 으로 통합 — 더블탭 첫 탭이 펼쳐버리지 않게(단일 탭은 약간 지연 후 펼침).
+  makeDraggable(miniHost, {
+    storageKey: 'be-the-bee/miniplayer-pos',
+    tapThroughSelector: '.mp-pill, .mp-collapse, .mp-head',
+    onTap: () => onPanelAction(miniHost.querySelector('.mp-card') ? 'musicCollapse' : 'musicExpand'),
+  })
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
   const gameEl = root.querySelector('.game') as HTMLElement // 데스크탑 설정창 접기 클래스 토글용
   // 설정창 펼치기 버튼(셸 정적 요소라 직접 배선; onPanelAction 은 함수선언 hoist).
