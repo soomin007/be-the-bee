@@ -2016,8 +2016,11 @@ export function mountGame(root: HTMLElement): void {
       if (isQueen) add('circle', { cx: 100, cy: 100, r: 71, fill: 'none', stroke: '#cf2a1c', 'stroke-width': 2.8 }) // 여왕벌 빨간 링
       if (key === lastPieceKey) {
         // 직전에 놓은 말: 흰 링으로 대비를 주고 그 위에 굵은 파란 링 + 부드러운 점멸 → 한눈에 띄게.
-        add('circle', { cx: 100, cy: 100, r: 89, fill: 'none', stroke: '#ffffff', 'stroke-width': 7, opacity: 0.95 })
-        const lastRing = add('circle', { cx: 100, cy: 100, r: 89, fill: 'none', stroke: '#1d4ed8', 'stroke-width': 4.5 })
+        // 이 말 그룹은 scale(s = DISC_R/80 ≈ 0.225)로 축소되므로, 스펙 좌표 두께는 화면상 약 0.225배로
+        // 보인다. 직전 타일 강조(흰 5px·파란 3.4px, 화면 px 직접)와 두께가 맞아 보이도록 1/s(≈4.4)배로
+        // 키운다. r 도 89→93 으로 키워 두꺼워진 링이 원판(r=80) 안쪽을 덮지 않게 한다.
+        add('circle', { cx: 100, cy: 100, r: 93, fill: 'none', stroke: '#ffffff', 'stroke-width': 24, opacity: 0.95 })
+        const lastRing = add('circle', { cx: 100, cy: 100, r: 93, fill: 'none', stroke: '#1d4ed8', 'stroke-width': 16 })
         lastRing.classList.add('last-piece-ring')
       }
 
