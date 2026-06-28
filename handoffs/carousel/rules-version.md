@@ -135,4 +135,4 @@
 ## 참고 (코드 기준값)
 - 캐러셀 생성기(현행, 레이아웃·카피의 단일 출처): [`../../scripts/shot-carousel.mjs`](../../scripts/shot-carousel.mjs)
 - 말 도형: [`../../src/ui/piece-art.ts`](../../src/ui/piece-art.ts) · 색: [`../../src/ui/themes.ts`](../../src/ui/themes.ts) · 아이콘: [`../../src/ui/icons.ts`](../../src/ui/icons.ts)
-- 규칙 전문: [`../../design/rules.md`](../../design/rules.md)
+- 규칙 전문: [`../../docs/design/rules.md`](../../docs/design/rules.md)

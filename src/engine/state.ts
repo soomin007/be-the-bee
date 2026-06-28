@@ -3,11 +3,11 @@
 import { hex, hexKey, type Hex } from './hex'
 import type { Board, Cell, GameState, Piece, Player, PlayerSupply, Tile } from './types'
 
-/** 각 플레이어 보유 자원(design/rules.md §8.6). 시작 시드 타일은 풀에서 차감하지 않는다. */
+/** 각 플레이어 보유 자원(docs/design/rules.md §8.6). 시작 시드 타일은 풀에서 차감하지 않는다. */
 export const STARTING_TILES = 30
 export const STARTING_PIECES = 30
 
-/** 한 직선이 벌집/승리로 인정되는 최소 길이(design/rules.md §1, §2). */
+/** 한 직선이 벌집/승리로 인정되는 최소 길이(docs/design/rules.md §1, §2). */
 export const LINE_LENGTH = 5
 
 function freshSupply(): PlayerSupply {
@@ -15,7 +15,7 @@ function freshSupply(): PlayerSupply {
 }
 
 /**
- * 초기 보드: 노란 타일 1개와 갈색 타일 1개가 한 변을 맞댄 상태(design/rules.md §3).
+ * 초기 보드: 노란 타일 1개와 갈색 타일 1개가 한 변을 맞댄 상태(docs/design/rules.md §3).
  * 노랑을 원점에, 갈색을 동쪽 이웃 hex(1,0) 에 둔다. 말은 아직 없다.
  * 시작 타일은 시드이며 각자 보유 30개에서 차감하지 않는다.
  */

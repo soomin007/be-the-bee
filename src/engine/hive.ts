@@ -1,4 +1,4 @@
-// 벌집(hive): 같은 색 타일 5개 이상이 일렬(design/rules.md §5, §7, §8.4).
+// 벌집(hive): 같은 색 타일 5개 이상이 일렬(docs/design/rules.md §5, §7, §8.4).
 // findLines 를 타일 색으로 호출해 탐지한다.
 
 import { LINE_LENGTH } from './state'

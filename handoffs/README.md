@@ -1,7 +1,7 @@
 # Handoffs — Be the Bee 디자인 핸드오프 모음
 
 외부 디자인 도구(주로 **Claude Design**)에 넣어 비주얼 에셋·홍보물을 만들기 위한 **사양서(핸드오프)** 모음이다.
-게임의 기획 문서는 [`../docs/`](../docs/INDEX.md), 게임 규칙 스펙은 [`../design/rules.md`](../design/rules.md)에 있다(여긴 아님).
+게임의 기획 문서는 [`../docs/`](../docs/INDEX.md), 게임 규칙 스펙은 [`../docs/design/rules.md`](../docs/design/rules.md)에 있다(여긴 아님).
 
 ## 원칙
 - **코드가 단일 출처.** 여기 문서의 좌표·색이 코드와 어긋나면 코드를 따른다. 대부분 이미 게임에 구현돼 있고,

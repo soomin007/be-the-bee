@@ -12,7 +12,7 @@
 | 주제 | 단일 소스 |
 |---|---|
 | 게임 규칙 (최종 권위) | [`../Be the Bee_게임 설명서.pdf`](../) |
-| 게임 규칙 명세 (구현 기준) | [`../design/rules.md`](../design/rules.md) |
+| 게임 규칙 명세 (구현 기준) | [`design/rules.md`](design/rules.md) |
 | 프로젝트 개요·명령어 (공개용) | [`../README.md`](../README.md) |
 | 아키텍처·코딩 규약·운영 규칙 | [`../CLAUDE.md`](../CLAUDE.md) |
 | 단계별 큰 그림(로드맵) | [`ROADMAP.md`](ROADMAP.md) |

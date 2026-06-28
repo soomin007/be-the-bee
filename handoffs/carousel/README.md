@@ -176,7 +176,7 @@
 - 캐러셀 생성기(레이아웃·카피·도형의 단일 출처): [`../../scripts/shot-carousel.mjs`](../../scripts/shot-carousel.mjs)
 - 말 도형: [`../../src/ui/piece-art.ts`](../../src/ui/piece-art.ts) · 색 테마: [`../../src/ui/themes.ts`](../../src/ui/themes.ts)
   · 아이콘: [`../../src/ui/icons.ts`](../../src/ui/icons.ts)
-- 규칙 전문: [`../../design/rules.md`](../../design/rules.md)
+- 규칙 전문: [`../../docs/design/rules.md`](../../docs/design/rules.md)
 - 규칙 버전 핸드오프(자매 문서): [`rules-version.md`](rules-version.md)
 </content>
 </invoke>

@@ -4,7 +4,7 @@
 //   - DOM/브라우저 전역 금지, src/ui import 금지
 //   - 상태는 JSON 직렬화 가능, 순수 함수 (state, move) => newState, 입력 불변
 //
-// 구현 기준: design/rules.md
+// 구현 기준: docs/design/rules.md
 
 export const ENGINE_VERSION = '0.1.0'
 

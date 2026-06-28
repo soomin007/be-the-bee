@@ -1,4 +1,4 @@
-// design/rules.md 의 까다로운 규칙 엣지케이스 단위 테스트.
+// docs/design/rules.md 의 까다로운 규칙 엣지케이스 단위 테스트.
 import { describe, it, expect } from 'vitest'
 import { hex, hexKey } from '../src/engine/hex'
 import { detectWin } from '../src/engine/victory'

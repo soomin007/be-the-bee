@@ -25,10 +25,10 @@ If anything in `engine/` touches the DOM or imports from `ui/`, that is a bug.
 
 ## Source of truth
 
-`design/rules.md` is the authoritative game spec. Implement from it.
+`docs/design/rules.md` is the authoritative game spec. Implement from it.
 - If gameplay behavior is unclear or underspecified, **STOP and ask** — do not
   invent rules.
-- If a rule changes during implementation, update `design/rules.md` in the same
+- If a rule changes during implementation, update `docs/design/rules.md` in the same
   change. Code and spec must never silently diverge; the spec wins.
 - Items marked ⚠️ in the spec are unconfirmed — do not implement them until they
   are resolved.
@@ -60,7 +60,7 @@ Write the line-scanning function once and reuse it for both. Do not duplicate it
   future netcode).
 - Prefer pure functions of the shape `(state, move) => newState`. Never mutate
   inputs.
-- Every rule edge case listed in `design/rules.md` gets a corresponding unit test.
+- Every rule edge case listed in `docs/design/rules.md` gets a corresponding unit test.
 - Keep the AI in `engine/ai.ts` behind a small interface so difficulty and
   strategy can be swapped without touching the rest of the engine.
 

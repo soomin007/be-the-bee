@@ -1,4 +1,4 @@
-// 승리 판정: 같은 진영의 말 5개 이상이 일렬(design/rules.md §2).
+// 승리 판정: 같은 진영의 말 5개 이상이 일렬(docs/design/rules.md §2).
 // findLines 를 말 소유자로 호출한다, 벌집과 같은 스캐너, 다른 입력.
 
 import { cellAt, LINE_LENGTH, pieceAt, withPiece, withTile } from './state'

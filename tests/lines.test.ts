@@ -44,7 +44,7 @@ describe('findLines (한 스캔 두 용도)', () => {
     for (let t = -2; t <= 2; t++) m.set(hexKey(hex(t, -t)), 'y')
     const lines = findLines(m, 5)
     expect(lines).toHaveLength(2)
-    // 두 직선 모두 중심 (0,0) 을 포함한다(중복 허용 — design/rules.md §8.4)
+    // 두 직선 모두 중심 (0,0) 을 포함한다(중복 허용 — docs/design/rules.md §8.4)
     const center = hexKey(hex(0, 0))
     expect(lines.every((l) => l.cells.includes(center))).toBe(true)
   })

@@ -3,7 +3,7 @@
 // 3개 축을 따라 같은 값이 연속된 최대 직선(run)을 모두 찾는다. 이 함수 하나를
 //  - 타일 색으로 호출 → 벌집(hive) 탐지 (hive.ts)
 //  - 말 소유자로 호출 → 승리(말 5목) 탐지 (victory.ts)
-// 두 곳에서 재사용한다. 절대 복제하지 않는다(design/rules.md "한 스캔 두 용도").
+// 두 곳에서 재사용한다. 절대 복제하지 않는다(docs/design/rules.md "한 스캔 두 용도").
 
 import { HEX_AXES, hexAdd, hexFromKey, hexKey, hexSubtract } from './hex'
 
