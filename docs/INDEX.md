@@ -21,6 +21,7 @@
 | 벌 컨셉 비주얼 테마 | [`design/bee_theme.md`](design/bee_theme.md) |
 | AI 전략·난이도/성향 상성 분석 | [`design/ai_strategy.md`](design/ai_strategy.md) (재실행: `npm run sim`) |
 | BGM 생성 프롬프트(Suno) | [`design/bgm_prompt.md`](design/bgm_prompt.md) |
+| 디자인 핸드오프(Claude Design용 에셋·홍보물 사양) | [`../handoffs/README.md`](../handoffs/README.md) |
 | 세션별 변경 흐름 | [`../session_logs/`](../session_logs/) |
 | 개발용 점검·미리보기 도구 | [`../scripts/README.md`](../scripts/README.md) (verify-* 회귀 / shot-* → `design/shots/`) |
 | 배포(GitHub Pages 자동) | `.github/workflows/deploy.yml` · ▶ https://soomin007.github.io/be-the-bee/ |

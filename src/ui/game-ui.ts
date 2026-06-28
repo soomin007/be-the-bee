@@ -564,7 +564,7 @@ export function mountGame(root: HTMLElement): void {
               <stop offset="48%" stop-color="#2a1c00" stop-opacity="0" />
               <stop offset="100%" stop-color="#2a1c00" stop-opacity="0.3" />
             </radialGradient>
-            <!-- 말(벌+원판) 에셋: design_handoff_bee_pieces 스펙. 진영=원판색(테마 piece 색으로 채움), 벌 공통. -->
+            <!-- 말(벌+원판) 에셋: handoffs/bee_pieces 스펙. 진영=원판색(테마 piece 색으로 채움), 벌 공통. -->
             <radialGradient id="disc-gold" cx="36%" cy="30%" r="80%"></radialGradient>
             <radialGradient id="disc-brown" cx="36%" cy="30%" r="80%"></radialGradient>
             <radialGradient id="bee-body" cx="38%" cy="26%" r="78%">
@@ -1957,7 +1957,7 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
-    // 6) 말 = 실물 토큰(벌 + 원판). design_handoff_bee_pieces 스펙(hifi)을 그대로 이식.
+    // 6) 말 = 실물 토큰(벌 + 원판). handoffs/bee_pieces 스펙(hifi)을 그대로 이식.
     //    스펙 좌표계: viewBox 0~200, 원판 중심 (100,100)·반지름 80. 각 말을 그룹 transform 으로
     //    게임 좌표(셀 중심 cx,cy · 반지름 DISC_R)에 매핑한다. 진영 = 원판 색(gold/brown), 벌 공통.
     //    원판 윗면 circle 에 .piece(테스트/검증이 세는 요소) + .pop. 줄무늬·꼬리는 몸통 타원에 클립.
@@ -2164,7 +2164,7 @@ export function mountGame(root: HTMLElement): void {
     return n
   }
 
-  // 배경음악 미니 플레이어(우하단). design_handoff_mini_player 스펙. 펼침=카드, 접힘=알약.
+  // 배경음악 미니 플레이어(우하단). handoffs/mini_player 스펙. 펼침=카드, 접힘=알약.
   // 실제 오디오(sound.currentTime/duration/seek)와 BGM 설정(볼륨/음소거/트랙)에 연결.
   function renderMiniPlayer(): void {
     const t = BGM_TRACKS[settings.bgmTrack]!

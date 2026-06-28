@@ -1,7 +1,7 @@
 # Handoff: Be the Bee — 인스타그램 캐러셀 (특징·후킹 버전)
 
 ## 이 문서가 뭔가 (기존 캐러셀과의 차이)
-- 기존 [`../design_handoff_carousel/README.md`](../design_handoff_carousel/README.md) = **규칙을 가르치는** 캐러셀.
+- 기존 [`rules-version.md`](rules-version.md) = **규칙을 가르치는** 캐러셀.
   목표→행동→벌집→소유권→승리조건 순서로 룰을 차곡차곡 쌓는다. 잘 만들어졌지만 **1장 후크가 약하고,
   9장으로 길다.**
 - **이 문서 = "왜 이 게임이 특별한가"로 스크롤을 멈추게 하는 후킹/세일즈 캐러셀.** 규칙은 이해에
@@ -63,7 +63,7 @@
 ## 비주얼 시스템 (다크 토큰)
 
 > 아래는 **현행 export 기준 근사값**이다. 픽셀 정확 토큰의 단일 출처는 캐러셀 생성기
-> [`../scripts/shot-carousel.mjs`](../scripts/shot-carousel.mjs)이다(현재 이 파일은 꿀빛 옛버전 →
+> [`../../scripts/shot-carousel.mjs`](../../scripts/shot-carousel.mjs)이다(현재 이 파일은 꿀빛 옛버전 →
 > 다크로 갱신된 실제 생성본과 동기화해 쓸 것). 타일/말/벌집/글로우 도형값은 그 파일이 진실.
 
 ### 색
@@ -84,9 +84,9 @@
 타일은 **육각형(pointy-top)**, 살짝 돔진 라디얼 음영. 격자는 좌표 키 희소 맵(정해진 판 없음).
 
 ### 말(꿀벌) — 별도 핸드오프 그대로
-정확한 도형/좌표/색은 [`../design_handoff_bee_pieces/README.md`](../design_handoff_bee_pieces/README.md).
+정확한 도형/좌표/색은 [`../bee_pieces/README.md`](../bee_pieces/README.md).
 요약: **고동/노랑 원판 위에 공통 노란 벌**. **진영 구분 = 원판 색**(노랑 vs 갈색). 여왕벌은 머리 위 왕관
-`♛` + 원판 빨간 링. 코드 단일 출처: [`../src/ui/piece-art.ts`](../src/ui/piece-art.ts).
+`♛` + 원판 빨간 링. 코드 단일 출처: [`../../src/ui/piece-art.ts`](../../src/ui/piece-art.ts).
 
 ### 표시 마커 (색에만 기대지 않기 — 피드백 4)
 - **승리 줄(말 5목)**: 그 5칸을 잇는 주황 글로우 라인(가로·세로·대각 어느 축이든).
@@ -151,7 +151,7 @@
 - 특징 칩(2줄, 6개): `💻📱 PC·모바일` `👑 여왕벌` `♾️ 무한 모드` `📖 규칙 튜토리얼` `↩️ 복기`
   `🎨 색약 친화 테마·3D`
   - (마지막 칩으로 **색약 친화 테마**를 노출 — 피드백 4의 게임 측 답. 테마: 꿀·고대비·벽돌·노랑남색,
-    그중 고대비·노랑남색이 색약/저시력 친화. 출처 [`../src/ui/themes.ts`](../src/ui/themes.ts))
+    그중 고대비·노랑남색이 색약/저시력 친화. 출처 [`../../src/ui/themes.ts`](../../src/ui/themes.ts))
 
 ### 06 · 메인 CTA (플레이 유도)
 - 제목 `지금, 무료로 플레이`. 벌 마스코트 + URL 알약 `soomin007.github.io/be-the-bee`
@@ -173,10 +173,10 @@
 - 외부 이미지 의존 0 지향(순수 도형 + 폰트). QR은 인라인 생성.
 
 ## 참고 (코드 기준값)
-- 캐러셀 생성기(레이아웃·카피·도형의 단일 출처): [`../scripts/shot-carousel.mjs`](../scripts/shot-carousel.mjs)
-- 말 도형: [`../src/ui/piece-art.ts`](../src/ui/piece-art.ts) · 색 테마: [`../src/ui/themes.ts`](../src/ui/themes.ts)
-  · 아이콘: [`../src/ui/icons.ts`](../src/ui/icons.ts)
-- 규칙 전문: [`../design/rules.md`](../design/rules.md)
-- 규칙 버전 핸드오프(자매 문서): [`../design_handoff_carousel/README.md`](../design_handoff_carousel/README.md)
+- 캐러셀 생성기(레이아웃·카피·도형의 단일 출처): [`../../scripts/shot-carousel.mjs`](../../scripts/shot-carousel.mjs)
+- 말 도형: [`../../src/ui/piece-art.ts`](../../src/ui/piece-art.ts) · 색 테마: [`../../src/ui/themes.ts`](../../src/ui/themes.ts)
+  · 아이콘: [`../../src/ui/icons.ts`](../../src/ui/icons.ts)
+- 규칙 전문: [`../../design/rules.md`](../../design/rules.md)
+- 규칙 버전 핸드오프(자매 문서): [`rules-version.md`](rules-version.md)
 </content>
 </invoke>

@@ -1,4 +1,4 @@
-// 게임 말(벌+원판) SVG 마크업 — design_handoff_bee_pieces 스펙(viewBox 0 0 200 210, 원판 중심 100,100 r80).
+// 게임 말(벌+원판) SVG 마크업 — handoffs/bee_pieces 스펙(viewBox 0 0 200 210, 원판 중심 100,100 r80).
 // game-ui.ts 의 보드 렌더러(절차적 DOM)와 "같은 도형"을 문자열로 만들어, 튜토리얼 등 정적 일러스트에서
 // 재사용한다. 보드 렌더는 상호작용 훅(클래스·링·tilt) 때문에 imperative 를 유지 — 두 경로가 같은 스펙 공유.
 

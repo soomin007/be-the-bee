@@ -59,10 +59,10 @@
 타일은 **육각형(뾰족한 위, pointy-top)**, 살짝 돔진 라디얼 음영. 격자는 좌표 키 희소 맵(정해진 판 없음).
 
 ### 말(꿀벌) — 별도 핸드오프 그대로 사용
-벌+원판 말의 정확한 도형/좌표/색은 **[`../design_handoff_bee_pieces/README.md`](../design_handoff_bee_pieces/README.md)** 에 있다.
+벌+원판 말의 정확한 도형/좌표/색은 **[`../bee_pieces/README.md`](../bee_pieces/README.md)** 에 있다.
 요약: **고동/노랑 원판 위에 공통 노란 벌**(검은 머리·흰 눈 2개·검정 줄무늬 2줄·넓은 흰 날개·어두운 꼬리).
 **진영 구분 = 원판 색**(노랑 vs 갈색), 벌은 양쪽 공통. 여왕벌은 머리 위 왕관 `♛` + 원판 빨간 링(캐러셀엔 거의 불필요).
-- 코드 단일 출처: [`../src/ui/piece-art.ts`](../src/ui/piece-art.ts) (`pieceMarkup`), 색 테마: [`../src/ui/themes.ts`](../src/ui/themes.ts).
+- 코드 단일 출처: [`../../src/ui/piece-art.ts`](../../src/ui/piece-art.ts) (`pieceMarkup`), 색 테마: [`../../src/ui/themes.ts`](../../src/ui/themes.ts).
 
 ### 표시 마커
 - **승리 줄**: 그 5칸을 잇는 주황 글로우 라인(가로·세로·대각 어느 축이든).
@@ -117,7 +117,7 @@
   - AI 관전 / `두 AI의 수 구경`
   - 온라인 초대 대전 / `링크로 친구와 1:1`
 - 특징 칩(2줄, 6개): `💻📱 PC·모바일` `여왕벌` `무한 모드` `규칙 튜토리얼` `복기` `테마·3D`
-- (아이콘은 게임 인게임 라인 아이콘 세트 톤과 맞추면 좋음: [`../src/ui/icons.ts`](../src/ui/icons.ts))
+- (아이콘은 게임 인게임 라인 아이콘 세트 톤과 맞추면 좋음: [`../../src/ui/icons.ts`](../../src/ui/icons.ts))
 
 ### 07 · 플레이 유도 (CTA)
 - 제목 `지금, 무료로 플레이`. 벌 마스코트 + URL 알약 `soomin007.github.io/be-the-bee`
@@ -133,6 +133,6 @@
 - 외부 이미지 의존 0 지향(순수 도형 + 폰트). QR은 인라인 생성.
 
 ## 참고 (코드 기준값)
-- 캐러셀 생성기(현행, 레이아웃·카피의 단일 출처): [`../scripts/shot-carousel.mjs`](../scripts/shot-carousel.mjs)
-- 말 도형: [`../src/ui/piece-art.ts`](../src/ui/piece-art.ts) · 색: [`../src/ui/themes.ts`](../src/ui/themes.ts) · 아이콘: [`../src/ui/icons.ts`](../src/ui/icons.ts)
-- 규칙 전문: [`../design/rules.md`](../design/rules.md)
+- 캐러셀 생성기(현행, 레이아웃·카피의 단일 출처): [`../../scripts/shot-carousel.mjs`](../../scripts/shot-carousel.mjs)
+- 말 도형: [`../../src/ui/piece-art.ts`](../../src/ui/piece-art.ts) · 색: [`../../src/ui/themes.ts`](../../src/ui/themes.ts) · 아이콘: [`../../src/ui/icons.ts`](../../src/ui/icons.ts)
+- 규칙 전문: [`../../design/rules.md`](../../design/rules.md)

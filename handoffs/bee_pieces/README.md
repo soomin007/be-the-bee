@@ -6,11 +6,10 @@
 일반 말 두 종을 포함합니다. 기존 코드의 절차적 렌더러(`src/ui/game-ui.ts`)를 정리·고도화한 버전입니다.
 
 ## About the Design Files
-이 번들의 HTML/SVG는 **디자인 레퍼런스**입니다 — 의도한 모양을 보여주는 산출물이지, 그대로 제품에 붙여 넣을 코드가 아닙니다.
-다만 이 에셋은 본질적으로 **순수 SVG 도형**이므로 거의 그대로 이식 가능합니다. 대상 코드베이스
-(`soomin007/be-the-bee`, TypeScript + Vite, `document.createElementNS`로 SVG를 그림)의 기존 패턴에 맞춰
-재현하세요. 가장 자연스러운 통합 지점은 `src/ui/game-ui.ts`의 말 렌더 루프(현재 `circle.piece` + `ellipse` 조합으로
-벌을 그리는 부분)를 아래 스펙으로 교체하는 것입니다.
+말의 정답 모양은 이 폴더의 **`svg/` 4종**(일반·여왕벌 × 갈색·노랑)과 아래 hifi 스펙입니다. 게임에는 이미
+이식돼 있고 **코드가 단일 출처**입니다: 2D 는 `src/ui/piece-art.ts`(`pieceMarkup`, `document.createElementNS`
+로 SVG 생성), 3D 는 `src/ui/board3d.ts`. 색·좌표를 바꿀 때는 이 문서와 해당 코드를 함께 고치세요.
+원본 파라미터화 프로토타입(`.dc.html` 들)은 구현 완료 후 정리했고, 스펙·SVG 만 남겼습니다.
 
 ## Fidelity
 **High-fidelity (hifi).** 모든 좌표·색상·반지름·각도가 최종값입니다. viewBox `0 0 200 210` 기준 좌표를 그대로 쓰면 됩니다.
@@ -79,7 +78,7 @@ function lighten(hex, amt){
 - 눈 `#ffffff` · 왕관 `#ffe07a`(stroke `#7a5410`) · 빨간 링 `#cf2a1c`
 
 ## Variants & Props
-부모(`Be the Bee 게임 말.dc.html`)가 `BeePiece`에 넘기는 prop = 그대로 컴포넌트 API로 쓰면 됩니다.
+다음 prop 으로 4종을 만듭니다(현재 코드 `pieceMarkup` 의 인자에 대응).
 
 | prop | 타입 | 기본 | 설명 |
 |---|---|---|---|
@@ -101,21 +100,20 @@ function lighten(hex, amt){
 ## Assets
 외부 이미지/폰트 0개 — 순수 SVG 도형 + 인라인 그라데이션. 왕관은 유니코드 글리프 `♛`(U+265B).
 
-## Files (이 번들)
+## Files (이 폴더)
 - `svg/piece-brown.svg`, `svg/piece-gold.svg` — 일반 말(해상 완료, 바로 사용 가능)
 - `svg/piece-brown-queen.svg`, `svg/piece-gold-queen.svg` — 여왕벌(왕관+빨간 링)
-- `BeePiece.dc.html` — 파라미터화된 원본 컴포넌트(템플릿 + 로직). 좌표/색 단일 출처.
-- `Be the Bee 게임 말.dc.html` — 4종을 배치한 쇼케이스(부모가 prop 넘기는 예시).
-- `support.js` — 위 .dc.html을 브라우저에서 바로 열기 위한 런타임(참고용, 제품엔 불필요).
-- `Be the Bee 3D 말.dc.html` — **three.js 3D 버전**(아래 별도 명세).
+- `REALISTIC_BEE_BRIEF.md` — 사실적(실사) 3D 벌 제작 브리프(아래 3D 부록의 자매 문서)
 
+> 구현 단일 출처는 코드입니다: 2D `src/ui/piece-art.ts`, 3D `src/ui/board3d.ts`.
 > matte로 내보내려면 광택 두 ellipse(`cx74 cy72…`, `cx86 cy92…`)의 opacity를 0으로 두거나 제거하세요.
 
 ---
 
-# 부록: 3D 버전 (`Be the Bee 3D 말.dc.html`)
+# 부록: 3D 버전 (`src/ui/board3d.ts` 에 구현)
 
-위 2D SVG 말을 **three.js 메시**로 옮긴 3D 뷰어입니다. 같은 비례(SVG의 회전체)와 색을 따릅니다.
+위 2D SVG 말을 **three.js 메시**로 옮긴 3D 버전입니다. 같은 비례(SVG의 회전체)와 색을 따릅니다.
+(실사 변형은 [`REALISTIC_BEE_BRIEF.md`](REALISTIC_BEE_BRIEF.md) 참고.)
 
 ## 의존성 & 컨트롤
 - **three.js r0.149.0** UMD 빌드 하나만 사용(`unpkg.com/three@0.149.0/build/three.min.js`). OrbitControls 등 추가 모듈 없음.

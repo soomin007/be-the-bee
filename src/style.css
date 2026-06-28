@@ -172,7 +172,7 @@ svg.board {
 }
 
 /* 음악 미니 플레이어 — 알약형 바(재생/정지 · 곡명 · 이전/다음 · 음소거) */
-/* ── 배경음악 미니 플레이어(우하단) — design_handoff_mini_player 스펙 ── */
+/* ── 배경음악 미니 플레이어(우하단) — handoffs/mini_player 스펙 ── */
 .mini-player-host {
   position: absolute;
   bottom: 1.1rem;

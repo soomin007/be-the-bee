@@ -1,7 +1,7 @@
 # Handoff: Be the Bee — 벌집(hive) 그래픽 (현행 인게임 룩)
 
 ## 이 문서가 뭔가
-인스타 캐러셀(`../design_carousel/export/`)에 그려진 **벌집**을, 게임 안에서 실제로 보이는
+인스타 캐러셀(`../carousel/export/`)에 그려진 **벌집**을, 게임 안에서 실제로 보이는
 **현행 벌집 룩**으로 맞추기 위한 사양서다. **Claude Design** 에 넣어 슬라이드의 벌집 일러스트를
 이 스펙으로 다시 그리면 된다.
 
@@ -113,7 +113,7 @@
 
 ## 색 토큰 (테마별)
 캐러셀은 **다크 배경 + 노랑 벌집**이 주력이므로 기본 테마(honey)의 노랑 값을 쓰면 된다. 단일 출처는
-[`../src/ui/themes.ts`](../src/ui/themes.ts)의 `hiveFill` / `hiveStroke` / `hiveGlow`.
+[`../../src/ui/themes.ts`](../../src/ui/themes.ts)의 `hiveFill` / `hiveStroke` / `hiveGlow`.
 
 | 테마 | 노랑 채움(base) | 노랑 벽 | 갈색 채움(base) | 갈색 벽 | 글로우 |
 |---|---|---|---|---|---|
@@ -170,21 +170,21 @@ viewBox 기준 셀 폴리곤 반지름 R=100, 중심 (140,140). 그대로 열어
 - 그 외 벌집이 등장하는 장도 동일 룩으로 통일.
 
 > 밀도·구도 규칙(체커보드 금지, 꽉 채우기 금지 등)은 캐러셀 핸드오프
-> [`../design_carousel/README.md`](../design_carousel/README.md) ·
-> [`../design_handoff_carousel_features/README.md`](../design_handoff_carousel_features/README.md)
+> [`../carousel/rules-version.md`](../carousel/rules-version.md) ·
+> [`../carousel/README.md`](../carousel/README.md)
 > 를 따른다. 이 문서는 **벌집 한 칸이 어떻게 생겼나만** 다룬다.
 
 ---
 
 ## 파일 / 단일 출처 (코드 기준값)
-- 색: [`../src/ui/themes.ts`](../src/ui/themes.ts) — `hiveFill` / `hiveStroke` / `hiveGlow`
-- 도형·그라데이션·배치·글로우·빛점: [`../src/ui/game-ui.ts`](../src/ui/game-ui.ts)
+- 색: [`../../src/ui/themes.ts`](../../src/ui/themes.ts) — `hiveFill` / `hiveStroke` / `hiveGlow`
+- 도형·그라데이션·배치·글로우·빛점: [`../../src/ui/game-ui.ts`](../../src/ui/game-ui.ts)
   - `applyThemeColors()` 의 `#honey-*` 그라데이션 채움
   - 벌집 셀 렌더 루프(`fill: url(#honey-*)`, `stroke: hiveStroke`, `filter: url(#hiveGlow)`, `size: HEX_SIZE*0.88`)
   - `#hiveGlow` 필터 defs, 빛점(`hive-spark`) 렌더 루프
-- 애니메이션: [`../src/style.css`](../src/style.css) — `@keyframes hive-spark`, `@keyframes honey-rise`
-- 헥스 좌표/크기: [`../src/ui/layout.ts`](../src/ui/layout.ts) — `HEX_SIZE`, `hexPolygonPoints`(pointy-top)
-- **말(꿀벌)은 별도 핸드오프**: [`../design_handoff_bee_pieces/README.md`](../design_handoff_bee_pieces/README.md)
+- 애니메이션: [`../../src/style.css`](../../src/style.css) — `@keyframes hive-spark`, `@keyframes honey-rise`
+- 헥스 좌표/크기: [`../../src/ui/layout.ts`](../../src/ui/layout.ts) — `HEX_SIZE`, `hexPolygonPoints`(pointy-top)
+- **말(꿀벌)은 별도 핸드오프**: [`../bee_pieces/README.md`](../bee_pieces/README.md)
 
 ## Fidelity
 **Hi-fi.** 색·비율은 모두 코드에서 그대로 뽑은 최종값이다(채움 4 stop 은 `shade()` 로 계산해 검증).
