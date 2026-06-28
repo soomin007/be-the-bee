@@ -31,6 +31,12 @@ AI 는 **막을 수 있는 위협은 다 막지만**(findBlock 등), 승리칸�
   `BTB1:eyJ2IjoxLCJtdiI6InQgMiAwIDEgMDt0IDEgLTEgMiAwO3QgMSAxIDEgMTt0IDEgMiAxIDI7dCAzIC0xIDEgLTE7dCAxIC0yIDEgLTI7MiA0IC0yIDAgMjt0IDIgMSAyIDE7dCAyIDIgMiAyO3QgMyAwIDMgMDt0IDAgMyAwIDM7dCAyIC0zIDIgLTM7dCAyIC0xIDIgLTE7dCAwIC0xIDAgLTE7dCAtMSAwIC0xIDA7dCAzIC00IDMgLTQ7dCA0IC01IDQgLTU7dCA0IC0xIDQgLTE7dCA1IC0yIDUgLTI7dCAzIC0yIDMgLTI7MiAwIDQgMCAxO3QgMiAtMiAyIC0yO3QgMCAtMiAwIC0yO3QgMyAtMyAzIC0zO3QgMyAtNSAzIC01O3QgMSAtMyAxIC0zO3QgNCAtMyA0IC0zO3QgMCAtMyAwIC0zO3QgLTEgLTMgLTEgLTM7dCAyIC01IDIgLTU7MiA0IC00IDQgLTY7dCAtMSAtMiAtMSAtMjt0IDEgLTQgMSAtNDt0IDIgLTQgMiAtNDt0IDIgLTYgMiAtNjt0IDMgMiAzIDI7dCA0IC03IDQgLTQ7dCA1IC01IDUgLTU7dCAtMSAzIDQgLTY7dCAxIC01IDEgLTU7dCA1IC0zIDQgLTciLCJpbmYiOjAsInFuIjowLCJtb2RlIjoidnNBaSIsImF0IjoxNzgyNDg3Mjg4NzgyfQ==`
   - 승리 라인 (4,-7)~(4,-3) 전부 노랑 잠긴 벌집. 40수 갈색 막을 승리칸 [4,-2],[4,-7] **둘 다 잠김**.
 
+- **게임4** (54수, **AI=노랑/선공이 패** — 이전 "후공이라 수동적" 가설의 반례): 사람(갈색)이 q+r=1
+  회랑을 **8수에 ①로 6칸 조기 잠금** → 그 잠긴 안에서 말 5목(3,-2~7,-6) 완성. 급소 (4,-3)은 7수엔
+  맨 타일(상대 말 실리기 33수 전)이라 규칙·평가 어느 것도 그 시점 위험을 못 본다. AI 가 선공으로
+  템포 우위였는데도 같은 패턴에 짐 → 패인은 "후공"이 아니라 "회랑 잠김 진행을 위협으로 인식 못 함".
+  픽스처: `tests/review.test.ts` 의 사용자 54수 기보(reviewMove 오진 — 53수 missBlock — 수정에 같이 씀).
+
 ## 3. 무엇을 시도했고 왜 실패했나 (★ 다시 하지 말 것)
 
 2026-06-27 시도(되돌림, commit `5505d8a` 에 코드 — `git show 5505d8a`): 전문가에 `CONTEST_CUT`
@@ -42,6 +48,20 @@ AI 는 **막을 수 있는 위협은 다 막지만**(findBlock 등), 승리칸�
   악용은 **10수+ 뒤**라 **depth-4 가 보상을 못 본다**. `CONTEST_CUT` 을 4000 까지 올려도 깊이값 불변.
 - **결론**: **정적 평가/얕은 탐색으로는 못 잡는다.** 가중치를 키우면 탐색이 "지금 끊으면 진다"를 정확히
   계산해 무시하거나, known_issues 의 "타일 쫓기 = 약화" 함정에 빠진다.
+
+2026-06-28 시도(되돌림): `corridorPreemptMoves` — 평가가 아니라 **규칙으로 강제**(접근 #1 의 첫 구현).
+"잠길 임박(타일선 길이4·한 수면 5칸) + 5칸 단색 윈도우에 상대 말 ≥1 실림 + 내 말 0" 인 활주로의 빈
+급소를 `findBlock` 처럼 즉시 승리·차단 다음 우선순위로 **강제 선점**(전문가만).
+- **됨**: 게임1 4수에 급소 (1,-1) 선점(이전엔 못 하던 것). 합성 발동/오발방지 단위 테스트 통과.
+- **안 됨**: 게임2((3,0) 대각선+세로 교차 잠금)·게임4(회랑 8수 조기 잠금, 상대 말 실리기 전)는 트리거
+  타이밍/형태가 안 맞아 못 잡음.
+- **self-play 약화(결정타)**: 전문가(preempt) vs hard = **1-5**, 같은 seed 로 preempt 만 끄면 **5-0**(무1)
+  — A/B 로 preempt 단독 약화 확정(이전 expert vs hard 10-0 과도 일치). 정상 AI 대국엔 "상대 말
+  실린 길이4 타일선"이 흔해 강제 선점이 자주 발동 → 진짜 말 5목 위협 대응 템포를 뺏겨 무너진다. 발동은
+  사람-회랑 기보에선 드물어 보였으나(게임당 0~1) AI 대국에선 빈번했다. → **되돌림**(코드 미커밋).
+- **결론**: 규칙 강제도 같은 벽이다. 게임1류는 잡지만 정상 대국이 무너지고, 트리거를 더 좁히면 게임1도
+  놓친다. **평가/탐색 재설계 없이는 안 된다**(2026-06-27 결론 재확인). 다음 시도는 섹션 5 #2(주도권
+  강화, 말-위협으로 상대가 타일 못 쌓게)나 #3(선택적 심화)을 우선 — 타일-기반 강제는 막다른 길로 보인다.
 
 ## 4. 제약 (known_issues, 반드시 지킬 것)
 
