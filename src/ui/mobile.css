@@ -4,8 +4,7 @@
 
 /* mobile-shell 이 만든 요소는 기본(데스크탑) 숨김 — 모바일 미디어쿼리에서만 표시. */
 .m-fab,
-.m-status,
-.m-pc {
+.m-status {
   display: none;
 }
 /* 상대 표시는 데스크탑 패널 요약에 이미 있으므로 HUD 엔 모바일만(데스크탑 불변). */
@@ -24,6 +23,11 @@
     height: auto;
     min-height: 0;
     padding: 0.4rem; /* HUD·안내는 이제 흐름 안에 쌓임(아래 order) */
+  }
+  /* 3D 보드 모드: 상단 HUD 는 흐름 배치(relative)라 절대배치 3D 캔버스(뒤 DOM)에 가려진다 → 위로 올린다.
+     (행동바·안내·하단 배너는 별도 규칙/DOM 순서로 이미 캔버스 위. 데스크탑 HUD 는 absolute+z-index 라 무관.) */
+  .board-wrap.mode-3d .board-status {
+    z-index: 1;
   }
   .panel .app-title,
   .credit,
@@ -241,20 +245,6 @@
   }
   .m-new {
     bottom: calc(env(safe-area-inset-bottom) + 4.3rem);
-  }
-  /* 3D 토글: 모바일 PC 전용 — 흐리게 + 'PC 전용' 배지. */
-  .panel .m-pconly {
-    opacity: 0.6;
-  }
-  .panel .m-pc {
-    display: inline-block;
-    margin-left: 0.4rem;
-    padding: 0.05rem 0.4rem;
-    border-radius: 0.5rem;
-    background: #fde9b0;
-    color: #8a6d1b;
-    font-size: 0.7rem;
-    font-weight: 700;
   }
   /* 설정 시트가 열리면 게임 화면 위 FAB·배너 숨김(시트만 보이게). */
   .game.msettings-open .m-undo,

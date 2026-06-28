@@ -3464,7 +3464,6 @@ export function mountGame(root: HTMLElement): void {
         notice = settings.dangerAlerts ? '위험 경고 ON' : '위험 경고 OFF'
         break
       case 'toggle3d':
-        if (mobileShell.active()) return // 모바일: 3D 미지원(고려사항 多) → PC 전용. mobile.css 가 'PC 전용' 표시.
         settings.board3d = !settings.board3d
         applyBoard3D()
         break

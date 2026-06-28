@@ -435,6 +435,8 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200)
   camera.position.copy(CAM_POS)
 
+  // 모바일(좁은 화면)은 저사양 GPU 대비 그림자 해상도를 낮춘다(가장 비싼 작업 — 화질 영향은 작다).
+  const isMobile = window.matchMedia('(max-width: 720px)').matches
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.shadowMap.enabled = true
@@ -449,7 +451,7 @@ export function createBoard3D(container: HTMLElement, opts: Board3DOptions = {})
   const key = new THREE.DirectionalLight(0xfffaf0, 0.95)
   key.position.set(-3, 16, 5) // 더 위에서 → 말·원판 그림자가 짧아져 "떠 있는" 느낌 감소
   key.castShadow = true
-  key.shadow.mapSize.set(2048, 2048)
+  key.shadow.mapSize.set(isMobile ? 1024 : 2048, isMobile ? 1024 : 2048)
   key.shadow.camera.near = 1
   key.shadow.camera.far = 40
   key.shadow.camera.left = -12

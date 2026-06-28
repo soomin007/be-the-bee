@@ -89,24 +89,10 @@ export function initMobileShell(ctx: MobileShellCtx): MobileShell {
     statusBanner.classList.toggle('empty', text === '')
   }
 
-  // 3D 토글은 모바일에서 PC 전용 — 흐리게 + 'PC 전용' 배지(탭해도 game-ui 가 토글 안 함).
-  function markPcOnly(): void {
-    const t3d = root.querySelector('.panel [data-act="toggle3d"]')
-    if (!t3d) return
-    t3d.classList.add('m-pconly')
-    if (!t3d.querySelector('.m-pc')) {
-      const tag = document.createElement('small')
-      tag.className = 'm-pc'
-      tag.textContent = 'PC 전용'
-      t3d.appendChild(tag)
-    }
-  }
-
   function afterRender(): void {
     if (!mq.matches) return
     applySections()
     updateStatusBanner()
-    markPcOnly()
   }
 
   function handleSectionClick(key: string): boolean {
