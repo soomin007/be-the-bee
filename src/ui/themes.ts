@@ -44,7 +44,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#8a5418', stripe: '#241200' },
     },
     hiveFill: { yellow: '#ffe55c', brown: '#c47d28' },
-    hiveStroke: { yellow: '#c27a10', brown: '#2e1808' }, // 갈색 테두리는 아주 어둡게(갈색 셀과 구분↑)
+    hiveStroke: { yellow: '#ff9500', brown: '#2e1808' }, // 노랑 벽은 쨍한 금주황(황토라 갈색과 헷갈리던 문제↓), 갈색 벽은 아주 어둡게(갈색 셀과 구분↑)
     hiveGlow: '#f97316',
   },
   {
@@ -61,7 +61,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#7a4a1c', stripe: '#1a0e04' }, // 베이지처럼 너무 밝지 않게 — 갈색답게 진하게
     },
     hiveFill: { yellow: '#fff3b0', brown: '#9c6228' },
-    hiveStroke: { yellow: '#b58200', brown: '#1f0f04' },
+    hiveStroke: { yellow: '#ff9500', brown: '#1f0f04' }, // 노랑 벽 쨍한 금주황(시인성↑)
     hiveGlow: '#ea580c',
   },
   {
@@ -78,7 +78,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#b54a28', stripe: '#2a0f06' },
     },
     hiveFill: { yellow: '#ffd98a', brown: '#c2532a' },
-    hiveStroke: { yellow: '#c2840f', brown: '#3f1407' },
+    hiveStroke: { yellow: '#ff9500', brown: '#3f1407' }, // 노랑 벽 쨍한 금주황(시인성↑)
     hiveGlow: '#e2570c',
   },
   {
@@ -97,7 +97,7 @@ export const COLOR_THEMES: ColorTheme[] = [
       brown: { body: '#2a4fc0', stripe: '#0a1430' },
     },
     hiveFill: { yellow: '#ffe55c', brown: '#5276d8' },
-    hiveStroke: { yellow: '#c27a10', brown: '#0c1c4a' }, // 남색 셀과 구분되게 더 짙은 남색
+    hiveStroke: { yellow: '#ff9500', brown: '#0c1c4a' }, // 노랑 벽 쨍한 금주황(시인성↑), 남색 벽은 셀과 구분되게 더 짙은 남색
     hiveGlow: '#facc15',
   },
 ]
