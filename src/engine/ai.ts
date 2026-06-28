@@ -29,7 +29,7 @@ import type { Board, GameState, Move, Player } from './types'
 import { cellAt, pieceAt, withPiece, withTile, LINE_LENGTH } from './state'
 import { findLines, type Line } from './lines'
 import { detectWin } from './victory'
-import { totalHiveScores } from './hive'
+import { totalHiveScores, hiveCountdowns } from './hive'
 import {
   allowedMoveTypes,
   applyMove,
@@ -303,6 +303,7 @@ export interface Weights {
   hiveDef: number // 임박한 벌집(열린 끝 길이-4 타일선) 견제. 반대칭(내 임박 - 상대 임박). 기본 0
   gapFour: number // 벌어진 4목(X·XXX 등, 한 수면 5목) 인식. 반대칭. 기본 0(전문가 난이도만 켬)
   spreadThree: number // 벌어진 3목(5칸 창에 같은 말 3 + 빈칸 2, 연속 아님). 잠기기 전 줄 끊기 유도. 반대칭. 기본 0(전문가만)
+  lockedRun: number // 잠긴 벌집 안 "막을 수 없는 말 5목"까지 임박도(hiveCountdowns). 반대칭. 기본 0(전문가만)
 }
 
 const BASE_WEIGHTS: Weights = {
@@ -323,6 +324,7 @@ const BASE_WEIGHTS: Weights = {
   hiveDef: 0,
   gapFour: 0,
   spreadThree: 0,
+  lockedRun: 0,
 }
 
 // 전문가 난이도 가중치 오버레이(성향 위에 덮어씀).
@@ -330,8 +332,13 @@ const BASE_WEIGHTS: Weights = {
 //  - spreadThree: 벌어진 3목(두 수면 5목) 인식 — 잠긴 벌집처럼 "사후 차단 불가"한 줄을 잠기기
 //    전에 끊게 한다(설명서 TIP#1 "허리 끊기"의 말 라인판). OPEN_3 아래로 낮춰 "타일 쫓기"
 //    함정(known_issues/A·B)을 피하고, 반대칭(공격<수비)이라 줄을 막는 쪽으로 기운다.
+//  - lockedRun: 잠긴 벌집 안에서 상대가 막을 수 없는 말 5목의 임박도(hiveCountdowns). 회랑을
+//    "잠그는 수(타일)"는 말 진전이 없어 즉시 보상이 없고, 승리는 잠금→채움→채움(depth-5)이라
+//    전문가 depth-4 지평을 막 벗어난다 → 평가에 없으면 AI 가 잠금/채움을 둘 다 놓친다(2026-06-29
+//    양방향 맹점). 이 항은 잠긴 벌집(이미 완성·잠김)과 그 안 owner 말이 있을 때만 작동하므로 "타일
+//    쫓기"(known_issues) 가 아니다 — 빈 벌집/미잠금엔 0이라 잠금을 처음부터 좇게 만들지 않는다.
 // (hiveDef 류 타일-견제 항은 여전히 제외 — AI 를 약화시켰던 항. 강함은 탐색 깊이 + 말 라인 인식.)
-const EXPERT_WEIGHTS: Partial<Weights> = { gapFour: 12000, spreadThree: 1500 }
+const EXPERT_WEIGHTS: Partial<Weights> = { gapFour: 12000, spreadThree: 1500, lockedRun: 10000 }
 
 // 성향별 오버라이드. 즉시 승리/차단(pickMove·useBlock)은 모든 성향 공통이라 자멸하진 않고,
 // 가치 판단(공격 vs 수비 vs 벌집)만 달라져 관전 대결에 특색이 생긴다.
@@ -604,6 +611,29 @@ function spreadThrees(board: Board, phex: readonly Hex[], p: Player): number {
   return n
 }
 
+// 잠긴 벌집 안 "막을 수 없는 5목"까지 남은 owner 말 수(movesLeft 1..4) → 가치(작을수록 임박,
+// 가파르게 증가). 표준 모드에선 상대가 그 빈칸에 말을 못 놓으므로(§5) 이건 사실상 확정 위협이다.
+// movesLeft=1 은 대개 pickMove 의 즉시-승리 검사가 이미 잡지만, 탐색이 그 직전 국면을 높게 보도록 둔다.
+function lockedRunValue(movesLeft: number): number {
+  switch (movesLeft) {
+    case 1:
+      return 9 // 다음 한 수면 승리(탐색 보강)
+    case 2:
+      return 3 // 두 수(잠금→채움→채움) — depth-4 지평 밖이라 핵심
+    case 3:
+      return 1
+    default:
+      return 0.4 // 4: 잠긴 5칸 창에 owner 말 1개뿐
+  }
+}
+
+// 진영별 가장 임박한 잠긴-벌집 위협의 가치(반대칭 합산용). hiveCountdowns 1회 스캔.
+function lockedRunByOwner(board: Board): Record<Player, number> {
+  const byOwner: Record<Player, number> = { yellow: 0, brown: 0 }
+  for (const cd of hiveCountdowns(board)) byOwner[cd.owner] = lockedRunValue(cd.movesLeft)
+  return byOwner
+}
+
 function evaluate(board: Board, me: Player, w: Weights): number {
   const opp = opponent(me)
   // 보드를 단 한 번만 훑어 owner 맵(말/타일)·말 위치·선점 점수를 동시에 모은다.
@@ -666,6 +696,13 @@ function evaluate(board: Board, me: Player, w: Weights): number {
     const ms = spreadThrees(board, phexMe, me)
     const os = spreadThrees(board, phexOpp, opp)
     s += w.spreadThree * (w.attackMul * ms - w.defenseMul * os)
+  }
+  // 전문가(lockedRun>0): 잠긴 벌집 안 "막을 수 없는 5목" 임박도(반대칭). 회랑을 잠그는 수의
+  // 가치가 잠근 직후 국면의 leaf 평가에 보이게 해, depth-4 지평 밖(잠금→채움→채움)의 승리를
+  // 탐색이 인식한다. 잠긴 벌집 + owner 말이 있을 때만 작동 → "타일 쫓기"(known_issues) 아님.
+  if (w.lockedRun !== 0) {
+    const lr = lockedRunByOwner(board)
+    s += w.lockedRun * (w.attackMul * lr[me] - w.defenseMul * lr[opp])
   }
   s -= w.CENTER * centralityPenalty(phexMe)
   return s
@@ -902,6 +939,66 @@ function defensiveMoves(state: GameState, me: Player): Move[] {
   return out
 }
 
+// ---- 잠긴-벌집 공격 시딩 (전문가 lockedRun 전용, 루트에서만) -----------------
+// generateCandidates 는 "내 타일선을 끝까지 연장해 5타일 벌집으로 잠그는 ①수"를 잘 안 만든다
+// (상위 타일칸끼리 짝지어, 줄을 잇는 둘째 칸이 후보에서 밀린다). 그래서 lockedRun 평가가 있어도
+// 그 잠금수가 후보에 없어 못 두는 맹점이 있었다(2026-06-29). 여기서 그 잠금수를 루트에 강제로
+// 끼워 깊이 탐색이 평가하게 한다(평가는 negamax 가 — 강제로 두게 하진 않음).
+// 안전장치: 잠긴 창에 **내 말이 이미 1개 이상 + 상대 말 0** 일 때만 시드한다(빈 벌집을 처음부터
+// 좇게 만들지 않음 → known_issues "타일 쫓기" 회피). 시딩은 루트에서만(내부 노드 빔 폭발 방지,
+// 2026-06-27 교훈).
+function lockingMoves(state: GameState): Move[] {
+  const me = state.turn
+  const board = state.board
+  const supply = state.supplies[me]
+  if (supply.tiles < 1) return []
+  const out: Move[] = []
+  const seen = new Set<string>()
+  for (const line of findLines(ownerTileMap(board, me), 3)) {
+    const len = line.cells.length
+    if (len < LINE_LENGTH - 2 || len >= LINE_LENGTH) continue // 길이 3·4만(5+는 이미 잠김)
+    const need = LINE_LENGTH - len // 1(len4) 또는 2(len3)
+    const dir = HEX_AXES[line.axis]!
+    const first = hexFromKey(line.cells[0]!)
+    const last = hexFromKey(line.cells[line.cells.length - 1]!)
+    // 한 끝(+ 또는 -)으로 need 칸 연장해 5칸 창을 만든다.
+    for (const sign of [1, -1] as const) {
+      const adds: Hex[] = []
+      let base = sign === 1 ? last : first
+      let okExtend = true
+      for (let i = 0; i < need; i++) {
+        base = sign === 1 ? hexAdd(base, dir) : hexSubtract(base, dir)
+        if (cellAt(board, base) !== undefined) { okExtend = false; break } // 빈칸이어야 연장 가능
+        adds.push(base)
+      }
+      if (!okExtend || adds.length !== need) continue
+      // 창(기존 라인 + 연장칸)에 내 말 ≥1, 상대 말 0 인지 확인(막을 수 없는 5목이 될 자격).
+      let mine = 0
+      let blocked = false
+      for (const key of line.cells) {
+        const o = pieceAt(board, hexFromKey(key))?.owner
+        if (o === me) mine++
+        else if (o !== undefined) { blocked = true; break }
+      }
+      if (blocked || mine < 1) continue
+      // 잠금수 구성: need=1 이면 ②(타일 + 그 칸에 말로 진전), need=2 이면 ①(타일 2개).
+      let move: Move | null = null
+      if (need === 1 && supply.pieces >= 1) {
+        move = { type: 'tileAndPiece', tile: adds[0]!, piece: { at: adds[0]!, kind: 'normal' } }
+      } else if (need === 2 && supply.tiles >= 2) {
+        move = { type: 'twoTiles', first: adds[0]!, second: adds[1]! }
+      }
+      if (!move || !validateMove(state, move).ok) continue
+      const sig = moveSig(move)
+      if (!seen.has(sig)) {
+        seen.add(sig)
+        out.push(move)
+      }
+    }
+  }
+  return out
+}
+
 // 후보 목록에 강제 차단수를 합친다(중복 제거). 빔 가지치기 뒤에 호출해 차단수가 살아남게 한다.
 function withForced(cands: Candidate[], forced: Move[]): Candidate[] {
   if (forced.length === 0) return cands
@@ -992,6 +1089,16 @@ function searchBestMove(
     if (!rootSeen.has(moveSig(m))) {
       rootSeen.add(moveSig(m))
       roots.push({ move: m })
+    }
+  }
+  // 전문가(lockedRun): 내 벌집을 잠가 "막을 수 없는 5목"을 만드는 잠금수를 루트에 강제 시딩한다
+  // (1수 평가는 낮아 보여도 잠근 직후 lockedRun 으로 깊이 가치가 드러난다). 루트에서만(빔 폭발 방지).
+  if (cfg.w.lockedRun !== 0) {
+    for (const m of lockingMoves(state)) {
+      if (!rootSeen.has(moveSig(m))) {
+        rootSeen.add(moveSig(m))
+        roots.push({ move: m })
+      }
     }
   }
 
