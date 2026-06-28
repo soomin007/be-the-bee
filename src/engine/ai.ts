@@ -137,6 +137,26 @@ function isGappedWin(board: Board, w: Hex, player: Player): boolean {
   return false
 }
 
+// before 국면에서 mover 가 상대 즉시 승리 위협(threats)을 "한 수로 모두 없앨" 합법수가 있었는가.
+// 위협 칸 하나를 내 말로 점유한 뒤 상대 승리칸이 0이 되면 true. 잠긴 상대 벌집 위 칸처럼 내가 둘 수
+// 없는 위협만 있으면(placementMove=null) false → "막을 수 없는 위협"이라 놓친 차단(블런더)이 아니다.
+// (이중 위협처럼 한 수로 다 못 막는 경우도 false — 그건 더 이른 수가 패인이지 이 수의 블런더가 아님.)
+function canBlockThreats(before: GameState, mover: Player, threats: readonly Hex[], queenAllowed: boolean): boolean {
+  const opp = opponent(mover)
+  for (const cell of threats) {
+    const m = placementMove(before, cell, mover)
+    if (!m) continue // 그 위협 칸에 내 말을 둘 합법수 없음(잠긴 상대 벌집 등)
+    let after: GameState
+    try {
+      after = applyMove(before, m)
+    } catch {
+      continue
+    }
+    if (winningCells(after.board, opp, after.supplies[opp], queenAllowed).length === 0) return true
+  }
+  return false
+}
+
 /**
  * before 상태에서 둔 move 를 분류(복기 해설 + 전문가 라이브 코칭 공용). 평범하면 null.
  * 우선순위: 승리 > 놓친 승리 > 놓친 차단 > 포크 > 차단 > 단일 위협 > 회랑끊기 > 벌집.
@@ -165,8 +185,17 @@ export function reviewMove(before: GameState, move: Move): MoveNote | null {
   const oppWinsBefore = winningCells(before.board, opp, before.supplies[opp], qa)
   const oppWinsAfter = winningCells(after.board, opp, after.supplies[opp], qa)
 
-  // 3) 놓친 차단(블런더): 상대가 즉시 승리 칸을 가졌는데 막지 못해 그대로 남김
-  if (oppWinsBefore.length > 0 && oppWinsAfter.length > 0) return 'missBlock'
+  // 3) 놓친 차단(블런더): 상대 즉시 승리 칸이 있었고, 내가 한 수로 막을 수 있었는데, 안 막아 그대로 남김.
+  //    "막을 수 있었나"(canBlockThreats)를 반드시 따진다 — 잠긴 상대 벌집 위 위협(§5)처럼 내 일반 말로
+  //    못 두는 칸은 애초에 막을 방법이 없어 블런더가 아니다(진짜 패인은 그 줄이 잠기기 전 더 이른 수).
+  //    표준 모드(여왕벌 OFF)에서 잠긴 상대 벌집 위 승리칸을 "놓친 차단"으로 비난하면 오진이다.
+  if (
+    oppWinsBefore.length > 0 &&
+    oppWinsAfter.length > 0 &&
+    canBlockThreats(before, mover, oppWinsBefore, qa)
+  ) {
+    return 'missBlock'
+  }
 
   // 내가 이 수로 새로 만든 위협(승리칸 = 떨어진 4목의 빈칸 포함). 2단계 가드를 지나 항상 신규.
   const myWinsAfter = winningCells(after.board, mover, after.supplies[mover], qa)
