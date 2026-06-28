@@ -2925,15 +2925,20 @@ export function mountGame(root: HTMLElement): void {
         ${personaBlock}
         <div class="modal-actions"><button data-act="ngBack">← 뒤로</button><button class="ng-start" data-act="ngStartAi">시작 🐝</button></div>`
     } else {
+      // 전문가는 성향을 무시(항상 최선)하므로, 그 색은 성향 선택을 숨기고 안내만(vsAi 단계와 동일 규칙).
+      const watchPersona = (diff: Difficulty, prefix: string, sel: Persona): string =>
+        diff === 'expert'
+          ? `<div class="ng-desc">전문가는 늘 최선의 수를 둬서 성향(공격형·수비형 등)을 따르지 않아요.</div>`
+          : `<div class="ng-label">성향</div>${personaRow(prefix, sel)}`
       inner = `
         <div class="modal-title">👀 AI 관전</div>
         <div class="modal-sub">두 AI의 난이도와 성향을 골라요.</div>
         <div class="ng-side-label">🟡 노랑</div>
         <div class="ng-label">난이도</div>${diffRow('ngDiffY', w.diffY)}
-        <div class="ng-label">성향</div>${personaRow('ngPersonaY', w.personaY)}
+        ${watchPersona(w.diffY, 'ngPersonaY', w.personaY)}
         <div class="ng-side-label">🟤 갈색</div>
         <div class="ng-label">난이도</div>${diffRow('ngDiffB', w.diffB)}
-        <div class="ng-label">성향</div>${personaRow('ngPersonaB', w.personaB)}
+        ${watchPersona(w.diffB, 'ngPersonaB', w.personaB)}
         <div class="modal-actions"><button data-act="ngBack">← 뒤로</button><button class="ng-start" data-act="ngStartWatch">시작 🐝</button></div>`
     }
     modalLayer.innerHTML = `<div class="modal-backdrop"><div class="modal-card ng-card">${inner}</div></div>`
@@ -3114,13 +3119,24 @@ export function mountGame(root: HTMLElement): void {
       PERSONAS.map((p) => `<option value="${p}" ${p === sel ? 'selected' : ''}>${PERSONA_LABEL[p]}</option>`).join('')
     const diffOpts = (sel: Difficulty): string =>
       DIFFS.map((dd) => `<option value="${dd}" ${dd === sel ? 'selected' : ''}>${DIFF_LABEL[dd]}</option>`).join('')
-    const sideRow = (icon: string, diffCtl: string, persona: Persona): string => `
+    const sideRow = (icon: string, diffCtl: string, persona: Persona): string => {
+      const diff: Difficulty = diffCtl === 'Yellow' ? settings.difficultyYellow : settings.difficultyBrown
+      // 전문가는 성향을 따르지 않으므로(항상 최선) 성향 select·설명을 숨기고 안내만 보여준다.
+      const isExpert = diff === 'expert'
+      const personaSel = isExpert
+        ? ''
+        : `<select data-ctl="persona${diffCtl}" aria-label="${icon} 성향" ${live ? 'disabled' : ''}>${personaOpts(persona)}</select>`
+      const personaDesc = isExpert
+        ? `<div class="persona-desc">전문가는 늘 최선의 수를 둬서 성향을 따르지 않아요.</div>`
+        : `<div class="persona-desc">${PERSONA_LABEL[persona]}: ${PERSONA_DESC[persona]}</div>`
+      return `
       <div class="persona-row">
         <span class="pr-label">${icon}</span>
-        <select data-ctl="difficulty${diffCtl}" aria-label="${icon} 난이도" ${live ? 'disabled' : ''}>${diffOpts(diffCtl === 'Yellow' ? settings.difficultyYellow : settings.difficultyBrown)}</select>
-        <select data-ctl="persona${diffCtl}" aria-label="${icon} 성향" ${live ? 'disabled' : ''}>${personaOpts(persona)}</select>
+        <select data-ctl="difficulty${diffCtl}" aria-label="${icon} 난이도" ${live ? 'disabled' : ''}>${diffOpts(diff)}</select>
+        ${personaSel}
       </div>
-      <div class="persona-desc">${PERSONA_LABEL[persona]}: ${PERSONA_DESC[persona]}</div>`
+      ${personaDesc}`
+    }
     let aiCtl = ''
     if (settings.mode === 'watch') {
       aiCtl = `
