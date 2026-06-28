@@ -1402,12 +1402,14 @@ export function mountGame(root: HTMLElement): void {
       const room = await createRoom(code0, 'yellow')
       enterOnline(room.id, true, 'waiting', 'yellow')
       const url = inviteUrl(room.id)
+      // 자동 복사(따로 복사 버튼 찾을 필요 없이 바로 붙여넣기). writeText 는 Promise 라 권한 거부 시
+      // catch 가 아닌 rejection 으로 새므로 .catch 로도 막는다(불가 환경은 아래 팝업 링크로 직접 복사).
       try {
-        void navigator.clipboard.writeText(url) // 자동 복사 — 따로 복사 버튼 찾을 필요 없이 바로 붙여넣기
+        void navigator.clipboard?.writeText(url).catch(() => {})
       } catch {
-        /* 클립보드 불가 환경: 아래 팝업의 링크를 직접 복사 */
+        /* navigator.clipboard 자체가 없는 환경 */
       }
-      onlineMsg = `방을 만들고 초대 링크를 복사했어요!\n${url}\n상대에게 붙여넣어 보내세요. 들어오면 선공·후공을 정해요.`
+      onlineMsg = `방을 만들고 초대 링크를 복사했어요!\n${url}\n상대에게 붙여넣어 보내세요. 들어오면 선공·후공을 정해요.\n\n두 명이 같이 접속해 있지 않아도 돼요. 이 기기에서 같은 링크로 다시 들어오면 이어서 둘 수 있고, 방은 마지막으로 둔 뒤 24시간 동안 유지돼요.`
       render()
     } catch (e) {
       onlineMsg = '방 만들기 실패: ' + (e as Error).message
@@ -2404,7 +2406,7 @@ export function mountGame(root: HTMLElement): void {
         ? `<div class="online-status wait-turn">⚠️ 상대 연결 끊김 · 방 ${online.roomId}</div>`
         : `<div class="online-status ${myOnlineTurn() && online.phase === 'playing' ? 'my-turn' : 'wait-turn'}">${
             online.phase === 'waiting'
-              ? `🔗 방 ${online.roomId} · 상대를 기다리는 중…`
+              ? `🔗 방 ${online.roomId} · 상대를 기다리는 중…<div class="online-hint">지금 창을 닫아도 괜찮아요. 이 기기에서 같은 링크로 다시 오면 이어서 둘 수 있어요.</div>`
               : online.phase === 'negotiating'
                 ? `🤝 방 ${online.roomId} · 선공·후공 정하는 중`
                 : myOnlineTurn()
