@@ -2467,11 +2467,12 @@ export function mountGame(root: HTMLElement): void {
         } else if (dangerCells.length > 0) {
           parts.push(`<div class="reach danger">⚠️ 상대가 다음 한 수로 5목을 둘 수 있어요. 막으세요!</div>`)
         } else if (oppCountdown) {
-          // 2~3수 남은 초읽기(리치보다 한발 이른 경고). 잠긴 벌집이라 사후 차단이 사실상 불가.
+          // 2~3수 남은 초읽기(리치보다 한발 이른 경고). 잠긴 벌집이라 그 줄을 끊는 건 불가능하므로
+          // (벌집 위엔 주인만 말을 놓을 수 있다 — rules.md §5) "끊으세요" 안내는 빼고 5목 경쟁만 권한다.
           parts.push(
             `<div class="reach danger">⏳ 상대 벌집 초읽기: ${oppCountdown.movesLeft}수 뒤 ${
               qn ? '5목(여왕벌로 한 번만 막을 수 있어요)' : '막을 수 없는 5목'
-            }. 지금 줄을 끊거나 더 빨리 5목을 노리세요.</div>`,
+            }. 더 빨리 5목을 노리세요.</div>`,
           )
         }
         // 내 벌집 초읽기는 유리 정보로 별도 표시(상대 위험과 동시에 떠도 됨).
