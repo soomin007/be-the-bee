@@ -59,6 +59,9 @@ export interface AiOptions {
   weights?: Partial<Weights> // 실험/튜닝용 가중치 오버라이드(성향 위에 덮어씀)
   engine?: 'search' | 'mcts' // 'mcts' = 몬테카를로 트리 탐색(실험). 기본 'search'(빔+negamax)
   mctsSims?: number // MCTS 시뮬레이션 수(기본 1200). 클수록 강하고 느리다
+  mctsRolloutDepth?: number // 롤아웃(플레이아웃) 깊이. 기본 MCTS_ROLLOUT_DEPTH. 0이면 leaf 평가만
+  mctsEpsilon?: number // 롤아웃 무작위 비율(0~1). 기본 MCTS_EPSILON
+  mctsRolloutWidth?: number // 롤아웃 greedy 에서 evaluate 할 후보 수 상한. 기본 MCTS_ROLLOUT_WIDTH
 }
 
 interface Cfg {
@@ -97,11 +100,16 @@ export function createAi(opts: AiOptions = {}): Ai {
   const cfg: Cfg = { ...cfgFor(difficulty), w }
   const rng = makeRng(opts.seed ?? 0xb17)
   const useMcts = opts.engine === 'mcts'
-  const sims = opts.mctsSims ?? 1200
+  const mctsParams: MctsParams = {
+    sims: opts.mctsSims ?? 1200,
+    rolloutDepth: opts.mctsRolloutDepth ?? MCTS_ROLLOUT_DEPTH,
+    epsilon: opts.mctsEpsilon ?? MCTS_EPSILON,
+    rolloutWidth: opts.mctsRolloutWidth ?? MCTS_ROLLOUT_WIDTH,
+  }
   return {
     chooseMove(state: GameState): Move {
       try {
-        return useMcts ? mctsChooseMove(state, cfg, rng, sims) : pickMove(state, cfg, rng)
+        return useMcts ? mctsChooseMove(state, cfg, rng, mctsParams) : pickMove(state, cfg, rng)
       } catch {
         return fallbackMove(state)
       }
@@ -1142,7 +1150,15 @@ const MCTS_SCALE = 80000 // tanh 정규화 스케일(평가값 → [-1,1])
 const MCTS_UCT_C = 1.2 // 탐색 상수
 const MCTS_ROLLOUT_DEPTH = 5 // 롤아웃 깊이(플레이아웃). 0 이면 leaf 평가만
 const MCTS_EPSILON = 0.4 // 롤아웃에서 무작위 비율(회랑 등 전략 형성 탐색)
+const MCTS_ROLLOUT_WIDTH = 64 // 롤아웃 greedy 에서 evaluate 할 후보 상한(비용 대부분 = evaluate×후보수)
 const PROVEN_BIAS = 1000 // 확정 노드를 선택에서 지배시키는 가중
+
+interface MctsParams {
+  sims: number
+  rolloutDepth: number
+  epsilon: number
+  rolloutWidth: number
+}
 
 interface MctsNode {
   readonly state: GameState
@@ -1198,17 +1214,17 @@ function immediateBlockMoves(state: GameState, me: Player): Move[] {
   return out
 }
 
-// 노드의 후보수(순위순 + 강제 시딩). 즉시 승리가 있으면 그 수만(전술 단축 → solver 즉시 확정승).
+// 노드의 후보수(+ 강제 시딩). 즉시 승리가 있으면 그 수만(전술 단축 → solver 즉시 확정승).
+// 순서는 generateCandidates 의 휴리스틱 순(말 근접→타일)을 그대로 쓴다 — 노드마다 evaluate×cap 으로
+// 재정렬하던 비용(프로파일상 확장 비용의 대부분)을 없앴다. 어차피 값 정렬은 UCT 가 시뮬레이션으로 한다.
 function mctsActions(state: GameState, cfg: Cfg, isRoot: boolean): Move[] {
   const me = state.turn
   const win = immediateWinMove(state, me)
   if (win) return [win]
   const cap = isRoot ? 18 : 10
   const ranked = generateCandidates(state, cfg)
-    .map((c) => ({ m: c.move, s: evaluate(resultBoard(state.board, c.move, me), me, cfg.w) }))
-    .sort((a, b) => b.s - a.s)
     .slice(0, cap)
-    .map((x) => x.m)
+    .map((c) => c.move)
   const seen = new Set(ranked.map(moveSig))
   const add = (m: Move): void => {
     const k = moveSig(m)
@@ -1224,9 +1240,9 @@ function mctsActions(state: GameState, cfg: Cfg, isRoot: boolean): Move[] {
 }
 
 // 가벼운 플레이아웃: 전술(즉시승/차단) + epsilon-greedy(평가). 회랑 등이 형성되게 잠금수도 포함.
-function mctsRollout(state: GameState, cfg: Cfg, rng: () => number): number {
+function mctsRollout(state: GameState, cfg: Cfg, rng: () => number, params: MctsParams): number {
   let s = state
-  for (let k = 0; k < MCTS_ROLLOUT_DEPTH && s.phase === 'playing'; k++) {
+  for (let k = 0; k < params.rolloutDepth && s.phase === 'playing'; k++) {
     const me = s.turn
     const win = immediateWinMove(s, me)
     if (win) {
@@ -1245,16 +1261,18 @@ function mctsRollout(state: GameState, cfg: Cfg, rng: () => number): number {
       const cands = generateCandidates(s, cfg).map((c) => c.move)
       if (cfg.w.lockedRun !== 0) for (const m of lockingMoves(s)) cands.push(m)
       if (cands.length === 0) break
-      if (rng() < MCTS_EPSILON) {
+      if (rng() < params.epsilon) {
         move = cands[Math.floor(rng() * cands.length)]!
       } else {
+        // greedy: 후보 상한(rolloutWidth)까지만 evaluate(비용 대부분이 evaluate×후보수).
+        const lim = Math.min(cands.length, params.rolloutWidth)
         let best = cands[0]!
         let bs = -Infinity
-        for (const m of cands) {
-          const v = evaluate(resultBoard(s.board, m, me), me, cfg.w)
+        for (let i = 0; i < lim; i++) {
+          const v = evaluate(resultBoard(s.board, cands[i]!, me), me, cfg.w)
           if (v > bs) {
             bs = v
-            best = m
+            best = cands[i]!
           }
         }
         move = best
@@ -1359,14 +1377,14 @@ function bestRootChild(root: MctsNode, rng: () => number): MctsNode {
   return mostVisitedChild(nonLoss.length > 0 ? nonLoss : root.children, P, rng)
 }
 
-function mctsChooseMove(state: GameState, cfg: Cfg, rng: () => number, sims: number): Move {
+function mctsChooseMove(state: GameState, cfg: Cfg, rng: () => number, params: MctsParams): Move {
   const me = state.turn
   const win = immediateWinMove(state, me) // 루트 즉시 승리 단축
   if (win) return win
   const root = makeMctsNode(state, null, cfg, true)
   if (root.untried.length === 0) return fallbackMove(state)
 
-  for (let i = 0; i < sims; i++) {
+  for (let i = 0; i < params.sims; i++) {
     const path: MctsNode[] = [root]
     let node = root
     // SELECTION: 완전 확장된 내부 노드를 따라 내려간다
@@ -1394,7 +1412,7 @@ function mctsChooseMove(state: GameState, cfg: Cfg, rng: () => number, sims: num
       const child = makeMctsNode(childState, m, cfg, false)
       node.children.push(child)
       path.push(child)
-      value = child.terminalVal !== null ? child.terminalVal : mctsRollout(child.state, cfg, rng)
+      value = child.terminalVal !== null ? child.terminalVal : mctsRollout(child.state, cfg, rng, params)
     } else value = leafValueYellow(node.state, cfg.w)
     // BACKUP(노랑 관점) + SOLVER(leaf→root)
     for (const n of path) {

@@ -18,7 +18,8 @@ function pieceCell(m: Move): string | null {
 
 describe('MCTS 엔진', () => {
   it('합법수만 두고 게임을 진행한다 (MCTS vs easy)', () => {
-    const mcts = createAi({ difficulty: 'expert', engine: 'mcts', mctsSims: 250, seed: 7 })
+    // 빠른 설정(롤아웃 얕게)으로 롤아웃 경로도 짚으면서 CI 빠르게.
+    const mcts = createAi({ difficulty: 'expert', engine: 'mcts', mctsSims: 250, mctsRolloutDepth: 2, mctsRolloutWidth: 6, seed: 7 })
     const easy = createAi({ difficulty: 'easy', seed: 11 })
     let state = createInitialState()
     let plies = 0
@@ -49,7 +50,8 @@ describe('MCTS 엔진', () => {
       infiniteTiles: false,
       queenEnabled: false,
     }
-    const ai = createAi({ difficulty: 'expert', engine: 'mcts', mctsSims: 800, seed: 3 })
+    // 롤아웃 없는 빠른 설정(잠금 시딩 + lockedRun 평가 + solver 로 잠금을 찾는다).
+    const ai = createAi({ difficulty: 'expert', engine: 'mcts', mctsSims: 1000, mctsRolloutDepth: 0, seed: 3 })
     const after = applyMove(state, ai.chooseMove(state))
     const cd = hiveCountdowns(after.board).find((c) => c.owner === 'brown')
     expect(cd?.movesLeft ?? 99).toBeLessThanOrEqual(2)
@@ -72,8 +74,9 @@ describe('MCTS 엔진', () => {
     let s = createInitialState()
     for (let i = 0; i < 3; i++) s = applyMove(s, moves[i]!) // 4수 직전(states[3])
     expect(s.turn).toBe('brown')
-    const ai = createAi({ difficulty: 'expert', engine: 'mcts', mctsSims: 1500, seed: 5 })
+    // 예방은 트리+solver 가 만든다(롤아웃 불필요) → 롤아웃 없이 sims 를 늘려 빠르게(~1s).
+    const ai = createAi({ difficulty: 'expert', engine: 'mcts', mctsSims: 2000, mctsRolloutDepth: 0, seed: 5 })
     const cell = pieceCell(ai.chooseMove(s))
     expect(cell !== null && corridor.has(cell)).toBe(true)
-  }, 120000)
+  }, 60000)
 })
