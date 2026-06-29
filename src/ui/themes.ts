@@ -100,6 +100,45 @@ export const COLOR_THEMES: ColorTheme[] = [
     hiveStroke: { yellow: '#ff9500', brown: '#0c1c4a' }, // 노랑 벽 쨍한 금주황(시인성↑), 남색 벽은 셀과 구분되게 더 짙은 남색
     hiveGlow: '#facc15',
   },
+  {
+    // 꽃 테마(분홍): 두 진영을 분홍 계열 두 톤으로 — 밝은 벚꽃 vs 진한 장미.
+    // 같은 계열이라 명도·채도 차를 크게 벌려 두 진영 말이 보드에서 또렷이 구분되게 한다.
+    // 진영 이름도 색에 맞춰 '벚꽃'/'장미'로 바꾼다(players).
+    id: 'blossom',
+    label: '벚꽃·장미',
+    desc: '분홍 꽃 테마',
+    players: { yellow: '벚꽃', brown: '장미' },
+    tile: {
+      yellow: { light: '#ffd9e8', mid: '#ff9ec6', dark: '#f06fa6', stroke: '#8a2a55' }, // 밝은 벚꽃 분홍
+      brown: { light: '#d65a93', mid: '#b21e62', dark: '#851146', stroke: '#470825' }, // 진한 장미 자홍
+    },
+    piece: {
+      yellow: { body: '#ff93c2', stripe: '#4a1030' }, // 연분홍 몸(어두운 줄무늬로 벌 줄 대비)
+      brown: { body: '#c02868', stripe: '#2c0617' }, // 진한 장미 몸
+    },
+    hiveFill: { yellow: '#ffc6de', brown: '#c44a85' },
+    hiveStroke: { yellow: '#e84a8f', brown: '#560c32' }, // 벚꽃 벽은 밝은 자홍, 장미 벽은 아주 짙게(셀과 구분↑)
+    hiveGlow: '#ec4899',
+  },
+  {
+    // 꽃 테마(초록): 밝은 민트 vs 진한 잎초록. 분홍과 마찬가지로 명도 차로 진영을 가른다.
+    // 진영 이름은 '민트'/'잎'.
+    id: 'meadow',
+    label: '민트·잎',
+    desc: '초록 꽃 테마',
+    players: { yellow: '민트', brown: '잎' },
+    tile: {
+      yellow: { light: '#c8f7dd', mid: '#5fe0a0', dark: '#2bbd78', stroke: '#136a3e' }, // 밝은 민트
+      brown: { light: '#4a9456', mid: '#2c7038', dark: '#1c5026', stroke: '#0c2c14' }, // 진한 잎초록
+    },
+    piece: {
+      yellow: { body: '#4dd698', stripe: '#053020' }, // 밝은 민트 몸
+      brown: { body: '#2a6b38', stripe: '#07210f' }, // 진한 잎 몸
+    },
+    hiveFill: { yellow: '#a8f0c8', brown: '#4a9258' },
+    hiveStroke: { yellow: '#16a34a', brown: '#0d3a1a' }, // 민트 벽은 또렷한 초록, 잎 벽은 아주 짙게
+    hiveGlow: '#22c55e',
+  },
 ]
 export const DEFAULT_THEME_ID = 'honey'
 
