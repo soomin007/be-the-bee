@@ -2,7 +2,7 @@
 // findLines 를 말 소유자로 호출한다, 벌집과 같은 스캐너, 다른 입력.
 
 import { cellAt, LINE_LENGTH, pieceAt, withPiece, withTile } from './state'
-import { hexFromKey, hexKey, hexNeighbors, type Hex } from './hex'
+import { HEX_AXES, hexAdd, hexFromKey, hexKey, hexNeighbors, hexSubtract, type Hex } from './hex'
 import { findLines } from './lines'
 import type { Board, Player } from './types'
 
@@ -49,6 +49,34 @@ export function completingCells(board: Board, player: Player): Hex[] {
       const tiled = cellAt(board, n) !== undefined ? board : withTile(board, n, player)
       if (detectWin(withPiece(tiled, n, { owner: player, kind: 'normal' })) === player) out.push(n)
     }
+  }
+  return out
+}
+
+/**
+ * player 의 "자라는 위협" 줄: 아직 5목은 아니지만(길이 3·4) 한쪽 끝으로 더 연장해 5목까지 갈 여지가
+ * 있는(열린 끝) 연속 말 직선들의 칸 목록. 코칭 '강하게' 에서 "상대가 노리는 줄"을 미리 강조하는 데 쓴다.
+ * 양끝이 다 막힌(죽은) 줄은 제외한다. 순수 함수(DOM 무관).
+ */
+export function threatLines(board: Board, player: Player): string[][] {
+  const owners = new Map<string, Player>()
+  for (const key of Object.keys(board)) {
+    const p = board[key]!.piece
+    if (p && p.owner === player) owners.set(key, player)
+  }
+  // 끝 너머 칸으로 연장 가능: 말이 없고(누구든) + 타일이 있거나 타일 옆이라 놓을 수 있음.
+  const extendable = (c: Hex): boolean => {
+    if (pieceAt(board, c) !== undefined) return false
+    if (cellAt(board, c) !== undefined) return true
+    return hexNeighbors(c).some((n) => cellAt(board, n) !== undefined)
+  }
+  const out: string[][] = []
+  for (const line of findLines(owners, 3)) {
+    if (line.cells.length >= LINE_LENGTH) continue // 이미 5목(승리 판정에서 처리)
+    const dir = HEX_AXES[line.axis]!
+    const before = hexSubtract(hexFromKey(line.cells[0]!), dir)
+    const after = hexAdd(hexFromKey(line.cells[line.cells.length - 1]!), dir)
+    if (extendable(before) || extendable(after)) out.push(line.cells.map((c) => c))
   }
   return out
 }

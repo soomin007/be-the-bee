@@ -19,6 +19,7 @@ import {
   notePolarity,
   opponent,
   reviewMove,
+  threatLines,
   totalHiveScores,
   validateMove,
   validatePiecePlacement,
@@ -173,14 +174,20 @@ const AI_LOADING_MIN_SHOW_MS = 550 // 오버레이가 한 번 뜨면 최소 이�
 const FEEDBACK_URL = 'https://forms.gle/qf5VA1xytdLojHtp9'
 
 
+// 코칭(훈수) 강도 단계.
+type CoachLevel = 'off' | 'basic' | 'strong'
+const COACH_LABEL: Record<CoachLevel, string> = { off: '끄기', basic: '기본', strong: '강하게' }
+const COACH_NEXT: Record<CoachLevel, CoachLevel> = { off: 'basic', basic: 'strong', strong: 'off' }
+
 // 방(매치) 설정. 지금은 로컬에서 패널로 바꾸지만, 멀티플레이에서는 게임 시작 전 로비에서
 // 방장이 정해 양쪽에 공통 적용되는 "방 설정"이 되도록 한 곳에 모아 둔다(직렬화 가능).
 interface RoomSettings {
   mode: Mode
   aiDifficulty: Difficulty
   aiSide: Player // vsAi 에서 AI 가 두는 색. 기본 'brown'(사람=노랑 선공). 'yellow' 면 사람이 후공(갈색) 연습.
-  hints: boolean // 훈수(승리 힌트): 내가 5목 둘 칸·내 벌집 초읽기 등 "유리" 정보. 기본 꺼짐.
-  dangerAlerts: boolean // 위험 경고: 상대가 다음 한 수로 5목·막을 수 없는 벌집(사이렌). 기본 켜짐.
+  // 코칭(훈수) 강도: off=도움 없음 / basic=상대 즉시 5목·막을 수 없는 벌집 경고(기본) /
+  // strong=거기에 더해 상대의 "자라는 위협"(연결 3목 등) 강조 + 내 승리 자리·벌집 초읽기 힌트.
+  coachLevel: CoachLevel
   queen: boolean // 여왕벌 모드(확장, 숙련자용). 기본 꺼짐. AI 는 사용 안 함
   infiniteTiles: boolean // 무한 모드(디지털 변형): 타일 제한 없음. 기본 꺼짐
   bgmTrack: number // BGM_TRACKS 인덱스
@@ -218,8 +225,7 @@ function defaultSettings(): RoomSettings {
     mode: 'hotseat',
     aiDifficulty: 'medium',
     aiSide: 'brown',
-    hints: false,
-    dangerAlerts: true, // 위험 경고는 기본 켜짐(초보가 지는 걸 놓치지 않게). 설정에서 끌 수 있음.
+    coachLevel: 'basic', // 기본=상대 즉시 5목 경고 켜짐(초보가 지는 걸 놓치지 않게). 끄기/강하게로 조절.
     queen: false,
     infiniteTiles: false,
     bgmTrack: 0,
@@ -272,8 +278,15 @@ function loadSettings(): RoomSettings {
     return {
       mode: MODES.includes(s.mode as Mode) ? (s.mode as Mode) : d.mode,
       aiDifficulty: DIFFS.includes(s.aiDifficulty as Difficulty) ? (s.aiDifficulty as Difficulty) : d.aiDifficulty,
-      hints: typeof s.hints === 'boolean' ? s.hints : d.hints,
-      dangerAlerts: typeof s.dangerAlerts === 'boolean' ? s.dangerAlerts : d.dangerAlerts,
+      coachLevel: ((): CoachLevel => {
+        const cl = (s as { coachLevel?: unknown }).coachLevel
+        if (cl === 'off' || cl === 'basic' || cl === 'strong') return cl
+        // 구버전(hints/dangerAlerts 불리언) 이전: hints→강하게, dangerAlerts 끔→끄기, 그 외→기본.
+        const old = s as { hints?: unknown; dangerAlerts?: unknown }
+        if (old.hints === true) return 'strong'
+        if (old.dangerAlerts === false) return 'off'
+        return d.coachLevel
+      })(),
       queen: typeof s.queen === 'boolean' ? s.queen : d.queen,
       infiniteTiles: typeof s.infiniteTiles === 'boolean' ? s.infiniteTiles : d.infiniteTiles,
       bgmTrack:
@@ -438,6 +451,7 @@ export function mountGame(root: HTMLElement): void {
   // 리치(한 수로 5목) 칸, render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
+  let developCells: Hex[] = [] // 코칭 '강하게': 상대의 "자라는 위협"(연결 3+목) 칸
   // 벌집 초읽기(잠긴 벌집 위 안전한 5목까지 N수). render 가 채우고 boardNotes 가 읽는다.
   let oppCountdown: HiveCountdown | null = null // 상대 벌집 초읽기 = 나에게 위험
   let myCountdown: HiveCountdown | null = null // 내 벌집 초읽기 = 나에게 유리
@@ -1306,7 +1320,7 @@ export function mountGame(root: HTMLElement): void {
       }
     }
     // 위험 경고가 켜져 있으면 새 차례가 위협받을 때(상대가 다음 한 수로 5목 가능) 경고음
-    if (settings.dangerAlerts && state.phase === 'playing') {
+    if (settings.coachLevel !== 'off' && state.phase === 'playing') {
       const opp = opponent(state.turn)
       if (winningCells(state.board, opp, state.supplies[opp], settings.queen).length > 0) sound.alert()
     }
@@ -2025,20 +2039,30 @@ export function mountGame(root: HTMLElement): void {
     //  · 승리 힌트(hints, 기본 꺼짐): 내가 5목 둘 칸·내 벌집 초읽기 등 "유리" 정보.
     dangerCells = []
     winNowCells = []
+    developCells = []
     oppCountdown = null
     myCountdown = null
     if (state.phase === 'playing' && !replaying) {
       const opp = opponent(state.turn)
+      const coach = settings.coachLevel
       // 분석은 그 판의 여왕벌 모드를 반영한다(queenEnabled). 표준 모드면 잠긴 상대 벌집 칸은 어느
       // 쪽도 둘 수 없으니 리치가 아니다 — 엔진 winningCells 의 queenAllowed 가 직접 가른다.
-      if (settings.dangerAlerts) dangerCells = winningCells(state.board, opp, state.supplies[opp], settings.queen)
-      if (settings.hints) winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn], settings.queen)
-      // 벌집 초읽기: 잠긴 벌집 위 "막을 수 없는 5목"까지 남은 수. 상대=위험 경고, 나=승리 힌트로 갈라 게이팅.
-      if (settings.dangerAlerts || settings.hints) {
+      if (coach !== 'off') dangerCells = winningCells(state.board, opp, state.supplies[opp], settings.queen)
+      if (coach === 'strong') winNowCells = winningCells(state.board, state.turn, state.supplies[state.turn], settings.queen)
+      // 강하게: 상대의 "자라는 위협"(연결 3+목, 곧 5목 될 줄)을 미리 강조. 즉시 위협(dangerCells)과
+      // 겹치는 칸은 빼서 빨강(즉시)이 우선 보이게 한다.
+      if (coach === 'strong') {
+        const dk = new Set(dangerCells.map((c) => hexKey(c)))
+        for (const line of threatLines(state.board, opp)) {
+          for (const k of line) if (!dk.has(k)) developCells.push(hexFromKey(k))
+        }
+      }
+      // 벌집 초읽기: 잠긴 벌집 위 "막을 수 없는 5목"까지 남은 수. 상대=경고(기본+), 나=힌트(강하게).
+      if (coach !== 'off') {
         for (const cd of hiveCountdowns(state.board)) {
           if (cd.owner === state.turn) {
-            if (settings.hints) myCountdown = cd
-          } else if (settings.dangerAlerts) oppCountdown = cd
+            if (coach === 'strong') myCountdown = cd
+          } else oppCountdown = cd
         }
       }
       // 상대 초읽기 줄을 보드에 점선 윤곽으로 강조 — 어디가 위험한지 한눈에.
@@ -2056,6 +2080,18 @@ export function mountGame(root: HTMLElement): void {
         }
       }
       // 리치 칸은 "붕붕" 모션(buzz = 펄스 + 미세 진동)으로 더 눈에 띄게.
+      // 자라는 위협(강하게): 상대 연결 3+목을 주황 점선으로 — 즉시 위협(빨강 붕붕)보다 덜 급하게.
+      for (const c of developCells) {
+        content.appendChild(
+          makeHexPolygon(hexToPixel(c), {
+            fill: 'none',
+            stroke: '#ea580c',
+            strokeWidth: 2.5,
+            dash: true,
+            interactive: false,
+          }),
+        )
+      }
       for (const c of dangerCells) {
         content.appendChild(
           makeHexPolygon(hexToPixel(c), {
@@ -3237,8 +3273,7 @@ export function mountGame(root: HTMLElement): void {
         <button data-act="toggleDark" class="${settings.darkMode ? 'active' : ''}" title="페이지 전체를 어둡게(눈 편하게)">${ICON.moon} 다크 모드</button>
         <button data-act="toggle3d" class="${settings.board3d ? 'active' : ''}" title="보드를 3D(three.js)로 표시">${ICON.cube3d} 3D 보드</button>
         <button data-act="toggleActionPos" title="행동 버튼을 보드 위/아래 중 어디에 둘지">${ICON.keyboard} 행동 버튼 ${settings.actionBarPos === 'top' ? '⬆ 위' : '⬇ 아래'}</button>
-        <button data-act="toggleDanger" class="${settings.dangerAlerts ? 'active' : ''}" title="상대가 이길 위기(다음 한 수로 5목·막을 수 없는 벌집)면 알려줘요">${ICON.warning} 위험 경고</button>
-        <button data-act="toggleHints" class="${settings.hints ? 'active' : ''}" title="내가 5목 둘 칸·내 벌집 초읽기 등 유리한 정보를 보여줘요">${ICON.bulb} 승리 힌트</button>
+        <button data-act="cycleCoach" class="${settings.coachLevel !== 'off' ? 'active' : ''}" title="코칭(훈수) 강도 — 끄기: 도움 없음 / 기본: 상대가 다음 한 수로 5목이면 경고 / 강하게: 상대의 자라는 위협(연결 3목)도 미리 강조 + 내 승리 자리·벌집 초읽기 힌트">${ICON.bulb} 코칭: ${COACH_LABEL[settings.coachLevel]}</button>
         <button data-act="resetView" title="${settings.board3d ? '3D 카메라(시점·줌)를 처음 위치로' : '보드 확대·이동을 처음 상태로'}">${ICON.recenter} 카메라 리셋</button>
       </div>`
     const settingsSummary =
@@ -3620,12 +3655,9 @@ export function mountGame(root: HTMLElement): void {
       case 'closeModal':
         modalDismissed = true
         break
-      case 'toggleHints':
-        settings.hints = !settings.hints
-        break
-      case 'toggleDanger':
-        settings.dangerAlerts = !settings.dangerAlerts
-        notice = settings.dangerAlerts ? '위험 경고 ON' : '위험 경고 OFF'
+      case 'cycleCoach':
+        settings.coachLevel = COACH_NEXT[settings.coachLevel]
+        notice = `코칭 ${COACH_LABEL[settings.coachLevel]}`
         break
       case 'toggle3d':
         settings.board3d = !settings.board3d
