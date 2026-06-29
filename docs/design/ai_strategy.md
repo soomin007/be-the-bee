@@ -16,8 +16,9 @@
 
 ## AI 설계 요약 (`src/engine/ai.ts`)
 
-- **난이도 = 탐색 깊이**: easy 1수 평가 / medium 빔 깊이 2 / hard 빔 깊이 4 (negamax + 알파-베타,
-  노드당 후보 상한).
+- **난이도**: easy 1수 평가 / medium 빔 깊이 2 / hard 빔 깊이 4 (negamax + 알파-베타, 노드당 후보
+  상한) / **expert = MCTS 엔진**(2026-06-29~). easy/medium/hard 는 빔서치, 전문가만 MCTS(가성비 설정
+  ~5s/수, 빔 expert 상대 self-play 5-1 + 회랑 예방). 빔 expert 가 필요하면 `engine:'search'` 로 호출.
 - **성향(persona) = 평가 가중치 프로파일**: 즉시 승리/차단은 모든 성향 공통(자멸 방지), "어디에
   가치를 두는가"만 달라진다.
   - **balanced(균형)**: 공격·수비 고르게(기본 가중치).
@@ -225,8 +226,14 @@
   - **강한 모드**(분석): 기본값 `depth=5, width=64` → **15-3** 이지만 ~16~31s/수.
   - 막다른 길: 룰 기반 경량 롤아웃(런 연장/차단, evaluate 없음)은 값이 오도돼 예방을 잃어 되돌림.
   - **예방은 트리+solver 가 만든다**(롤아웃 무관) — 그래서 빠른 모드도 예방한다.
-- **상태**: `engine:'mcts'` 실험 플래그(기본 OFF, 기본 설정=강한 모드) 뒤 보존. UI 노출 시 빠른 모드를
-  기본으로 쓸지 결정 필요(usable vs 15-3 정체성).
+- **채택(2026-06-29)**: **전문가 난이도가 이제 MCTS 를 기본 엔진으로 쓴다.** 설정은 사용자 선택(~5s/수
+  허용)에 맞춘 "가성비" 값: `rolloutDepth=2, rolloutWidth=16, sims=1000`(상수 MCTS_*). **빔 expert 상대
+  self-play 5-1**(양 진영, N=3)로 더 강하고, 게임1류 짧은 회랑을 예방하며 평균 ~4.8s/수.
+  - **한계(정직)**: 게임2(대각선)·게임3(긴 q=4) 같은 **먼 지평 회랑은 ~5s 안엔 예방 못 한다**(sims 를
+    올려도 안 됨, 9s+ 까지 X). 그건 깊은 롤아웃(15-3·16~31s)이 필요 — 분석용 파라미터로만.
+  - **UX 메모**: chooseMove 는 동기라 ~2~5s 메인스레드 점유(옛 expert 후반 2~30s 와 같은 성질, 오히려
+    더 균일). 거슬리면 Web Worker 로 빼는 게 후속 과제.
+  - 빔 expert 와 대조/테스트는 `engine:'search'`. 강한 모드는 `mctsRolloutDepth:5, mctsRolloutWidth:64`.
 - **재현**: `createAi({ difficulty:'expert', engine:'mcts', mctsSims:800 })` head-to-head, 또는
   `tests/ai-mcts.test.ts`(합법·공격·예방 회귀). 상세 일지: `session_logs/2026-06-29.md` 세션 2.
 

@@ -447,7 +447,7 @@ describe('AI: 전문가가 벌어진 3목을 잠기기 전에 끊는다 (벌집-
     for (const tok of PREFIX.split(';')) state = applyMove(state, parseMove(tok))
     expect(state.turn).toBe('brown') // 28수(갈색=AI) 차례
 
-    const move = createAi({ difficulty: 'expert', seed: 0x2222 }).chooseMove(state)
+    const move = createAi({ difficulty: 'expert', engine: 'search', seed: 0x2222 }).chooseMove(state)
     expect(validateMove(state, move).ok).toBe(true)
     const at = move.type === 'twoTiles' ? null : move.piece.at
     const breaksSpread = at !== null && (hexEquals(at, hex(-3, 0)) || hexEquals(at, hex(-1, -2)))

@@ -52,7 +52,8 @@ describe('lockedRun — 잠긴 벌집 안 막을 수 없는 5목 공격 인식',
     expect(brownMovesLeft(state.board)).toBeNull() // 아직 안 잠김
     // 두 시드로 일관되게 잠그는지(동점 tie-break 영향 배제).
     for (const seed of [12345, 777]) {
-      const ai = createAi({ difficulty: 'expert', seed })
+      // lockedRun 평가 항이 빔 search 에서 잠금을 찾는지 검증(전문가 기본 MCTS 라 search 로 고정).
+      const ai = createAi({ difficulty: 'expert', engine: 'search', seed })
       const move: Move = ai.chooseMove(state)
       const after = applyMove(state, move)
       expect(brownMovesLeft(after.board), `seed ${seed}`).not.toBeNull()
@@ -62,7 +63,7 @@ describe('lockedRun — 잠긴 벌집 안 막을 수 없는 5목 공격 인식',
 
   it('lockedRun 을 끄면(가중치 0) 같은 위치에서 잠금을 놓친다(이 항이 원인임을 확인)', () => {
     const state = makeLockableCorridor()
-    const ai = createAi({ difficulty: 'expert', seed: 12345, weights: { lockedRun: 0 } })
+    const ai = createAi({ difficulty: 'expert', engine: 'search', seed: 12345, weights: { lockedRun: 0 } })
     const after = applyMove(state, ai.chooseMove(state))
     // OFF 면 잠그지 않아 갈색 카운트다운이 안 생긴다(맹점 재현).
     expect(brownMovesLeft(after.board)).toBeNull()

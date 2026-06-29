@@ -33,13 +33,14 @@ describe('전문가 AI 방어/성향', () => {
   // 전문가(expert) 탐색은 무거워 기본 5s 타임아웃을 CI(느린 러너)에서 넘긴다 → ai.test.ts 와 같이
   // it 별 타임아웃을 넉넉히 준다(②는 chooseMove 를 2번 호출해 더 오래 걸림).
   it('① 잠기지 않은 열린 3목의 끝을 막는다', () => {
-    const m = createAi({ difficulty: 'expert' }).chooseMove(openThreeState())
+    // 빔 search 엔진의 결정적 차단을 검증(전문가 기본은 MCTS 라 engine:'search' 로 고정).
+    const m = createAi({ difficulty: 'expert', engine: 'search' }).chooseMove(openThreeState())
     expect(blocksEnd(m)).toBe(true) // (-1,0) 또는 (3,0) 에 갈색 말 → 차단
   }, 30000)
 
   it('② 성향과 무관하게 동일한 수를 둔다(전문가=성향 무시)', () => {
-    const agg = createAi({ difficulty: 'expert', persona: 'aggressive' }).chooseMove(openThreeState())
-    const def = createAi({ difficulty: 'expert', persona: 'defensive' }).chooseMove(openThreeState())
+    const agg = createAi({ difficulty: 'expert', engine: 'search', persona: 'aggressive' }).chooseMove(openThreeState())
+    const def = createAi({ difficulty: 'expert', engine: 'search', persona: 'defensive' }).chooseMove(openThreeState())
     expect(JSON.stringify(agg)).toBe(JSON.stringify(def)) // 성향 무시 → 완전히 같은 선택
     expect(blocksEnd(agg)).toBe(true)
   }, 30000)

@@ -99,9 +99,11 @@ export function createAi(opts: AiOptions = {}): Ai {
   const w: Weights = { ...makeWeights(persona), ...expertOverlay, ...(opts.weights ?? {}) }
   const cfg: Cfg = { ...cfgFor(difficulty), w }
   const rng = makeRng(opts.seed ?? 0xb17)
-  const useMcts = opts.engine === 'mcts'
+  // 전문가 난이도는 기본으로 MCTS 엔진을 쓴다(빔 search 보다 강함 — self-play 5-1). 빔 search 가
+  // 필요하면(테스트/대조) engine:'search' 로 명시. 그 외 난이도(easy/medium/hard)는 빔 그대로.
+  const useMcts = opts.engine === 'mcts' || (opts.engine !== 'search' && isExpert)
   const mctsParams: MctsParams = {
-    sims: opts.mctsSims ?? 1200,
+    sims: opts.mctsSims ?? MCTS_DEFAULT_SIMS,
     rolloutDepth: opts.mctsRolloutDepth ?? MCTS_ROLLOUT_DEPTH,
     epsilon: opts.mctsEpsilon ?? MCTS_EPSILON,
     rolloutWidth: opts.mctsRolloutWidth ?? MCTS_ROLLOUT_WIDTH,
@@ -1146,11 +1148,14 @@ function searchBestMove(
 // 노린다. 엔진(applyMove/evaluate/generateCandidates)을 재사용한다. 값은 전부 **노랑 관점** [-1,1]
 // (종료 승=±1, 점수승=±0.85, 비종료=tanh(evaluate/SCALE)). 2인 제로섬이라 선택 시 노드의 둘 차례
 // (player)를 보고 max 방향만 바꾼다(엣지별 부호 불필요).
+// 기본 설정 = "전문가 가성비"(~5s/수): 빔 expert 상대 self-play 5-1, 회랑(짧은) 예방. depth/width 를
+// 올리면 더 세지만(예: 5/64 = 15-3) 16~31s/수로 실전 부적합 → 분석용으로만 파라미터로 키운다.
 const MCTS_SCALE = 80000 // tanh 정규화 스케일(평가값 → [-1,1])
 const MCTS_UCT_C = 1.2 // 탐색 상수
-const MCTS_ROLLOUT_DEPTH = 5 // 롤아웃 깊이(플레이아웃). 0 이면 leaf 평가만
+const MCTS_ROLLOUT_DEPTH = 2 // 롤아웃 깊이(플레이아웃). 0 이면 leaf 평가만. 깊을수록 강하고 느리다
 const MCTS_EPSILON = 0.4 // 롤아웃에서 무작위 비율(회랑 등 전략 형성 탐색)
-const MCTS_ROLLOUT_WIDTH = 64 // 롤아웃 greedy 에서 evaluate 할 후보 상한(비용 대부분 = evaluate×후보수)
+const MCTS_ROLLOUT_WIDTH = 16 // 롤아웃 greedy 에서 evaluate 할 후보 상한(비용 대부분 = evaluate×후보수)
+const MCTS_DEFAULT_SIMS = 1000 // 기본 시뮬레이션 수
 const PROVEN_BIAS = 1000 // 확정 노드를 선택에서 지배시키는 가중
 
 interface MctsParams {
