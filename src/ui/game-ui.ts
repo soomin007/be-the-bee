@@ -167,7 +167,8 @@ function noteLine(note: MoveNote): string {
   return `${notePolarity(note) === 'bad' ? '✗' : '✓'} ${NOTE_TEXT[note]}`
 }
 const AI_DELAY_MS = 350
-const AI_LOADING_THRESHOLD_MS = 450 // 이보다 오래 걸리는 AI 계산에만 로딩 오버레이를 띄운다(깜빡임 방지)
+const AI_LOADING_THRESHOLD_MS = 800 // 이보다 오래 걸리는 AI 계산에만 로딩 오버레이(초반 빠른 수 깜빡임 방지)
+const AI_LOADING_MIN_SHOW_MS = 550 // 오버레이가 한 번 뜨면 최소 이만큼 유지(잠깐 떴다 사라지는 깜빡임 방지)
 // 사용자 피드백 설문(구글폼). 크레딧 밑 '피드백 보내기' 버튼이 새 창으로 연다.
 const FEEDBACK_URL = 'https://forms.gle/qf5VA1xytdLojHtp9'
 
@@ -470,6 +471,7 @@ export function mountGame(root: HTMLElement): void {
   // AI 계산을 Web Worker 로 비동기 처리(메인 스레드 멈춤 방지). 워커가 없으면(테스트/구형) 동기 폴백.
   let aiReqId = 0 // 최신 요청 id. 리셋/무르기 시 증가시켜 오래된 워커 응답을 무시한다.
   let loadingTimer: number | null = null // 로딩 오버레이 지연 표시 타이머
+  let overlayShownAt: number | null = null // 오버레이를 띄운 시각(최소 표시 시간 보장용), 안 떴으면 null
   let tipTimer: number | null = null // 팁 회전 타이머
   let aiWorker: Worker | null = null
   let aiWorkerTried = false // 워커 1회 지연 생성 플래그
@@ -692,12 +694,14 @@ export function mountGame(root: HTMLElement): void {
   }
   function showAiThinking(): void {
     setTipText()
+    overlayShownAt = Date.now()
     aiThinkingLayer.classList.add('show')
     aiThinkingLayer.setAttribute('aria-hidden', 'false')
     if (tipTimer !== null) clearInterval(tipTimer)
     tipTimer = window.setInterval(setTipText, 3400) // 엘레베이터 거울: 기다리는 동안 팁을 돌린다
   }
   function hideAiThinking(): void {
+    overlayShownAt = null
     aiThinkingLayer.classList.remove('show')
     aiThinkingLayer.setAttribute('aria-hidden', 'true')
     if (tipTimer !== null) {
@@ -1771,16 +1775,20 @@ export function mountGame(root: HTMLElement): void {
     }, AI_LOADING_THRESHOLD_MS)
     requestAiMove(side, state, (result) => {
       if (reqId !== aiReqId) return // 오래된/취소된 요청(리셋·무르기 등)
-      // 계산 끝 → 로딩 오버레이 종료. 남은 delay 동안은 보드만 보인다(관전 페이싱).
+      // 아직 임계값 전이면 오버레이 자체를 취소(빠른 수는 안 띄움).
       if (loadingTimer !== null) {
         clearTimeout(loadingTimer)
         loadingTimer = null
       }
-      hideAiThinking()
-      const wait = Math.max(0, delay - (Date.now() - started))
+      // 적용 시각 = max(페이싱 delay, 오버레이가 떴으면 최소 표시 시간). 오버레이는 그때까지 유지해
+      // "잠깐 떴다 사라지는" 깜빡임을 막는다.
+      let applyAt = started + delay
+      if (overlayShownAt !== null) applyAt = Math.max(applyAt, overlayShownAt + AI_LOADING_MIN_SHOW_MS)
+      const wait = Math.max(0, applyAt - Date.now())
       aiTimer = window.setTimeout(() => {
         aiTimer = null
         if (reqId !== aiReqId) return
+        hideAiThinking()
         aiThinking = false
         if (result.error || !result.move) {
           message = 'AI가 둘 곳을 찾지 못했어요. 무르기나 새 게임을 눌러 주세요.'

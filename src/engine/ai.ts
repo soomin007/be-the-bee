@@ -1388,6 +1388,10 @@ function mctsChooseMove(state: GameState, cfg: Cfg, rng: () => number, params: M
   const me = state.turn
   const win = immediateWinMove(state, me) // 루트 즉시 승리 단축
   if (win) return win
+  // 상대 즉시 5목 위협(완성된 4목 등)은 MCTS 를 안 돌리고 바로 막는다 — 강제 수라 탐색이 불필요하고,
+  // 빔 expert 와 동일하게 즉답한다(MCTS 로 매번 ~수 초 고민하던 문제). 못 막는 위협이면 null → MCTS 로.
+  const block = findBlock(state, me, cfg.w)
+  if (block) return block
   const root = makeMctsNode(state, null, cfg, true)
   if (root.untried.length === 0) return fallbackMove(state)
 
