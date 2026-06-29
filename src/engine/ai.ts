@@ -1153,7 +1153,9 @@ function searchBestMove(
 const MCTS_SCALE = 80000 // tanh 정규화 스케일(평가값 → [-1,1])
 const MCTS_UCT_C = 1.2 // 탐색 상수
 const MCTS_ROLLOUT_DEPTH = 2 // 롤아웃 깊이(플레이아웃). 0 이면 leaf 평가만. 깊을수록 강하고 느리다
-const MCTS_EPSILON = 0.4 // 롤아웃에서 무작위 비율(회랑 등 전략 형성 탐색)
+// 롤아웃 무작위 비율. 높으면(0.4) 값 추정이 노이지해 "안 막으면 진다"를 놓쳐 기본 방어(열린 3목 차단)가
+// 불안정해진다(전문가끼리 13수 속결 사례). 회랑 예방은 트리+solver 가 하므로 무작위가 거의 불필요 → 낮춤.
+const MCTS_EPSILON = 0.1
 const MCTS_ROLLOUT_WIDTH = 16 // 롤아웃 greedy 에서 evaluate 할 후보 상한(비용 대부분 = evaluate×후보수)
 const MCTS_DEFAULT_SIMS = 1000 // 기본 시뮬레이션 수
 const PROVEN_BIAS = 1000 // 확정 노드를 선택에서 지배시키는 가중
