@@ -29,6 +29,7 @@
 | `verify-watch-persona.mjs` | 관전 색깔별 난이도 + 성향 설명 + 종료 시 자동 멈춤 (+ `shots/panel-watch2.png`) |
 | `verify-infinite.mjs` | 무한 모드 토글 → 자원 타일 ∞ 표시 + 설정 영속 |
 | `verify-expert.mjs` | 전문가 난이도 메뉴 노출 + vs AI 응수 + 에러 없음 |
+| `verify-ai-loading.mjs` | AI 계산을 Web Worker 로 분리 + 로딩 오버레이/팁 표시 + 계산 중 메인스레드 무프리즈(page.evaluate 즉답) |
 
 ## shot-* (시각 미리보기 — PNG 저장)
 | 파일 | 산출물 |

@@ -26,7 +26,8 @@ import {
   winningLine,
   withTile,
 } from '../engine/index'
-import type { Ai, Difficulty, GameState, Hex, HiveCountdown, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
+import type { Ai, AiOptions, Difficulty, GameState, Hex, HiveCountdown, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
+import { nextTip } from './tips'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, DEFAULT_THEME_ID, themeById, type ColorTheme } from './themes'
@@ -166,6 +167,7 @@ function noteLine(note: MoveNote): string {
   return `${notePolarity(note) === 'bad' ? '✗' : '✓'} ${NOTE_TEXT[note]}`
 }
 const AI_DELAY_MS = 350
+const AI_LOADING_THRESHOLD_MS = 450 // 이보다 오래 걸리는 AI 계산에만 로딩 오버레이를 띄운다(깜빡임 방지)
 // 사용자 피드백 설문(구글폼). 크레딧 밑 '피드백 보내기' 버튼이 새 창으로 연다.
 const FEEDBACK_URL = 'https://forms.gle/qf5VA1xytdLojHtp9'
 
@@ -465,6 +467,15 @@ export function mountGame(root: HTMLElement): void {
   let aiBrown: Ai | null = null
   let aiThinking = false // 재진입 가드 + 입력 잠금
   let aiTimer: number | null = null
+  // AI 계산을 Web Worker 로 비동기 처리(메인 스레드 멈춤 방지). 워커가 없으면(테스트/구형) 동기 폴백.
+  let aiReqId = 0 // 최신 요청 id. 리셋/무르기 시 증가시켜 오래된 워커 응답을 무시한다.
+  let loadingTimer: number | null = null // 로딩 오버레이 지연 표시 타이머
+  let tipTimer: number | null = null // 팁 회전 타이머
+  let aiWorker: Worker | null = null
+  let aiWorkerTried = false // 워커 1회 지연 생성 플래그
+  let pendingAiId = -1
+  let pendingAiCb: ((r: { move?: Move; error?: string }) => void) | null = null
+  let lastTip = '' // 직전 팁(연속 중복 방지)
   let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === settings.aiSide)
@@ -481,24 +492,74 @@ export function mountGame(root: HTMLElement): void {
       return online.phase === 'playing' && state.turn !== online.mySide && !undoUsed[online.mySide] && !online.undoReq
     return !(settings.mode === 'hotseat' && undoUsed[opponent(state.turn)])
   }
-  const aiForTurn = (turn: Player): Ai | null => (turn === 'yellow' ? aiYellow : aiBrown)
   // 그 진영을 두는 AI 의 난이도(해설은 전문가일 때만). 관전은 색깔별, vsAi 는 단일.
   const aiDifficultyFor = (turn: Player): Difficulty =>
     settings.mode === 'watch' ? (turn === 'yellow' ? settings.difficultyYellow : settings.difficultyBrown) : settings.aiDifficulty
+  // 한 진영을 두는 AI 의 옵션(없으면 null). 시드는 진영별로 다르게(거울 대국 방지).
+  // 메인 폴백 AI 생성과 워커 init 둘 다 이걸 써서 설정이 어긋나지 않게 한다.
+  const aiOptsFor = (side: Player): AiOptions | null => {
+    if (settings.mode === 'watch')
+      return side === 'yellow'
+        ? { difficulty: settings.difficultyYellow, persona: settings.personaYellow, seed: 0x1111 }
+        : { difficulty: settings.difficultyBrown, persona: settings.personaBrown, seed: 0x2222 }
+    if (settings.mode === 'vsAi' && side === settings.aiSide)
+      return { difficulty: settings.aiDifficulty, persona: settings.personaBrown, seed: 0x2222 }
+    return null // hotseat, 또는 vsAi 의 사람 쪽
+  }
   const rebuildAi = (): void => {
-    // 같은 시드면 두 AI 가 결정론적으로 같은 대국을 반복 → 시드를 진영별로 다르게.
-    // 관전은 양색 모두 AI(색깔별 난이도·성향), vsAi 는 settings.aiSide 한 쪽만 AI(단일 난이도·성향).
-    aiYellow = null
-    aiBrown = null
-    if (settings.mode === 'watch') {
-      aiYellow = createAi({ difficulty: settings.difficultyYellow, persona: settings.personaYellow, seed: 0x1111 })
-      aiBrown = createAi({ difficulty: settings.difficultyBrown, persona: settings.personaBrown, seed: 0x2222 })
-    } else if (settings.mode === 'vsAi') {
-      const ai = createAi({ difficulty: settings.aiDifficulty, persona: settings.personaBrown, seed: 0x2222 })
-      if (settings.aiSide === 'yellow') aiYellow = ai
-      else aiBrown = ai
+    // 동기 폴백용 AI(워커 없을 때). 워커가 있으면 같은 옵션으로 init 해 워커가 실제 계산을 맡는다.
+    const yo = aiOptsFor('yellow')
+    const bo = aiOptsFor('brown')
+    aiYellow = yo ? createAi(yo) : null
+    aiBrown = bo ? createAi(bo) : null
+    if (aiWorker) aiWorker.postMessage({ type: 'init', yellow: yo, brown: bo })
+  }
+  // 워커 1회 지연 생성(핫시트/테스트에선 AI 수가 없어 아예 안 만든다). 실패하면 동기 폴백.
+  function ensureAiWorker(): Worker | null {
+    if (aiWorkerTried) return aiWorker
+    aiWorkerTried = true
+    try {
+      if (typeof Worker !== 'undefined') {
+        aiWorker = new Worker(new URL('./ai-worker.ts', import.meta.url), { type: 'module' })
+        aiWorker.onmessage = (e: MessageEvent): void => {
+          const d = e.data as { id: number; move?: Move; error?: string }
+          if (d.id === pendingAiId && pendingAiCb) {
+            const cb = pendingAiCb
+            pendingAiCb = null
+            pendingAiId = -1
+            cb({ move: d.move, error: d.error })
+          }
+        }
+        aiWorker.onerror = (): void => {
+          aiWorker = null // 워커 로드 실패 → 이후 동기 폴백
+        }
+        // 현재 설정으로 워커에 AI 를 심는다.
+        aiWorker.postMessage({ type: 'init', yellow: aiOptsFor('yellow'), brown: aiOptsFor('brown') })
+      }
+    } catch {
+      aiWorker = null
     }
-    // hotseat: 둘 다 null
+    return aiWorker
+  }
+  // AI 한 수를 비동기로 요청한다. 워커가 있으면 워커가, 없으면 동기로(폴백) 계산해 cb 로 돌려준다.
+  function requestAiMove(side: Player, st: GameState, cb: (r: { move?: Move; error?: string }) => void): void {
+    const worker = ensureAiWorker()
+    if (worker) {
+      pendingAiId = aiReqId
+      pendingAiCb = cb
+      worker.postMessage({ type: 'move', id: aiReqId, side, state: st })
+      return
+    }
+    // 폴백: 동기 계산(메인 스레드 점유 — 워커 불가 환경 전용).
+    window.setTimeout(() => {
+      const ai = side === 'yellow' ? aiYellow : aiBrown
+      if (!ai) return cb({ error: 'no-ai' })
+      try {
+        cb({ move: ai.chooseMove(st) })
+      } catch (err) {
+        cb({ error: String(err) })
+      }
+    }, 0)
   }
   rebuildAi() // 불러온 모드가 vs AI/관전이면 AI 준비
 
@@ -585,6 +646,13 @@ export function mountGame(root: HTMLElement): void {
         <div class="mini-player-host"></div>
         <div class="action-bar"></div>
         <div class="board-notes"></div>
+        <div class="ai-thinking-layer" aria-hidden="true">
+          <div class="ai-thinking-card">
+            <div class="ai-thinking-bee" aria-hidden="true">🐝</div>
+            <div class="ai-thinking-title">AI가 다음 수를 고르고 있어요</div>
+            <div class="ai-thinking-tip"></div>
+          </div>
+        </div>
       </div>
       <button class="panel-reopen" data-act="togglePanel" title="설정 펼치기" aria-label="설정 펼치기">☰</button>
     </div>
@@ -608,7 +676,35 @@ export function mountGame(root: HTMLElement): void {
     onTap: () => onPanelAction(miniHost.querySelector('.mp-card') ? 'musicCollapse' : 'musicExpand'),
   })
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
+  const aiThinkingLayer = root.querySelector('.ai-thinking-layer') as HTMLElement
+  const aiTipEl = aiThinkingLayer.querySelector('.ai-thinking-tip') as HTMLElement
   const gameEl = root.querySelector('.game') as HTMLElement // 데스크탑 설정창 접기 클래스 토글용
+
+  // ---- AI 로딩 대기 화면(엘레베이터 거울) -----------------------------------
+  // AI 가 한 수를 계산하는 동안(전문가 MCTS 는 수 초) 보여준다. 워커가 메인 스레드를 안 막아
+  // 스피너·팁이 실제로 움직인다. 계산이 짧으면(빠른 난이도) 임계값 전에 끝나 안 뜬다(깜빡임 방지).
+  function setTipText(): void {
+    lastTip = nextTip(lastTip)
+    aiTipEl.textContent = lastTip
+    aiTipEl.classList.remove('tip-in')
+    void aiTipEl.offsetWidth // 리플로우로 애니메이션 재시작
+    aiTipEl.classList.add('tip-in')
+  }
+  function showAiThinking(): void {
+    setTipText()
+    aiThinkingLayer.classList.add('show')
+    aiThinkingLayer.setAttribute('aria-hidden', 'false')
+    if (tipTimer !== null) clearInterval(tipTimer)
+    tipTimer = window.setInterval(setTipText, 3400) // 엘레베이터 거울: 기다리는 동안 팁을 돌린다
+  }
+  function hideAiThinking(): void {
+    aiThinkingLayer.classList.remove('show')
+    aiThinkingLayer.setAttribute('aria-hidden', 'true')
+    if (tipTimer !== null) {
+      clearInterval(tipTimer)
+      tipTimer = null
+    }
+  }
   // 설정창 펼치기 버튼(셸 정적 요소라 직접 배선; onPanelAction 은 함수선언 hoist).
   root.querySelector('.panel-reopen')?.addEventListener('click', () => onPanelAction('togglePanel'))
 
@@ -1642,6 +1738,14 @@ export function mountGame(root: HTMLElement): void {
       clearTimeout(aiTimer)
       aiTimer = null
     }
+    if (loadingTimer !== null) {
+      clearTimeout(loadingTimer)
+      loadingTimer = null
+    }
+    aiReqId++ // 진행 중인 워커 응답을 무효화(리셋·무르기·모드 변경 시)
+    pendingAiCb = null
+    pendingAiId = -1
+    hideAiThinking()
     aiThinking = false
   }
 
@@ -1652,32 +1756,54 @@ export function mountGame(root: HTMLElement): void {
     if (!aiControls(state.turn) || aiThinking) return
     // 관전 모드는 ▶(시작)을 눌러야 진행, 모드 선택만으로 바로 시작하지 않는다.
     if (settings.mode === 'watch' && !watchRunning) return
-    const ai = aiForTurn(state.turn)
-    if (ai === null) return
+    const side = state.turn
+    if (aiOptsFor(side) === null) return // 이 진영을 두는 AI 가 없음
     aiThinking = true
-    render() // "생각 중" 표시 + 입력 잠금
-    // 관전 모드는 사용자가 정한 간격으로 천천히, vs AI 는 짧게.
+    render() // 입력 잠금
+    // 관전 모드는 사용자가 정한 간격으로 천천히, vs AI 는 짧게. (계산 시간이 더 길면 그게 페이싱.)
     const delay = settings.mode === 'watch' ? settings.watchDelay : AI_DELAY_MS
-    aiTimer = window.setTimeout(() => {
-      aiTimer = null
-      aiThinking = false
-      try {
-        const mv = ai.chooseMove(state)
-        // 적용 전 합법성 확인, 불법수면 applyAndAdvance 가 history 를 오염시키며 throw 해
-        // "생각 중"에서 영구 정지하던 버그를 막는다(이론상 엔진이 합법수를 보장하지만 방어).
-        if (!validateMove(state, mv).ok) throw new Error('AI returned an illegal move')
-        // 전문가 난이도면 결정적 수에 해설을 단다(적용 전 상태로 분석).
-        const note = aiDifficultyFor(state.turn) === 'expert' ? analyzeMove(state, mv) : null
-        applyAndAdvance(mv) // 여기서 aiComment 가 비워지므로
-        if (note) {
-          aiComment = NOTE_TEXT[note] // 적용 후 다시 채우고 한 번 더 렌더
+    const reqId = ++aiReqId
+    const started = Date.now()
+    // 계산이 임계값보다 오래 걸릴 때만 로딩 오버레이를 띄운다(빠른 수엔 깜빡임 방지).
+    loadingTimer = window.setTimeout(() => {
+      loadingTimer = null
+      if (reqId === aiReqId && aiThinking) showAiThinking()
+    }, AI_LOADING_THRESHOLD_MS)
+    requestAiMove(side, state, (result) => {
+      if (reqId !== aiReqId) return // 오래된/취소된 요청(리셋·무르기 등)
+      // 계산 끝 → 로딩 오버레이 종료. 남은 delay 동안은 보드만 보인다(관전 페이싱).
+      if (loadingTimer !== null) {
+        clearTimeout(loadingTimer)
+        loadingTimer = null
+      }
+      hideAiThinking()
+      const wait = Math.max(0, delay - (Date.now() - started))
+      aiTimer = window.setTimeout(() => {
+        aiTimer = null
+        if (reqId !== aiReqId) return
+        aiThinking = false
+        if (result.error || !result.move) {
+          message = 'AI가 둘 곳을 찾지 못했어요. 무르기나 새 게임을 눌러 주세요.'
+          render()
+          return
+        }
+        const mv = result.move
+        try {
+          // 적용 전 합법성 확인(이론상 엔진이 합법수 보장이나 방어).
+          if (!validateMove(state, mv).ok) throw new Error('AI returned an illegal move')
+          // 전문가 난이도면 결정적 수에 해설을 단다(적용 전 상태로 분석).
+          const note = aiDifficultyFor(side) === 'expert' ? analyzeMove(state, mv) : null
+          applyAndAdvance(mv) // 여기서 aiComment 가 비워지므로
+          if (note) {
+            aiComment = NOTE_TEXT[note] // 적용 후 다시 채우고 한 번 더 렌더
+            render()
+          }
+        } catch {
+          message = 'AI가 둘 곳을 찾지 못했어요. 무르기나 새 게임을 눌러 주세요.'
           render()
         }
-      } catch {
-        message = 'AI가 둘 곳을 찾지 못했어요. 무르기나 새 게임을 눌러 주세요.'
-        render()
-      }
-    }, delay)
+      }, wait)
+    })
   }
 
   function onHexClick(h: Hex): void {

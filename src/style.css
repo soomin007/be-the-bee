@@ -120,6 +120,110 @@ svg.board {
   }
 }
 
+/* AI 로딩 대기 화면(엘레베이터 거울): AI 계산 중 보드 위를 덮어 스피너(벌)+팁을 보여준다.
+   계산은 Web Worker 에서 돌아 메인 스레드가 안 멈추므로 애니메이션·팁 회전이 실제로 움직인다.
+   기본 숨김(.show 일 때만 페이드인). 보드 입력은 AI 차례라 어차피 잠겨 있어 pointer-events:none. */
+.ai-thinking-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.25s ease,
+    visibility 0.25s ease;
+  background: rgba(255, 250, 235, 0.55);
+  backdrop-filter: blur(2.5px);
+  -webkit-backdrop-filter: blur(2.5px);
+}
+.ai-thinking-layer.show {
+  opacity: 1;
+  visibility: visible;
+}
+.ai-thinking-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  max-width: min(86vw, 24rem);
+  padding: 1.1rem 1.35rem 1.25rem;
+  border-radius: 1rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(245, 176, 28, 0.5);
+  box-shadow: 0 10px 34px rgba(120, 78, 8, 0.22);
+}
+.ai-thinking-bee {
+  font-size: 2.4rem;
+  line-height: 1;
+  animation: ai-bee-buzz 1.5s ease-in-out infinite;
+  transform-origin: 50% 60%;
+}
+.ai-thinking-title {
+  font-weight: 700;
+  color: #6b4a09;
+  font-size: 0.98rem;
+}
+.ai-thinking-tip {
+  font-size: 0.9rem;
+  color: #7a5a1e;
+  min-height: 2.6em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ai-thinking-tip::before {
+  content: '💡 ';
+  margin-right: 0.15rem;
+}
+.ai-thinking-tip.tip-in {
+  animation: ai-tip-in 0.4s ease;
+}
+@keyframes ai-bee-buzz {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-7deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(7deg);
+  }
+}
+@keyframes ai-tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.dark .ai-thinking-layer {
+  background: rgba(28, 22, 10, 0.6);
+}
+.dark .ai-thinking-card {
+  background: rgba(40, 32, 18, 0.94);
+  border-color: rgba(245, 176, 28, 0.4);
+}
+.dark .ai-thinking-title {
+  color: #f3d488;
+}
+.dark .ai-thinking-tip {
+  color: #e7c98a;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-thinking-bee {
+    animation: none;
+  }
+  .ai-thinking-tip.tip-in {
+    animation: none;
+  }
+}
+
 .action-bar {
   flex: none;
   display: flex;
