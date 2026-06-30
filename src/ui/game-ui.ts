@@ -2704,7 +2704,7 @@ export function mountGame(root: HTMLElement): void {
             <button class="rr-btn" data-act="replayNext" ${disNext} title="다음 수" aria-label="다음 수">▶</button>
             <button class="rr-btn" data-act="replayLast" ${disNext} title="마지막으로" aria-label="마지막으로">⏭</button>
           </div>
-          <button class="rr-btn rr-extra ${replayAnalysisOpen ? 'active' : ''}" data-act="replayToggleAnalysis" title="이 판 분석" aria-label="이 판 분석">📊</button>
+          <button class="rr-btn rr-extra ${replayAnalysisOpen ? 'active' : ''}" data-act="replayToggleAnalysis" title="이 판 분석" aria-label="이 판 분석">${ICON.analysis}</button>
           <button class="rr-btn rr-extra rr-exit" data-act="replayExit" title="복기 종료" aria-label="복기 종료">✕</button>
         </div>
         <div class="rr-seek">

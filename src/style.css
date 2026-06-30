@@ -1496,6 +1496,10 @@ button:has(> .ico) {
   background: #fde68a;
   border-color: #f0c43a;
 }
+/* 분석 아이콘(육각 돋보기): active(노란 배경)에선 꿀빛이 흐리니 진한 갈색으로 대비를 준다. */
+.rr-btn.rr-extra.active .ico {
+  color: #7a5210;
+}
 .rr-btn.rr-exit {
   color: #b4341f;
 }

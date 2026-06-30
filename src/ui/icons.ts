@@ -52,4 +52,6 @@ export const ICON: Record<string, string> = {
   clipboard: svg('<rect x="6" y="5" width="12" height="15" rx="1.6"/><path d="M9 5V3.8h6V5"/><path d="M9 11h6"/><path d="M9 14.5h4"/>'),
   upload: svg('<path d="M12 14.5V5"/><path d="M8 8.9 12 4.9l4 4"/><path d="M5 16.5V18A1.5 1.5 0 0 0 6.5 19.5h11A1.5 1.5 0 0 0 19 18v-1.5"/>'),
   coin: svg('<circle cx="12" cy="12" r="8"/><path d="M12 7.5v9"/><path d="M9.8 9.8a2.3 2.3 0 0 1 4.4.4c0 2.2-4.4 1.4-4.4 3.6a2.3 2.3 0 0 0 4.4.4"/>'),
+  // 복기 "이 판 분석": 게임의 육각 보드를 돋보기로 들여다보는 모티브(이모지 📊 대체).
+  analysis: svg('<path d="M9.5 4.5 13.8 7v5l-4.3 2.5L5.2 12V7Z"/><path d="M13.4 12.8 19 18"/>'),
 }
