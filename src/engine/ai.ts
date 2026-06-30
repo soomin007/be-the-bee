@@ -28,6 +28,8 @@ import { opponent } from './types'
 import type { Board, GameResult, GameState, Move, Player } from './types'
 import { cellAt, pieceAt, withPiece, withTile, LINE_LENGTH } from './state'
 import { findLines, type Line } from './lines'
+import { valueNetForward, type LeafEvaluator, type ValueNetWeights } from './value-net'
+import { defaultValueNetWeights } from './value-net-weights'
 import { detectWin } from './victory'
 import { totalHiveScores, hiveCountdowns } from './hive'
 import {
@@ -62,6 +64,7 @@ export interface AiOptions {
   mctsRolloutDepth?: number // 롤아웃(플레이아웃) 깊이. 기본 MCTS_ROLLOUT_DEPTH. 0이면 leaf 평가만
   mctsEpsilon?: number // 롤아웃 무작위 비율(0~1). 기본 MCTS_EPSILON
   mctsRolloutWidth?: number // 롤아웃 greedy 에서 evaluate 할 후보 수 상한. 기본 MCTS_ROLLOUT_WIDTH
+  valueNet?: true | ValueNetWeights // 학습 가치함수로 MCTS leaf 평가(기본 off). true=기본 가중치
 }
 
 interface Cfg {
@@ -107,6 +110,7 @@ export function createAi(opts: AiOptions = {}): Ai {
     rolloutDepth: opts.mctsRolloutDepth ?? MCTS_ROLLOUT_DEPTH,
     epsilon: opts.mctsEpsilon ?? MCTS_EPSILON,
     rolloutWidth: opts.mctsRolloutWidth ?? MCTS_ROLLOUT_WIDTH,
+    valueNet: opts.valueNet ? makeLeafEvaluator(opts.valueNet) : undefined,
   }
   return {
     chooseMove(state: GameState): Move {
@@ -789,6 +793,86 @@ function evaluate(board: Board, me: Player, w: Weights): number {
   return s
 }
 
+// ── 학습 가치함수(value-net) 입력 피처 ──────────────────────────────────────
+// evaluate 와 같은 1회 보드 스캔으로 핵심 신호(말 라인·벌어진 위협·잠긴 회랑·벌집·말/타일 수)를
+// 정규화 벡터로 뽑는다. 손라벨이 아니라 게임 결과로 학습하므로 raw 신호를 넉넉히 주고, 가중·결합·
+// 타이밍은 학습이 잡는다(손튜닝 brittleness 회피). me 관점이지만 leaf 평가는 항상 'yellow' 로 호출.
+export const FEATURE_DIM = 21
+export function encodeFeatures(board: Board, me: Player): number[] {
+  const opp = opponent(me)
+  const pieceMe = new Map<string, Player>()
+  const pieceOpp = new Map<string, Player>()
+  const tileMe = new Map<string, Player>()
+  const tileOpp = new Map<string, Player>()
+  const phexMe: Hex[] = []
+  const phexOpp: Hex[] = []
+  let pcMe = 0
+  let pcOpp = 0
+  let tcMe = 0
+  let tcOpp = 0
+  let seize = 0
+  for (const key of Object.keys(board)) {
+    const cell = board[key]!
+    if (cell.tile.owner === me) {
+      tileMe.set(key, me)
+      tcMe++
+    } else {
+      tileOpp.set(key, opp)
+      tcOpp++
+    }
+    const piece = cell.piece
+    if (piece) {
+      if (piece.owner === me) {
+        pieceMe.set(key, me)
+        phexMe.push(hexFromKey(key))
+        pcMe++
+      } else {
+        pieceOpp.set(key, opp)
+        phexOpp.push(hexFromKey(key))
+        pcOpp++
+      }
+      if (piece.owner !== cell.tile.owner) seize += piece.owner === me ? 1 : -1
+    }
+  }
+  const lf = (lines: Line<Player>[]): [number, number, number, number] => {
+    let c2 = 0
+    let c3 = 0
+    let c4 = 0
+    let mx = 0
+    for (const l of lines) {
+      const len = l.cells.length
+      if (len >= 2) c2++
+      if (len >= 3) c3++
+      if (len >= 4) c4++
+      if (len > mx) mx = len
+    }
+    return [c2, c3, c4, mx]
+  }
+  const [m2, m3, m4, mmax] = lf(findLines(pieceMe, 2))
+  const [o2, o3, o4, omax] = lf(findLines(pieceOpp, 2))
+  const hive = totalHiveScores(board)
+  const lr = lockedRunByOwner(board)
+  // 정규화(대략 [0,1] 스케일). 학습이 미세 가중하니 러프해도 된다.
+  return [
+    m2 / 6, m3 / 4, m4 / 3, mmax / 5,
+    o2 / 6, o3 / 4, o4 / 3, omax / 5,
+    gappedFours(board, phexMe, me) / 3, gappedFours(board, phexOpp, opp) / 3,
+    spreadThrees(board, phexMe, me) / 3, spreadThrees(board, phexOpp, opp) / 3,
+    lr[me] / 9, lr[opp] / 9,
+    hive[me] / 4, hive[opp] / 4,
+    pcMe / 30, pcOpp / 30,
+    tcMe / 30, tcOpp / 30,
+    seize / 5,
+  ]
+}
+
+// AiOptions.valueNet → MCTS leaf 평가기. true 면 기본 가중치, 객체면 그 가중치. 항상 노랑 관점으로
+// 인코딩해 노랑 관점 [-1,1] 을 낸다(leafValueYellow 와 일치). 학습/추론이 encodeFeatures+forward 공유.
+function makeLeafEvaluator(opt: true | ValueNetWeights): LeafEvaluator {
+  const nn = opt === true ? defaultValueNetWeights : opt
+  return (state) => valueNetForward(encodeFeatures(state.board, 'yellow'), nn)
+}
+
 // 위협 셀(완성 가능 셀)은 engine/victory(completingCells)·moves(winningCells)에서 공유한다.
 
 // ---- 이동 생성 -------------------------------------------------------------
@@ -1232,6 +1316,7 @@ interface MctsParams {
   rolloutDepth: number
   epsilon: number
   rolloutWidth: number
+  valueNet?: LeafEvaluator // 학습 가치함수(있으면 leaf 평가를 이걸로). 기본 undefined = 휴리스틱.
 }
 
 interface MctsNode {
@@ -1256,8 +1341,9 @@ function terminalProvenYellow(r: GameResult): number {
 }
 
 // 리프(혹은 롤아웃 종착) 값, 노랑 관점 [-1,1].
-function leafValueYellow(state: GameState, w: Weights): number {
+function leafValueYellow(state: GameState, w: Weights, valueNet?: LeafEvaluator): number {
   if (state.phase === 'finished' && state.result) return terminalYellow(state.result)
+  if (valueNet) return valueNet(state) // 학습 가치함수(노랑 관점 [-1,1])
   return Math.tanh(evaluate(state.board, 'yellow', w) / MCTS_SCALE)
 }
 
@@ -1358,7 +1444,7 @@ function mctsRollout(state: GameState, cfg: Cfg, rng: () => number, params: Mcts
       break
     }
   }
-  return leafValueYellow(s, cfg.w)
+  return leafValueYellow(s, cfg.w, params.valueNet)
 }
 
 function makeMctsNode(state: GameState, parentMove: Move | null, cfg: Cfg, isRoot: boolean): MctsNode {
@@ -1491,7 +1577,7 @@ function mctsChooseMove(state: GameState, cfg: Cfg, rng: () => number, params: M
       node.children.push(child)
       path.push(child)
       value = child.terminalVal !== null ? child.terminalVal : mctsRollout(child.state, cfg, rng, params)
-    } else value = leafValueYellow(node.state, cfg.w)
+    } else value = leafValueYellow(node.state, cfg.w, params.valueNet)
     // BACKUP(노랑 관점) + SOLVER(leaf→root)
     for (const n of path) {
       n.visits++
