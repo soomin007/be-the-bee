@@ -1192,8 +1192,7 @@ export function mountGame(root: HTMLElement): void {
         modalDismissed = true
         replayIndex = 0
         replayAnalysisOpen = false
-        // 분석(분류 + 실수의 점수 손해·추천 수)을 진입 시 한 번만 계산해 캐싱(매 렌더 재계산 방지).
-        cachedReview = analyzeGame(timeline()[0]!, moveLog, { withScores: true })
+        cachedReview = null // 분석은 무거우니(hard 탐색) 진입이 아니라 "이 판 분석"을 펼칠 때 1회 계산
         // 복기는 보드를 보며 하는 것 — 설정 패널/시트를 닫고 보드로 복귀시킨다(조작은 하단 리모컨).
         replayPrevPanelCollapsed = panelCollapsed
         if (!panelCollapsed) {
@@ -1204,6 +1203,8 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'replayToggleAnalysis':
         replayAnalysisOpen = !replayAnalysisOpen
+        // 펼칠 때 1회 계산해 캐싱(이후 슬라이더/재생에도 재계산 안 함). 무거운 hard 탐색은 이때만.
+        if (replayAnalysisOpen && cachedReview === null) cachedReview = analyzeGame(timeline()[0]!, moveLog, { withScores: true })
         break
       case 'replayExit':
         stopReplayTimer()

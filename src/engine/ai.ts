@@ -276,8 +276,20 @@ export interface AnalyzeOptions {
   /** true 면 실수(놓친 승리/차단)에 점수 손해(lossCp)와 추천 수(bestMove)를 함께 계산한다.
    *  탐색을 돌려 무거우니(실수 수만큼) 복기 진입 때 1회만 계산해 캐싱한다. */
   withScores?: boolean
-  /** 점수 계산에 쓸 탐색 강도(기본 'medium' — 속도·정확 균형). 'hard' 면 더 정확하지만 느리다. */
+  /** 점수 계산에 쓸 탐색 강도(기본 'hard'). 낮추면 빠르지만 추천·점수 손해가 덜 정확하다. */
   difficulty?: Difficulty
+}
+
+// 한 수를 둔 뒤 player 관점의 깊은 평가(상대 응수까지 negamax 로 본다). 점수 손해 계산용 —
+// 1수 정적 평가보다 정확하다(상대가 바로 응징하는 수의 손해를 제대로 반영).
+function scoreAfterMove(state: GameState, move: Move, player: Player, cfg: Cfg, depth: number): number {
+  const after = applyMove(state, move)
+  if (after.phase === 'finished') {
+    if (after.result?.kind === 'win') return after.result.winner === player ? WIN_SCORE : -WIN_SCORE
+    return 0 // 무·점수승은 점수 손해 비교에서 중립(0)
+  }
+  const nm = negamax(after, depth, -Infinity, Infinity, cfg) // after.turn 관점 점수
+  return after.turn === player ? nm : -nm // player 관점으로 변환
 }
 
 /**
@@ -287,7 +299,7 @@ export interface AnalyzeOptions {
  * opts.withScores 면 실수마다 더 나은 수(추천)와 점수 손해를 계산해 붙인다.
  */
 export function analyzeGame(initial: GameState, moveLog: Move[], opts: AnalyzeOptions = {}): GameReview {
-  const scoreCfg: Cfg | null = opts.withScores === true ? { ...cfgFor(opts.difficulty ?? 'medium'), w: makeWeights('balanced') } : null
+  const scoreCfg: Cfg | null = opts.withScores === true ? { ...cfgFor(opts.difficulty ?? 'hard'), w: makeWeights('balanced') } : null
   const scoreRng = scoreCfg ? makeRng(0xa11) : null
   let state = initial
   const reviews: MoveReview[] = []
@@ -301,8 +313,10 @@ export function analyzeGame(initial: GameState, moveLog: Move[], opts: AnalyzeOp
       if (scoreCfg && scoreRng && r.polarity === 'bad') {
         try {
           const best = pickMove(state, scoreCfg, scoreRng)
-          const bestScore = evaluate(resultBoard(state.board, best, player), player, scoreCfg.w)
-          const actualScore = evaluate(resultBoard(state.board, move, player), player, scoreCfg.w)
+          // 1수 정적 평가가 아니라 둔 뒤 상대 응수까지 깊이 탐색해(negamax) 점수를 매긴다(정확도↑).
+          const d = Math.max(1, scoreCfg.beamDepth - 1)
+          const bestScore = scoreAfterMove(state, best, player, scoreCfg, d)
+          const actualScore = scoreAfterMove(state, move, player, scoreCfg, d)
           r.bestMove = best
           r.lossCp = Math.max(0, Math.round((bestScore - actualScore) / 100))
         } catch {
