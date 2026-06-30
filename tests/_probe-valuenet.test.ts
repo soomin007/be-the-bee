@@ -38,8 +38,13 @@ function probe(label: string, states: ReturnType<typeof createInitialState>[], i
   for (const idx of idxs) {
     const st = states[idx]
     if (!st || st.phase !== 'playing' || st.turn !== 'brown') continue
-    for (const [tag, vn] of [['off', undefined] as const, ['vnet', true as true]]) {
-      const ai = createAi({ difficulty: 'expert', seed: 5, mctsRolloutDepth: 0, valueNet: vn as true | ValueNetWeights | undefined })
+    const variants: Array<[string, { valueNet?: true; valueNetBlend?: number }]> = [
+      ['off', {}],
+      ['vnet1.0', { valueNet: true }],
+      ['vnet0.6', { valueNet: true, valueNetBlend: 0.6 }],
+    ]
+    for (const [tag, opt] of variants) {
+      const ai = createAi({ difficulty: 'expert', seed: 5, mctsRolloutDepth: 0, ...opt })
       const cell = cellOf(ai.chooseMove(st))
       // eslint-disable-next-line no-console
       console.log(`${label} ${idx + 1}수 [${tag}]: ${cell ?? 'none'} ${cell && cor.has(cell) ? '← HIT' : ''}`)
@@ -51,7 +56,8 @@ describe('Gate 2: value-net 회랑 프로브', () => {
   it('게임1/2/3 회랑 칸 선점 (value-net vs off, rolloutDepth 0)', () => {
     void defaultValueNetWeights // 가중치 로드 확인
     probe('게임1', reconstruct(G1), [3], COR1)
-    probe('게임2', reconstruct(decode(B2)), [3, 5, 7, 9], COR2)
-    probe('게임3', reconstruct(MV3), [31, 35], COR3)
+    probe('게임2', reconstruct(decode(B2)), [3, 7, 10], COR2)
+    void MV3
+    void COR3 // 게임3(긴 회랑)은 blend 검증 범위 밖 — 제외(시간 절약)
   }, 300000)
 })

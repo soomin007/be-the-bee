@@ -65,6 +65,7 @@ export interface AiOptions {
   mctsEpsilon?: number // 롤아웃 무작위 비율(0~1). 기본 MCTS_EPSILON
   mctsRolloutWidth?: number // 롤아웃 greedy 에서 evaluate 할 후보 수 상한. 기본 MCTS_ROLLOUT_WIDTH
   valueNet?: true | ValueNetWeights // 학습 가치함수로 MCTS leaf 평가(기본 off). true=기본 가중치
+  valueNetBlend?: number // value-net leaf blend(0~1). 1=단독, 0.5=휴리스틱과 반반. 기본 1.
 }
 
 interface Cfg {
@@ -111,6 +112,7 @@ export function createAi(opts: AiOptions = {}): Ai {
     epsilon: opts.mctsEpsilon ?? MCTS_EPSILON,
     rolloutWidth: opts.mctsRolloutWidth ?? MCTS_ROLLOUT_WIDTH,
     valueNet: opts.valueNet ? makeLeafEvaluator(opts.valueNet) : undefined,
+    valueNetBlend: opts.valueNetBlend,
   }
   return {
     chooseMove(state: GameState): Move {
@@ -1317,6 +1319,7 @@ interface MctsParams {
   epsilon: number
   rolloutWidth: number
   valueNet?: LeafEvaluator // 학습 가치함수(있으면 leaf 평가를 이걸로). 기본 undefined = 휴리스틱.
+  valueNetBlend?: number // value-net 과 휴리스틱 leaf 의 blend(0~1). 기본 1=단독.
 }
 
 interface MctsNode {
@@ -1341,10 +1344,12 @@ function terminalProvenYellow(r: GameResult): number {
 }
 
 // 리프(혹은 롤아웃 종착) 값, 노랑 관점 [-1,1].
-function leafValueYellow(state: GameState, w: Weights, valueNet?: LeafEvaluator): number {
+function leafValueYellow(state: GameState, w: Weights, valueNet?: LeafEvaluator, blend = 1): number {
   if (state.phase === 'finished' && state.result) return terminalYellow(state.result)
-  if (valueNet) return valueNet(state) // 학습 가치함수(노랑 관점 [-1,1])
-  return Math.tanh(evaluate(state.board, 'yellow', w) / MCTS_SCALE)
+  if (!valueNet) return Math.tanh(evaluate(state.board, 'yellow', w) / MCTS_SCALE)
+  // 학습 가치함수(회랑 등 큰 그림)와 휴리스틱(전술 정밀도)을 blend. blend=1 이면 value-net 단독.
+  if (blend >= 1) return valueNet(state)
+  return blend * valueNet(state) + (1 - blend) * Math.tanh(evaluate(state.board, 'yellow', w) / MCTS_SCALE)
 }
 
 // 한 셀에 내 말을 놓아 즉시 5목이 되는 합법수(없으면 null). pickMove 1단계와 동일 로직.
@@ -1444,7 +1449,7 @@ function mctsRollout(state: GameState, cfg: Cfg, rng: () => number, params: Mcts
       break
     }
   }
-  return leafValueYellow(s, cfg.w, params.valueNet)
+  return leafValueYellow(s, cfg.w, params.valueNet, params.valueNetBlend)
 }
 
 function makeMctsNode(state: GameState, parentMove: Move | null, cfg: Cfg, isRoot: boolean): MctsNode {
@@ -1577,7 +1582,7 @@ function mctsChooseMove(state: GameState, cfg: Cfg, rng: () => number, params: M
       node.children.push(child)
       path.push(child)
       value = child.terminalVal !== null ? child.terminalVal : mctsRollout(child.state, cfg, rng, params)
-    } else value = leafValueYellow(node.state, cfg.w, params.valueNet)
+    } else value = leafValueYellow(node.state, cfg.w, params.valueNet, params.valueNetBlend)
     // BACKUP(노랑 관점) + SOLVER(leaf→root)
     for (const n of path) {
       n.visits++

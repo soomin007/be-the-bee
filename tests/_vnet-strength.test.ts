@@ -31,12 +31,14 @@ function h2h(a: AiOptions, b: AiOptions): { aw: number; bw: number; d: number } 
 describe('value-net 강도(Gate 2b)', () => {
   it('vnet expert vs hard, off 대조', () => {
     if (N <= 0) return
-    const vnet: AiOptions = { difficulty: 'expert', mctsRolloutDepth: 0, valueNet: true }
-    const off: AiOptions = { difficulty: 'expert', mctsRolloutDepth: 0 }
     const hard: AiOptions = { difficulty: 'hard' }
-    const a = h2h(vnet, hard)
-    const b = h2h(off, hard)
+    for (const blend of [0.3, 0.6]) {
+      const r = h2h({ difficulty: 'expert', mctsRolloutDepth: 0, valueNet: true, valueNetBlend: blend }, hard)
+      // eslint-disable-next-line no-console
+      console.log(`blend ${blend} vs hard: ${r.aw}-${r.bw} (무${r.d})`)
+    }
+    const off = h2h({ difficulty: 'expert', mctsRolloutDepth: 0 }, hard)
     // eslint-disable-next-line no-console
-    console.log(`vnet-leaf vs hard: ${a.aw}-${a.bw} (무${a.d}) | off(휴리스틱)-leaf vs hard: ${b.aw}-${b.bw} (무${b.d})`)
+    console.log(`off(휴리스틱) vs hard: ${off.aw}-${off.bw} (무${off.d})`)
   }, 1800000)
 })
