@@ -2,7 +2,7 @@
 // off(휴리스틱 leaf) 대조. 수동: npx vitest run tests/_probe-valuenet.test.ts
 import { describe, it } from 'vitest'
 import { createAi, createInitialState, applyMove, hex } from '../src/engine/index'
-import type { Move, ValueNetWeights } from '../src/engine/index'
+import type { Move } from '../src/engine/index'
 import { defaultValueNetWeights } from '../src/engine/value-net-weights'
 
 function parseTok(tok: string): Move {
