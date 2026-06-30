@@ -156,6 +156,28 @@ describe('analyzeGame — 기보 한 판 분석', () => {
     expect(b.bestMove).toBeDefined() // 더 나은 수 = 위협 차단
     expect(b.lossCp !== undefined && b.lossCp > 0).toBe(true) // 막았어야 했으니 점수 손해 큼
   }, 30000)
+
+  it('withScores: 분류엔 없지만 점수 손해가 큰 수는 inaccuracy(아쉬운 수)로 잡힌다', () => {
+    // 노랑 말 3목 (0,0)(1,0)(2,0). 한 수로 (3,0) 두면 열린 4목(강함). 대신 무의미한 (0,1) 에 두면 큰 손해.
+    const board: Board = {
+      [hexKey(hex(0, 0))]: { tile: { owner: 'yellow' }, piece: { owner: 'yellow', kind: 'normal' } },
+      [hexKey(hex(1, 0))]: { tile: { owner: 'yellow' }, piece: { owner: 'yellow', kind: 'normal' } },
+      [hexKey(hex(2, 0))]: { tile: { owner: 'yellow' }, piece: { owner: 'yellow', kind: 'normal' } },
+    }
+    const before: GameState = {
+      board,
+      turn: 'yellow',
+      supplies: { yellow: { tiles: 20, pieces: 20, queenUsed: false }, brown: { tiles: 20, pieces: 20, queenUsed: false } },
+      moveNumber: 6,
+      phase: 'playing',
+    }
+    const weak: Move = { type: 'tileAndPiece', tile: hex(0, 1), piece: { at: hex(0, 1), kind: 'normal' } }
+    const review = analyzeGame(before, [weak], { withScores: true })
+    const ina = review.reviews.find((r) => r.note === 'inaccuracy')
+    expect(ina).toBeDefined() // 4목 연장을 놓친 약한 수가 inaccuracy 로 리스트에 올라야
+    expect(ina!.bestMove).toBeDefined()
+    expect(ina!.lossCp !== undefined && ina!.lossCp > 0).toBe(true)
+  }, 30000)
 })
 
 describe('reviewMove — 막을 수 있는 위협을 안 막으면 missBlock(블런더)', () => {

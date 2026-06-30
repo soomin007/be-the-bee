@@ -162,6 +162,7 @@ const NOTE_TEXT: Record<MoveNote, string> = {
   hive: '벌집을 완성해 점수를 얻었어요.',
   missWin: '여기서 바로 5목으로 승리할 수 있었어요. 그 자리를 놓쳤어요.',
   missBlock: '상대가 다음 한 수로 5목을 둘 수 있어요. 막았어야 했어요.',
+  inaccuracy: '더 나은 수가 있었어요.',
 }
 // 코드를 ✓(칭찬)/✗(지적) 아이콘과 함께 한 줄로. 색은 notePolarity 로 CSS 클래스(good/bad).
 function noteLine(note: MoveNote): string {

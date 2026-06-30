@@ -126,11 +126,12 @@ export function createAi(opts: AiOptions = {}): Ai {
 // threat = "떨어진 4목"(X·XXX, XX·XX 등 가운데를 끼워 넣으면 5목)만. winningCells 가 그 빈칸을
 // 승리칸으로 잡아 전문가 평가의 gapFour 와 같은 범위를 본다. 연속 4목(끝에 한 칸)은 사람도 바로
 // 보이므로 제외(isGappedWin 으로 구분) — 멘트가 너무 자주 뜨지 않게.
-export type MoveNote = 'win' | 'fork' | 'threat' | 'block' | 'corridor' | 'hive' | 'missWin' | 'missBlock'
+// inaccuracy = 분류엔 안 걸리지만 점수 손해가 큰 "아쉬운 수"(analyzeGame withScores 가 붙인다).
+export type MoveNote = 'win' | 'fork' | 'threat' | 'block' | 'corridor' | 'hive' | 'missWin' | 'missBlock' | 'inaccuracy'
 
 /** 코드의 성향: 칭찬(good) / 지적(bad). UI 가 ✓/✗·색을 고를 때 쓴다. */
 export function notePolarity(note: MoveNote): 'good' | 'bad' {
-  return note === 'missWin' || note === 'missBlock' ? 'bad' : 'good'
+  return note === 'missWin' || note === 'missBlock' || note === 'inaccuracy' ? 'bad' : 'good'
 }
 
 function piecePlacedAt(m: Move): Hex | null {
@@ -292,6 +293,21 @@ function scoreAfterMove(state: GameState, move: Move, player: Player, cfg: Cfg, 
   return after.turn === player ? nm : -nm // player 관점으로 변환
 }
 
+// 한 수의 1수 평가 손해(탐색 없이 빠름) — 모든 수를 훑어 "정밀 분석할 가치"가 있는지 가른다.
+function quick1plyLoss(state: GameState, move: Move, player: Player, cfg: Cfg): number {
+  let bestS = -Infinity
+  for (const c of generateCandidates(state, cfg)) {
+    const s = evaluate(resultBoard(state.board, c.move, player), player, cfg.w)
+    if (s > bestS) bestS = s
+  }
+  const actualS = evaluate(resultBoard(state.board, move, player), player, cfg.w)
+  return Math.max(0, bestS - actualS)
+}
+// 모든 수 점수 분석 임계: 1수 손해가 QUICK 이상인 수만 hard 정밀 분석하고(나머지는 건너뜀),
+// 정밀 손해가 INACCURACY 이상이면 "아쉬운 수"(inaccuracy)로 리스트에 올린다(작은 손해=노이즈 제외).
+const ANALYZE_QUICK_RAW = 6000
+const ANALYZE_INACCURACY_RAW = 9000
+
 /**
  * 시작 국면 + 기보를 처음부터 재생하며 각 수를 reviewMove 로 분류해 한 판 분석을 만든다.
  * initial 의 모드 플래그(queenEnabled/infiniteTiles)가 분석에 그대로 반영된다.
@@ -307,24 +323,31 @@ export function analyzeGame(initial: GameState, moveLog: Move[], opts: AnalyzeOp
     const move = moveLog[i]!
     const player = state.turn
     const note = reviewMove(state, move)
-    if (note) {
-      const r: MoveReview = { index: i + 1, player, note, polarity: notePolarity(note) }
-      // 실수(놓친 승리/차단)면 그 위치 최선 수(추천)와 점수 손해를 계산해 붙인다.
-      if (scoreCfg && scoreRng && r.polarity === 'bad') {
+    let r: MoveReview | null = note ? { index: i + 1, player, note, polarity: notePolarity(note) } : null
+    // withScores: 실수(blunder)는 무조건, 그 외 수는 1수 손해가 큰 것만 hard 정밀 분석한다.
+    // 분류 안 된 수라도 정밀 손해가 크면 "아쉬운 수"(inaccuracy)로 리스트에 올린다.
+    if (scoreCfg && scoreRng) {
+      const isBad = r?.polarity === 'bad'
+      const quick = isBad || r === null ? quick1plyLoss(state, move, player, scoreCfg) : 0
+      if (isBad || quick >= ANALYZE_QUICK_RAW) {
         try {
           const best = pickMove(state, scoreCfg, scoreRng)
           // 1수 정적 평가가 아니라 둔 뒤 상대 응수까지 깊이 탐색해(negamax) 점수를 매긴다(정확도↑).
           const d = Math.max(1, scoreCfg.beamDepth - 1)
-          const bestScore = scoreAfterMove(state, best, player, scoreCfg, d)
-          const actualScore = scoreAfterMove(state, move, player, scoreCfg, d)
-          r.bestMove = best
-          r.lossCp = Math.max(0, Math.round((bestScore - actualScore) / 100))
+          const lossRaw = Math.max(0, scoreAfterMove(state, best, player, scoreCfg, d) - scoreAfterMove(state, move, player, scoreCfg, d))
+          const lossCp = Math.round(lossRaw / 100)
+          if (r) {
+            r.bestMove = best
+            r.lossCp = lossCp
+          } else if (lossRaw >= ANALYZE_INACCURACY_RAW) {
+            r = { index: i + 1, player, note: 'inaccuracy', polarity: 'bad', bestMove: best, lossCp }
+          }
         } catch {
-          /* 점수 계산 실패(예외)면 분류만 유지한다 */
+          /* 점수 계산 실패(예외)면 분류만(있으면) 유지한다 */
         }
       }
-      reviews.push(r)
     }
+    if (r) reviews.push(r)
     try {
       state = applyMove(state, move)
     } catch {
