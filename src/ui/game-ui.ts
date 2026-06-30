@@ -13,6 +13,7 @@ import {
   hexEquals,
   hexFromKey,
   analyzeGame,
+  corridorLockThreats,
   hexKey,
   hiveCountdowns,
   isTilePlaceable,
@@ -457,6 +458,7 @@ export function mountGame(root: HTMLElement): void {
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
   let developCells: Hex[] = [] // 코칭 '강하게': 상대의 "자라는 위협"(연결 3+목) 칸
+  let corridorCells: Hex[] = [] // 코칭 '강하게': 상대가 곧 잠글 벌집 줄을 끊을 칸(잠기기 전 예방)
   // 벌집 초읽기(잠긴 벌집 위 안전한 5목까지 N수). render 가 채우고 boardNotes 가 읽는다.
   let oppCountdown: HiveCountdown | null = null // 상대 벌집 초읽기 = 나에게 위험
   let myCountdown: HiveCountdown | null = null // 내 벌집 초읽기 = 나에게 유리
@@ -2110,6 +2112,7 @@ export function mountGame(root: HTMLElement): void {
     dangerCells = []
     winNowCells = []
     developCells = []
+    corridorCells = []
     oppCountdown = null
     myCountdown = null
     if (state.phase === 'playing' && !replaying) {
@@ -2125,6 +2128,12 @@ export function mountGame(root: HTMLElement): void {
         const dk = new Set(dangerCells.map((c) => hexKey(c)))
         for (const line of threatLines(state.board, opp)) {
           for (const k of line) if (!dk.has(k)) developCells.push(hexFromKey(k))
+        }
+        // 곧 잠길 상대 벌집 줄을 끊을 칸(예방). 잠기면 그 안에 상대가 말을 채워 못 막는 5목이 되므로,
+        // 잠기기 전에 그 줄 위에 내 말을 놓으라고 안내한다(설명서 TIP#1 "허리 끊기"의 코칭판).
+        const seen = new Set<string>(developCells.map((c) => hexKey(c)))
+        for (const threat of corridorLockThreats(state.board, opp)) {
+          for (const k of threat.cutCells) if (!seen.has(k)) { seen.add(k); corridorCells.push(hexFromKey(k)) }
         }
       }
       // 벌집 초읽기: 잠긴 벌집 위 "막을 수 없는 5목"까지 남은 수. 상대=경고(기본+), 나=힌트(강하게).
@@ -2148,6 +2157,18 @@ export function mountGame(root: HTMLElement): void {
             }),
           )
         }
+      }
+      // 곧 잠길 상대 벌집 줄을 끊을 칸(강하게): 청록 점선 — "여기 막아 예방하라"(자라는 위협보다 더 이른 예방).
+      for (const c of corridorCells) {
+        content.appendChild(
+          makeHexPolygon(hexToPixel(c), {
+            fill: 'none',
+            stroke: '#0891b2',
+            strokeWidth: 2.5,
+            dash: true,
+            interactive: false,
+          }),
+        )
       }
       // 리치 칸은 "붕붕" 모션(buzz = 펄스 + 미세 진동)으로 더 눈에 띄게.
       // 자라는 위협(강하게): 상대 연결 3+목을 주황 점선으로 — 즉시 위협(빨강 붕붕)보다 덜 급하게.
@@ -2724,6 +2745,13 @@ export function mountGame(root: HTMLElement): void {
             `<div class="reach danger">⏳ 상대 벌집 초읽기: ${oppCountdown.movesLeft}수 뒤 ${
               qn ? '5목(여왕벌로 한 번만 막을 수 있어요)' : '막을 수 없는 5목'
             }. 더 빨리 5목을 노리세요.</div>`,
+          )
+        }
+        // 곧 잠길 상대 벌집 줄 예방(강하게): 끊을 수 있을 때만(잠기기 전) 안내 — 즉시 위협이 없을 때.
+        // oppCountdown(이미 잠김)은 못 끊지만 이건 아직 끊을 수 있어 "막으세요"가 참이다.
+        else if (corridorCells.length > 0) {
+          parts.push(
+            `<div class="reach danger">✂️ 상대가 벌집 줄을 길게 잇고 있어요. 잠기기 전에 표시된 칸에 말을 놓아 끊으세요.</div>`,
           )
         }
         // 내 벌집 초읽기는 유리 정보로 별도 표시(상대 위험과 동시에 떠도 됨).
