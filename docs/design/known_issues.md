@@ -8,6 +8,17 @@
 
 ## 2026-06-30
 
+### 프로세스★: 테스트 파일 타입 에러는 check:engine·vitest 가 못 잡는다 — CI 배포(tsc 전체)만 잡음
+- **증상**: value-net Stage 2 커밋부터 GitHub Pages 배포(deploy.yml)가 **매번 실패**(반복 fail 알림).
+  로컬 `npm test`·`npm run check:engine` 은 통과해서 못 보고 지나감.
+- **원인**: `tests/_probe-valuenet.test.ts` 가 index 에 없는 `ValueNetWeights` 를 `import type`(+미사용).
+  vitest(esbuild)는 **타입체크 안 함**, `check:engine` 은 **엔진(src)만** typecheck 라 tests/ 제외.
+  CI 의 `npm run build`(`tsc --noEmit` **전체**)만 tests/ 까지 검사해 TS2305(미존재)/TS6196(미사용)로 실패.
+- **재발 방지**: 새 **테스트 파일 추가**하거나 import 를 바꾸면 `check:engine` 만으론 부족 —
+  **`npm run typecheck`(또는 `npm run build`)로 tests/ 포함 전체 타입체크**를 커밋 전 한 번 돌린다.
+  (AI/엔진 수정엔 `check:engine` 먼저 + 새 테스트가 있으면 `typecheck` 추가.) 임시 `_*.test.ts` 도
+  CI 빌드 대상이다(가드 early-return 은 런타임만 막을 뿐 타입체크는 무조건 됨).
+
 ### AI(연구★): value-net blend 강도는 N=2 가 거짓 신호 — N=5 에서 모든 blend 회귀 드러남
 - **증상/측정**: value-net leaf 의 회랑↔강도 균형을 blend 로 맞추려 했다. 직전 측정(N=2 = 4판)은
   blend 0.6 = vs hard 3-1 로 "강도 거의 회복"처럼 보였다. **N=5(매치업당 10판)로 키우니 off(휴리스틱
