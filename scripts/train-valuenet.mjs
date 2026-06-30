@@ -5,6 +5,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 
 const SP = 'C:/Users/soomi/AppData/Local/Temp/claude/C--Users-soomi-Dev-Be-the-Bee/a9d0705f-d9f2-4eeb-af49-1e8362798b0a/scratchpad'
 const DATA = process.env.TRAIN_DATA ?? `${SP}/training.jsonl`
+const CORR = process.env.CORR_DATA ?? `${SP}/corridor.jsonl` // 회랑 데이터(있으면 오버샘플로 train 에)
+const OVERSAMPLE = Number(process.env.OVERSAMPLE ?? 5) // 회랑 데이터 반복 횟수(일반에 안 묻히게)
 const OUT = 'src/engine/value-net-weights.ts'
 const DIM = 21
 const HIDDEN = Number(process.env.HIDDEN ?? 32)
@@ -15,12 +17,16 @@ const BATCH = 64
 let seed = 12345
 const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
 
-const rows = readFileSync(DATA, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
-for (let i = rows.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1));[rows[i], rows[j]] = [rows[j], rows[i]] }
-const split = Math.floor(rows.length * 0.9)
-const train = rows.slice(0, split)
-const test = rows.slice(split)
-console.log(`데이터 ${rows.length} (train ${train.length} / test ${test.length}), DIM=${DIM} HIDDEN=${HIDDEN}`)
+const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1));[a[i], a[j]] = [a[j], a[i]] } }
+const gen = readFileSync(DATA, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+let corr = []
+try { corr = readFileSync(CORR, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) } catch { /* 회랑 데이터 없으면 일반만 */ }
+shuffle(gen)
+const split = Math.floor(gen.length * 0.9)
+const test = gen.slice(split) // 일반 held-out(강도 평가). 회랑 효과는 별도 프로브로.
+const train = [...gen.slice(0, split), ...Array(OVERSAMPLE).fill(0).flatMap(() => corr)]
+shuffle(train)
+console.log(`일반 ${gen.length} + 회랑 ${corr.length}×${OVERSAMPLE} → train ${train.length} / test(일반) ${test.length}, DIM=${DIM} HIDDEN=${HIDDEN}`)
 
 const he = (n) => (rand() * 2 - 1) * Math.sqrt(2 / n)
 const W1 = Array.from({ length: DIM * HIDDEN }, () => he(DIM))
