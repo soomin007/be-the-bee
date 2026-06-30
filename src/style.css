@@ -238,6 +238,10 @@ svg.board {
 .board-wrap.ab-top .action-bar {
   order: -1;
 }
+/* 복기 리모컨은 행동바 위/아래 설정과 무관하게 항상 보드 아래에 둔다(밑에서 조작 — 사용자 요청). */
+.board-wrap.ab-top .action-bar:has(.replay-remote) {
+  order: 1;
+}
 
 .action-bar:empty {
   display: none;
@@ -1405,37 +1409,125 @@ button:has(> .ico) {
   background: #eef2ff;
   border-color: #c7d2fe;
 }
-.replay-nav {
+/* 복기 리모컨(데스크탑·모바일 공통): 보드 아래 떠 있는 컨트롤 바. 진행·네비·슬라이더·분석·종료. */
+.replay-remote {
+  position: relative;
   display: flex;
-  gap: 0.3rem;
-  margin: 0.5rem 0;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: min(560px, 96%);
+  margin: 0 auto;
+  padding: 0.55rem 0.75rem;
+  background: linear-gradient(180deg, #fffdf7, #fdf4e3);
+  border: 1px solid #e6dcc3;
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(120, 80, 0, 0.18);
 }
-.replay-nav button {
-  flex: 1;
-  padding: 0.4rem 0.1rem;
-  font-size: 0.82rem;
+.replay-remote .rr-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.rr-progress {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #5a3a14;
   white-space: nowrap;
+  min-width: 3rem;
 }
-.replay-nav button[data-act='replayPlay'] {
-  flex: 1.6;
+.rr-progress i {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: #9a8456;
+  margin-left: 1px;
 }
-.replay-nav button[disabled] {
-  opacity: 0.4;
+.rr-nav {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+  justify-content: center;
+}
+.rr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  height: 2.4rem;
+  padding: 0 0.45rem;
+  border: 1px solid #d8c9a4;
+  border-radius: 10px;
+  background: #fffef9;
+  color: #5a3a14;
+  font-size: 1.02rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.08s, border-color 0.12s;
+}
+.rr-btn:hover:not(:disabled) {
+  background: #f6edd6;
+}
+.rr-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.rr-btn:disabled {
+  opacity: 0.36;
   cursor: default;
 }
-.replay-nav button.active {
+.rr-btn.rr-play {
+  min-width: 3rem;
+  font-size: 1.18rem;
   background: #2563eb;
   color: #fff;
   border-color: #2563eb;
 }
-.replay-exit {
-  width: 100%;
-  margin-top: 0.4rem;
-  background: #fff;
-  border: 1px solid #c9b88f;
+.rr-btn.rr-play:hover:not(:disabled) {
+  background: #1d4ed8;
 }
-.replay-exit:hover {
-  background: #f5efdf;
+.rr-btn.rr-play.active {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+.rr-btn.rr-extra {
+  min-width: 2.2rem;
+  font-size: 0.98rem;
+}
+.rr-btn.rr-extra.active {
+  background: #fde68a;
+  border-color: #f0c43a;
+}
+.rr-btn.rr-exit {
+  color: #b4341f;
+}
+.rr-btn.rr-exit:hover {
+  background: #fbe3dd;
+  border-color: #e7a99c;
+}
+.rr-seek {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rr-seek input[type='range'] {
+  flex: 1;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+.rr-seek-val {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #8a7344;
+  white-space: nowrap;
+  min-width: 3rem;
+  text-align: right;
+}
+/* 이 판 분석(접이식): 리모컨 위로 펼쳐지는 카드. */
+.rr-analysis {
+  max-height: 42vh;
+  overflow-y: auto;
+}
+.rr-analysis .replay-analysis {
+  margin-top: 0;
 }
 
 /* 복기 "이 판 분석" 요약: 진영별 집계 + 결정적 순간 리스트(클릭하면 그 수로 점프). */
@@ -2689,6 +2781,37 @@ button:has(> .ico) {
   background: #3a3122;
   border-color: #4a3f2a;
   color: #d8cba8;
+}
+/* 복기 리모컨(다크) — .game.dark .action-bar button 보다 specificity 가 높아야 색이 살아남는다. */
+.game.dark .replay-remote {
+  background: linear-gradient(180deg, #241f15, #1d1810);
+  border-color: #3a3225;
+}
+.game.dark .replay-remote .rr-progress {
+  color: #e4dac2;
+}
+.game.dark .replay-remote .rr-progress i,
+.game.dark .replay-remote .rr-seek-val {
+  color: #a8966c;
+}
+.game.dark .replay-remote .rr-btn {
+  background: #2a2417;
+  border-color: #3a3225;
+  color: #e4dac2;
+}
+.game.dark .replay-remote .rr-btn.rr-play {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.game.dark .replay-remote .rr-btn.rr-play.active {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+.game.dark .replay-remote .rr-btn.rr-extra.active {
+  background: #4a3e1a;
+  border-color: #6b5a1e;
+  color: #ffe39a;
 }
 /* 모달(새 게임 마법사·보관함·온라인·협상·결과 등) — modal-layer 가 .game 밖이라 별도 스코프 */
 .modal-layer.dark .modal-card {

@@ -137,9 +137,9 @@ describe('핫시트 UI (headless DOM)', () => {
     playMove() // 갈색
     expect(pieceCount()).toBe(2)
 
-    // 복기 진입 → 시작 국면(0수) — 말 0개
+    // 복기 진입 → 시작 국면(0수) — 말 0개. 복기는 패널이 아니라 하단 리모컨(.replay-remote)으로 조작.
     click(findAct('replayEnter')!)
-    expect(root.querySelector('.panel')!.textContent).toContain('복기')
+    expect(root.querySelector('.replay-remote')).not.toBeNull()
     expect(pieceCount()).toBe(0)
 
     // 다음 수 → 말 1개, 다시 → 2개
@@ -152,9 +152,9 @@ describe('핫시트 UI (headless DOM)', () => {
     click(findAct('replayPrev')!)
     expect(pieceCount()).toBe(1)
 
-    // 종료 → 실시간 복귀(2개)
+    // 종료 → 실시간 복귀(2개), 리모컨 사라짐
     click(findAct('replayExit')!)
-    expect(root.querySelector('.panel')!.textContent).not.toContain('복기 종료')
+    expect(root.querySelector('.replay-remote')).toBeNull()
     expect(pieceCount()).toBe(2)
   })
 })

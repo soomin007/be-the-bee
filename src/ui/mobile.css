@@ -259,32 +259,27 @@
   .game.modal-open .m-status {
     display: none;
   }
-  /* 복기 중에는 무르기·새 게임 FAB 을 숨긴다(작동 의미 없음). 복기 컨트롤은 행동바(.ab-replay)에 뜬다. */
+  /* 복기 중에는 무르기·새 게임 FAB 을 숨긴다(작동 의미 없음). 복기 컨트롤은 하단 리모컨(.replay-remote)에 뜬다. */
   .game.replaying .m-undo,
   .game.replaying .m-new {
     display: none;
   }
-  /* 복기 컨트롤(행동 버튼 자리): 이전 · 재생/멈춤 · 다음 · 종료 한 줄. */
-  .ab-replay {
-    display: flex;
-    align-items: stretch;
-    gap: 0.4rem;
+  /* 복기 리모컨(데스크탑과 공통 .replay-remote): 모바일은 터치 버튼을 키우고, 버튼별 그림자는 끈다
+     (리모컨 카드 자체에 그림자가 있어 중복 방지). */
+  .replay-remote .rr-btn {
+    box-shadow: none;
+    height: 2.9rem;
+    min-width: 2.5rem;
+    padding-inline: 0.2rem;
+    font-size: 1.05rem;
   }
-  .ab-replay .ab-rep {
-    min-height: 48px;
-    padding: 0.45rem 0.7rem;
-    border-radius: 0.8rem;
-    font-size: 1rem;
-    font-weight: 700;
+  .replay-remote .rr-btn.rr-play {
+    min-width: 3rem;
+    font-size: 1.22rem;
   }
-  .ab-replay .ab-rep-play {
-    padding-inline: 0.9rem;
-  }
-  .ab-replay .ab-rep-exit {
-    padding-inline: 0.8rem;
-  }
-  .ab-replay .ab-rep:disabled {
-    opacity: 0.45;
+  /* 모바일은 폭이 좁아 진행 표시(0/7수)를 버튼 줄에서 빼고 슬라이더 줄(rr-seek-val)에만 둔다 — 버튼이 한 줄에 다 들어가게. */
+  .replay-remote .rr-progress {
+    display: none;
   }
 
   /* === 행동 선택 = 우하단 플로팅(FAB). 안내는 .m-status 가 보여줌 === */
@@ -315,9 +310,13 @@
   .action-bar:has(.ab-watch-speed) {
     max-width: 64vw;
   }
-  /* 복기 컨트롤은 4버튼 한 줄이라 폭을 넉넉히. */
-  .action-bar:has(.ab-replay) {
-    max-width: 92vw;
+  /* 복기 리모컨은 하단 중앙 풀폭 바(유튜브식). 우하단 FAB 위치를 가운데로 옮긴다. */
+  .action-bar:has(.replay-remote) {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    max-width: 96vw;
+    width: min(560px, 96vw);
   }
   .ab-watch-speed {
     display: flex;

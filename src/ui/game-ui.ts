@@ -391,6 +391,8 @@ export function mountGame(root: HTMLElement): void {
   let moveLog: Move[] = [] // 둔 수의 순서(history 와 보조를 맞춤), 복기용
   let replayIndex: number | null = null // null = 실시간, 그 외 = timeline 의 그 국면을 본다
   let replayTimer: number | null = null // 복기 자동 재생 타이머
+  let replayAnalysisOpen = false // 복기 리모컨의 "이 판 분석" 펼침 여부
+  let replayPrevPanelCollapsed = false // 복기 진입 때 데스크탑 패널 접힘 상태(종료 시 복원)
   let draft: Draft | null = null
   let pieceKind: PieceKind = 'normal'
   let message = '' // 경고(잘못된 수 등), ⚠️ 빨강
@@ -1186,10 +1188,26 @@ export function mountGame(root: HTMLElement): void {
         message = ''
         modalDismissed = true
         replayIndex = 0
+        replayAnalysisOpen = false
+        // 복기는 보드를 보며 하는 것 — 설정 패널/시트를 닫고 보드로 복귀시킨다(조작은 하단 리모컨).
+        replayPrevPanelCollapsed = panelCollapsed
+        if (!panelCollapsed) {
+          panelCollapsed = true
+          applyPanelCollapsed()
+        }
+        if (mobileShell.active()) mobileShell.setSettings(false)
+        break
+      case 'replayToggleAnalysis':
+        replayAnalysisOpen = !replayAnalysisOpen
         break
       case 'replayExit':
         stopReplayTimer()
         replayIndex = null
+        // 복기 진입 때 닫았던 데스크탑 패널 상태를 되돌린다.
+        if (panelCollapsed !== replayPrevPanelCollapsed) {
+          panelCollapsed = replayPrevPanelCollapsed
+          applyPanelCollapsed()
+        }
         startTurn()
         render()
         maybeScheduleAi()
@@ -2665,24 +2683,67 @@ export function mountGame(root: HTMLElement): void {
     boardNotes.innerHTML = html
   }
 
+  // 복기 리모컨(데스크탑·모바일 공통, 보드 아래 떠 있는 컨트롤): 진행 표시 + 처음/이전/재생·멈춤/다음/끝
+  // + 진행 슬라이더 + 이 판 분석(접이식) + 종료. 복기 진입 때 설정 패널/시트를 닫아 보드를 보며 조작한다.
+  function renderReplayRemote(): void {
+    const n = moveLog.length
+    const idx = replayIndex!
+    const playing = replayTimer !== null
+    const disPrev = idx <= 0 ? 'disabled' : ''
+    const disNext = idx >= n ? 'disabled' : ''
+    const analysis = replayAnalysisOpen ? `<div class="rr-analysis">${replayAnalysisHtml(idx)}</div>` : ''
+    actionBar.innerHTML = `
+      <div class="replay-remote">
+        ${analysis}
+        <div class="rr-bar">
+          <span class="rr-progress">${idx}<i>/${n}수</i></span>
+          <div class="rr-nav">
+            <button class="rr-btn" data-act="replayFirst" ${disPrev} title="처음으로" aria-label="처음으로">⏮</button>
+            <button class="rr-btn" data-act="replayPrev" ${disPrev} title="이전 수" aria-label="이전 수">◀</button>
+            <button class="rr-btn rr-play ${playing ? 'active' : ''}" data-act="replayPlay" title="${playing ? '멈춤' : '재생'}" aria-label="${playing ? '멈춤' : '재생'}">${playing ? '⏸' : '▶'}</button>
+            <button class="rr-btn" data-act="replayNext" ${disNext} title="다음 수" aria-label="다음 수">▶</button>
+            <button class="rr-btn" data-act="replayLast" ${disNext} title="마지막으로" aria-label="마지막으로">⏭</button>
+          </div>
+          <button class="rr-btn rr-extra ${replayAnalysisOpen ? 'active' : ''}" data-act="replayToggleAnalysis" title="이 판 분석" aria-label="이 판 분석">📊</button>
+          <button class="rr-btn rr-extra rr-exit" data-act="replayExit" title="복기 종료" aria-label="복기 종료">✕</button>
+        </div>
+        <div class="rr-seek">
+          <input type="range" data-ctl="replaySeek" min="0" max="${n}" step="1" value="${idx}" aria-label="복기 진행">
+          <span class="rr-seek-val">${idx}/${n}</span>
+        </div>
+      </div>`
+    for (const btn of Array.from(actionBar.querySelectorAll('button'))) {
+      if (btn.hasAttribute('data-jump')) continue // 분석 항목은 아래에서 별도 처리
+      if (btn.hasAttribute('disabled')) continue
+      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
+    }
+    // 분석 요약 항목 클릭 → 그 수로 점프(보기 전용)
+    for (const el of Array.from(actionBar.querySelectorAll('[data-jump]'))) {
+      el.addEventListener('click', () => {
+        stopReplayTimer()
+        replayIndex = Number(el.getAttribute('data-jump'))
+        render()
+      })
+    }
+    const seek = actionBar.querySelector('input[data-ctl="replaySeek"]') as HTMLInputElement | null
+    if (seek) {
+      const val = actionBar.querySelector('.rr-seek-val') as HTMLElement | null
+      seek.addEventListener('input', () => {
+        if (val) val.textContent = `${Number(seek.value)}/${n}` // 드래그 중엔 숫자만 미리보기
+      })
+      seek.addEventListener('change', () => {
+        stopReplayTimer()
+        replayIndex = Number(seek.value)
+        render()
+      })
+    }
+  }
+
   // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
   function renderActionBar(): void {
-    // 모바일 복기: 이 화면에서 제일 필요한 이전/재생·멈춤/다음·종료를 행동 버튼 자리(우하단 플로팅)에 둔다.
-    // (설정 시트를 열어야만 나오던 문제 수정. 복기 중엔 무르기·새 게임 FAB 은 .replaying 으로 숨긴다.)
-    if (replayIndex !== null && mobileShell.active()) {
-      const n = moveLog.length
-      const idx = replayIndex
-      const playing = replayTimer !== null
-      actionBar.innerHTML = `
-        <div class="ab-replay">
-          <button class="ab-rep" data-act="replayPrev" ${idx <= 0 ? 'disabled' : ''} title="이전 수" aria-label="이전 수">◀</button>
-          <button class="ab-rep ab-rep-play ${playing ? 'active' : ''}" data-act="replayPlay">${playing ? '⏸ 멈춤' : '▶ 재생'}</button>
-          <button class="ab-rep" data-act="replayNext" ${idx >= n ? 'disabled' : ''} title="다음 수" aria-label="다음 수">▶</button>
-          <button class="ab-rep ab-rep-exit" data-act="replayExit" title="복기 종료" aria-label="복기 종료">✕</button>
-        </div>`
-      for (const btn of Array.from(actionBar.querySelectorAll('button'))) {
-        btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
-      }
+    // 복기 중이면 데스크탑·모바일 공통으로 하단 리모컨을 띄운다(설정 패널/시트는 진입 때 닫혔다).
+    if (replayIndex !== null) {
+      renderReplayRemote()
       return
     }
     // 모바일 관전: 행동 버튼이 없는 자리(우하단 플로팅)에 ▶/⏸ 와 속도 슬라이더를 둔다(설정 시트 안 열어도 조작).
@@ -3179,61 +3240,8 @@ export function mountGame(root: HTMLElement): void {
       </div>`
   }
 
-  function renderReplayPanel(idx: number): void {
-    const n = moveLog.length
-    const playing = replayTimer !== null
-    const disPrev = idx <= 0 ? 'disabled' : ''
-    const disNext = idx >= n ? 'disabled' : ''
-    // 이 수의 해설(✓/✗)은 보드 옆 board-notes 에 띄운다(renderBoardNotes). 보드만 봐도 읽히게.
-    panel.innerHTML = `
-      <h2>🐝 복기</h2>
-      <div class="replay-nav">
-        <button data-act="replayFirst" ${disPrev} title="처음으로">⏮</button>
-        <button data-act="replayPrev" ${disPrev} title="이전 수">◀</button>
-        <button data-act="replayPlay" class="${playing ? 'active' : ''}">${playing ? '⏸ 멈춤' : '▶ 재생'}</button>
-        <button data-act="replayNext" ${disNext} title="다음 수">▶</button>
-        <button data-act="replayLast" ${disNext} title="마지막으로">⏭</button>
-      </div>
-      <div class="sc-slider">
-        <span class="sc-label">진행</span>
-        <input type="range" data-ctl="replaySeek" min="0" max="${n}" step="1" value="${idx}">
-        <span class="sc-val">${idx}/${n}</span>
-      </div>
-      <button class="replay-exit" data-act="replayExit">복기 종료 ✕</button>
-      <p class="hint">◀ ▶ 한 수씩 · ▶재생 자동 진행(관전 간격 적용) · 파란 강조 = 그 수</p>
-      ${replayAnalysisHtml(idx)}
-    `
-    for (const btn of Array.from(panel.querySelectorAll('button'))) {
-      if (btn.hasAttribute('data-jump')) continue // 분석 요약 항목은 아래에서 별도 처리
-      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
-    }
-    // 분석 요약 항목 클릭 → 그 수로 점프(보기 전용)
-    for (const el of Array.from(panel.querySelectorAll('[data-jump]'))) {
-      el.addEventListener('click', () => {
-        stopReplayTimer()
-        replayIndex = Number(el.getAttribute('data-jump'))
-        render()
-      })
-    }
-    const seek = panel.querySelector('input[data-ctl="replaySeek"]') as HTMLInputElement | null
-    if (seek) {
-      const val = seek.nextElementSibling as HTMLElement | null
-      seek.addEventListener('input', () => {
-        if (val) val.textContent = `${Number(seek.value)}/${n}` // 끄는 동안 숫자만 갱신
-      })
-      seek.addEventListener('change', () => {
-        stopReplayTimer()
-        replayIndex = Number(seek.value)
-        render()
-      })
-    }
-  }
-
   function renderPanel(): void {
-    if (replayIndex !== null) {
-      renderReplayPanel(replayIndex)
-      return
-    }
+    // 복기 중에는 설정 패널을 닫고 보드 위 하단 리모컨(renderReplayRemote)으로 조작한다.
     // 게임 상태(차례·안내·자원·점수)는 보드 좌상단 오버레이(renderBoardStatus)로 옮겼다 — 패널엔 설정만.
 
     // 게임이 진행 중(첫 수 이후)이면 게임 규칙·AI 설정(모드/난이도/성향/여왕벌/무한)을 바꿀 수 없다.

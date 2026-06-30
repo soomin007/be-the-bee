@@ -216,6 +216,11 @@ export function makeDraggable(el: HTMLElement, opts: DraggableOptions): Draggabl
   el.addEventListener('pointercancel', onCancel)
   if (opts.onTap) el.addEventListener('keydown', onKey)
   window.addEventListener('resize', onResize)
+
+  // 요소 크기가 바뀌면(예: 미니 플레이어를 알약→카드로 펼치면) 새 크기 기준으로 다시 화면 안에 가둔다.
+  // 작은 알약일 때 우하단 끝에 뒀다가 큰 카드로 펼치면 오른쪽·아래로 삐져나가던 문제 방지.
+  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { if (pos) applyPos() }) : null
+  ro?.observe(el)
   applyPos()
 
   return {
@@ -227,6 +232,7 @@ export function makeDraggable(el: HTMLElement, opts: DraggableOptions): Draggabl
       el.removeEventListener('pointercancel', onCancel)
       el.removeEventListener('keydown', onKey)
       window.removeEventListener('resize', onResize)
+      ro?.disconnect()
       window.clearTimeout(lpTimer)
       window.clearTimeout(pendingTap)
     },
