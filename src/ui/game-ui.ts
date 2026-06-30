@@ -495,6 +495,11 @@ export function mountGame(root: HTMLElement): void {
   let aiWorkerTried = false // 워커 1회 지연 생성 플래그
   let pendingAiId = -1
   let pendingAiCb: ((r: { move?: Move; error?: string }) => void) | null = null
+  // 복기 "이 판 분석"을 워커에서 계산(hard 탐색이 무거울 수 있어 메인 안 막음). id 는 음수로 둬 move 와 안 겹침.
+  let pendingAnalyzeId = 0
+  let pendingAnalyzeCb: ((r: { review?: GameReview; error?: string }) => void) | null = null
+  let analyzeCount = 0
+  let analysisLoading = false // 분석을 워커에서 계산 중이면 분석 카드에 "계산 중" 표시
   let lastTip = '' // 직전 팁(연속 중복 방지)
   let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
@@ -542,7 +547,14 @@ export function mountGame(root: HTMLElement): void {
       if (typeof Worker !== 'undefined') {
         aiWorker = new Worker(new URL('./ai-worker.ts', import.meta.url), { type: 'module' })
         aiWorker.onmessage = (e: MessageEvent): void => {
-          const d = e.data as { id: number; move?: Move; error?: string }
+          const d = e.data as { id: number; move?: Move; review?: GameReview; error?: string }
+          if (d.id === pendingAnalyzeId && pendingAnalyzeCb) {
+            const cb = pendingAnalyzeCb
+            pendingAnalyzeCb = null
+            pendingAnalyzeId = 0
+            cb({ review: d.review, error: d.error })
+            return
+          }
           if (d.id === pendingAiId && pendingAiCb) {
             const cb = pendingAiCb
             pendingAiCb = null
@@ -576,6 +588,25 @@ export function mountGame(root: HTMLElement): void {
       if (!ai) return cb({ error: 'no-ai' })
       try {
         cb({ move: ai.chooseMove(st) })
+      } catch (err) {
+        cb({ error: String(err) })
+      }
+    }, 0)
+  }
+  // 복기 "이 판 분석"을 비동기로 요청한다(워커 있으면 워커, 없으면 동기 폴백). 결과를 cb 로 돌려준다.
+  function requestAnalysis(initial: GameState, mlog: Move[], cb: (r: { review?: GameReview; error?: string }) => void): void {
+    const worker = ensureAiWorker()
+    if (worker) {
+      const id = -(++analyzeCount) // 음수 id — move 요청과 안 겹침
+      pendingAnalyzeId = id
+      pendingAnalyzeCb = cb
+      worker.postMessage({ type: 'analyze', id, initial, moveLog: mlog, opts: { withScores: true } })
+      return
+    }
+    // 폴백: 동기 계산(워커 불가 환경 전용).
+    window.setTimeout(() => {
+      try {
+        cb({ review: analyzeGame(initial, mlog, { withScores: true }) })
       } catch (err) {
         cb({ error: String(err) })
       }
@@ -1192,7 +1223,8 @@ export function mountGame(root: HTMLElement): void {
         modalDismissed = true
         replayIndex = 0
         replayAnalysisOpen = false
-        cachedReview = null // 분석은 무거우니(hard 탐색) 진입이 아니라 "이 판 분석"을 펼칠 때 1회 계산
+        cachedReview = null // 분석은 무거우니(hard 탐색) 진입이 아니라 "이 판 분석"을 펼칠 때 워커에서 계산
+        analysisLoading = false
         // 복기는 보드를 보며 하는 것 — 설정 패널/시트를 닫고 보드로 복귀시킨다(조작은 하단 리모컨).
         replayPrevPanelCollapsed = panelCollapsed
         if (!panelCollapsed) {
@@ -1203,13 +1235,25 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'replayToggleAnalysis':
         replayAnalysisOpen = !replayAnalysisOpen
-        // 펼칠 때 1회 계산해 캐싱(이후 슬라이더/재생에도 재계산 안 함). 무거운 hard 탐색은 이때만.
-        if (replayAnalysisOpen && cachedReview === null) cachedReview = analyzeGame(timeline()[0]!, moveLog, { withScores: true })
+        // 펼칠 때 아직 분석이 없으면 워커에 비동기 요청(hard 탐색이라 무거울 수 있어 화면 안 멈춤).
+        // 결과가 오면 캐싱하고 다시 그린다. 이후 슬라이더/재생에도 재계산 없음.
+        if (replayAnalysisOpen && cachedReview === null && !analysisLoading) {
+          analysisLoading = true
+          const tl0 = timeline()[0]!
+          const mlog = moveLog.slice()
+          requestAnalysis(tl0, mlog, (r) => {
+            analysisLoading = false
+            if (r.review) cachedReview = r.review
+            if (replayIndex !== null) render() // 아직 복기 중이면 분석 카드 갱신
+          })
+        }
         break
       case 'replayExit':
         stopReplayTimer()
         replayIndex = null
         cachedReview = null
+        analysisLoading = false
+        pendingAnalyzeCb = null // 늦게 오는 워커 응답 무시(복기 종료)
         // 복기 진입 때 닫았던 데스크탑 패널 상태를 되돌린다.
         if (panelCollapsed !== replayPrevPanelCollapsed) {
           panelCollapsed = replayPrevPanelCollapsed
@@ -3242,7 +3286,11 @@ export function mountGame(root: HTMLElement): void {
   // 복기 "이 판 분석" 요약 HTML. 기보를 analyzeGame 으로 분석해 결정적 순간을 리스트로(클릭=그 수로 점프).
   function replayAnalysisHtml(currentIdx: number): string {
     if (moveLog.length === 0) return ''
-    const review = cachedReview ?? analyzeGame(timeline()[0]!, moveLog, { withScores: true })
+    // 분석은 워커에서 비동기로 계산된다(replayToggleAnalysis). 아직 결과 전이면 "계산 중" 카드.
+    if (cachedReview === null) {
+      return `<div class="replay-analysis"><div class="ra-title">이 판 분석</div><div class="ra-empty">${analysisLoading ? '분석을 계산하고 있어요…' : '분석을 준비 중이에요…'}</div></div>`
+    }
+    const review = cachedReview
     const decisive = [...review.blunders, ...review.highlights].sort((a, b) => a.index - b.index)
     const cy = review.counts.yellow
     const cb = review.counts.brown
