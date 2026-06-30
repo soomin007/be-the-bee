@@ -1607,6 +1607,23 @@ button:has(> .ico) {
 .replay-analysis .ra-item.bad {
   border-left: 3px solid #e2570c;
 }
+/* 실수의 점수 손해(−N)와 "더 나은 수 보기" 칩(클릭=직전 국면 + 추천 칸 강조). */
+.replay-analysis .ra-loss {
+  flex: none;
+  font-weight: 800;
+  color: #c2410c;
+}
+.replay-analysis .ra-best {
+  flex: none;
+  margin-left: auto;
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  background: #e7f6e9;
+  color: #2f7d32;
+  font-weight: 700;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
 
 /* 설명 박스, 패널 맨 밑 도움말. 제목 + 아이콘 행으로 정리해 가독성을 높인다 */
 .help {

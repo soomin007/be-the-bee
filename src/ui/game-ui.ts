@@ -27,7 +27,7 @@ import {
   winningLine,
   withTile,
 } from '../engine/index'
-import type { Ai, AiOptions, Difficulty, GameState, Hex, HiveCountdown, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
+import type { Ai, AiOptions, Difficulty, GameReview, GameState, Hex, HiveCountdown, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
 import { nextTip } from './tips'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
@@ -393,6 +393,8 @@ export function mountGame(root: HTMLElement): void {
   let replayTimer: number | null = null // 복기 자동 재생 타이머
   let replayAnalysisOpen = false // 복기 리모컨의 "이 판 분석" 펼침 여부
   let replayPrevPanelCollapsed = false // 복기 진입 때 데스크탑 패널 접힘 상태(종료 시 복원)
+  let cachedReview: GameReview | null = null // 복기 진입 시 1회 계산한 분석(매 렌더 재계산 방지 + 점수 손해)
+  let recommendedCells: Hex[] | null = null // 분석의 "더 나은 수"가 가리키는 칸(복기 보드에 초록 강조)
   let draft: Draft | null = null
   let pieceKind: PieceKind = 'normal'
   let message = '' // 경고(잘못된 수 등), ⚠️ 빨강
@@ -1178,6 +1180,7 @@ export function mountGame(root: HTMLElement): void {
   // 복기 컨트롤(보기 전용, state/history/moveLog 를 건드리지 않는다).
   function handleReplay(act: string): void {
     const n = moveLog.length
+    if (act !== 'replayToggleAnalysis') recommendedCells = null // 네비/종료는 "더 나은 수" 강조 해제
     switch (act) {
       case 'replayEnter':
         if (n === 0) return
@@ -1189,6 +1192,8 @@ export function mountGame(root: HTMLElement): void {
         modalDismissed = true
         replayIndex = 0
         replayAnalysisOpen = false
+        // 분석(분류 + 실수의 점수 손해·추천 수)을 진입 시 한 번만 계산해 캐싱(매 렌더 재계산 방지).
+        cachedReview = analyzeGame(timeline()[0]!, moveLog, { withScores: true })
         // 복기는 보드를 보며 하는 것 — 설정 패널/시트를 닫고 보드로 복귀시킨다(조작은 하단 리모컨).
         replayPrevPanelCollapsed = panelCollapsed
         if (!panelCollapsed) {
@@ -1203,6 +1208,7 @@ export function mountGame(root: HTMLElement): void {
       case 'replayExit':
         stopReplayTimer()
         replayIndex = null
+        cachedReview = null
         // 복기 진입 때 닫았던 데스크탑 패널 상태를 되돌린다.
         if (panelCollapsed !== replayPrevPanelCollapsed) {
           panelCollapsed = replayPrevPanelCollapsed
@@ -2280,6 +2286,15 @@ export function mountGame(root: HTMLElement): void {
       }
     }
 
+    // 7.5) 복기 분석 "더 나은 수"(추천) 칸 강조 — 초록 점선 펄스. 실수 항목 클릭 시 그 직전 국면에 표시.
+    if (recommendedCells) {
+      for (const cell of recommendedCells) {
+        content.appendChild(
+          makeHexPolygon(hexToPixel(cell), { fill: 'none', stroke: '#16a34a', strokeWidth: 4, dash: true, cls: 'pulse', interactive: false }),
+        )
+      }
+    }
+
     // 3D 보드 모드: 같은 상태 + 힌트를 three.js 렌더러로(SVG 는 CSS 로 숨김). 클릭은 동일한 onHexClick.
     if (settings.board3d) {
       if (!board3dApi) {
@@ -2717,11 +2732,22 @@ export function mountGame(root: HTMLElement): void {
       if (btn.hasAttribute('disabled')) continue
       btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
     }
-    // 분석 요약 항목 클릭 → 그 수로 점프(보기 전용)
+    // 분석 요약 항목 클릭 → 그 수로 점프(보기 전용). 실수(data-best)면 직전 국면 + 추천 칸 강조.
     for (const el of Array.from(actionBar.querySelectorAll('[data-jump]'))) {
       el.addEventListener('click', () => {
         stopReplayTimer()
-        replayIndex = Number(el.getAttribute('data-jump'))
+        const idx = Number(el.getAttribute('data-jump'))
+        const bestAttr = el.getAttribute('data-best')
+        if (bestAttr) {
+          replayIndex = Math.max(0, idx - 1) // 그 실수를 두기 직전(둘 차례) 국면
+          recommendedCells = bestAttr.split('|').map((p) => {
+            const [q, r] = p.split(',').map(Number)
+            return { q: q!, r: r!, s: -q! - r! } as Hex
+          })
+        } else {
+          replayIndex = idx
+          recommendedCells = null
+        }
         render()
       })
     }
@@ -3215,7 +3241,7 @@ export function mountGame(root: HTMLElement): void {
   // 복기 "이 판 분석" 요약 HTML. 기보를 analyzeGame 으로 분석해 결정적 순간을 리스트로(클릭=그 수로 점프).
   function replayAnalysisHtml(currentIdx: number): string {
     if (moveLog.length === 0) return ''
-    const review = analyzeGame(timeline()[0]!, moveLog)
+    const review = cachedReview ?? analyzeGame(timeline()[0]!, moveLog, { withScores: true })
     const decisive = [...review.blunders, ...review.highlights].sort((a, b) => a.index - b.index)
     const cy = review.counts.yellow
     const cb = review.counts.brown
@@ -3223,11 +3249,16 @@ export function mountGame(root: HTMLElement): void {
       decisive.length === 0
         ? `<div class="ra-empty">눈에 띄는 결정적 순간은 없었어요.</div>`
         : `<div class="ra-list">${decisive
-            .map(
-              (r) =>
-                `<button class="ra-item ${r.polarity} ${r.index === currentIdx ? 'cur' : ''}" data-jump="${r.index}">` +
-                `<span class="ra-idx">${r.index}수</span> ${PLAYER_LABEL[r.player]} ${noteLine(r.note)}</button>`,
-            )
+            .map((r) => {
+              // 실수에 점수 손해와 "더 나은 수"(추천)가 붙어 있으면 함께 보여준다(클릭=직전 국면+추천 칸 강조).
+              const loss = r.lossCp !== undefined && r.lossCp > 0 ? ` <span class="ra-loss">−${r.lossCp}</span>` : ''
+              const bestAttr = r.bestMove ? ` data-best="${moveCells(r.bestMove).map((h) => `${h.q},${h.r}`).join('|')}"` : ''
+              const bestHint = r.bestMove ? ` <span class="ra-best">더 나은 수 보기</span>` : ''
+              return (
+                `<button class="ra-item ${r.polarity} ${r.index === currentIdx ? 'cur' : ''}" data-jump="${r.index}"${bestAttr}>` +
+                `<span class="ra-idx">${r.index}수</span> ${PLAYER_LABEL[r.player]} ${noteLine(r.note)}${loss}${bestHint}</button>`
+              )
+            })
             .join('')}</div>`
     return `
       <div class="replay-analysis">

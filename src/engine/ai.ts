@@ -256,6 +256,9 @@ export interface MoveReview {
   player: Player // 그 수를 둔 사람
   note: MoveNote
   polarity: 'good' | 'bad'
+  // ── 점수 분석(analyzeGame 의 withScores 옵션에서만 채워짐, 실수=blunder 에 한함) ──
+  lossCp?: number // 점수 손해 = (최선 수 평가 − 실제 둔 수 평가) / 100, 0 이상. 클수록 큰 실수.
+  bestMove?: Move // 더 나은 수(추천) — 그 위치에서 탐색이 고른 최선 수.
 }
 
 /** 기보 한 판 분석. reviews=코칭 붙은 수, blunders=지적, highlights=결정적 잘한 수, counts=진영별 집계. */
@@ -268,19 +271,46 @@ export interface GameReview {
 
 const DECISIVE_GOOD: MoveNote[] = ['win', 'fork', 'threat', 'block', 'corridor']
 
+/** analyzeGame 옵션. */
+export interface AnalyzeOptions {
+  /** true 면 실수(놓친 승리/차단)에 점수 손해(lossCp)와 추천 수(bestMove)를 함께 계산한다.
+   *  탐색을 돌려 무거우니(실수 수만큼) 복기 진입 때 1회만 계산해 캐싱한다. */
+  withScores?: boolean
+  /** 점수 계산에 쓸 탐색 강도(기본 'medium' — 속도·정확 균형). 'hard' 면 더 정확하지만 느리다. */
+  difficulty?: Difficulty
+}
+
 /**
  * 시작 국면 + 기보를 처음부터 재생하며 각 수를 reviewMove 로 분류해 한 판 분석을 만든다.
  * initial 의 모드 플래그(queenEnabled/infiniteTiles)가 분석에 그대로 반영된다.
  * 불법 수(손상된 기보)를 만나면 그 지점에서 분석을 멈춘다.
+ * opts.withScores 면 실수마다 더 나은 수(추천)와 점수 손해를 계산해 붙인다.
  */
-export function analyzeGame(initial: GameState, moveLog: Move[]): GameReview {
+export function analyzeGame(initial: GameState, moveLog: Move[], opts: AnalyzeOptions = {}): GameReview {
+  const scoreCfg: Cfg | null = opts.withScores === true ? { ...cfgFor(opts.difficulty ?? 'medium'), w: makeWeights('balanced') } : null
+  const scoreRng = scoreCfg ? makeRng(0xa11) : null
   let state = initial
   const reviews: MoveReview[] = []
   for (let i = 0; i < moveLog.length; i++) {
     const move = moveLog[i]!
     const player = state.turn
     const note = reviewMove(state, move)
-    if (note) reviews.push({ index: i + 1, player, note, polarity: notePolarity(note) })
+    if (note) {
+      const r: MoveReview = { index: i + 1, player, note, polarity: notePolarity(note) }
+      // 실수(놓친 승리/차단)면 그 위치 최선 수(추천)와 점수 손해를 계산해 붙인다.
+      if (scoreCfg && scoreRng && r.polarity === 'bad') {
+        try {
+          const best = pickMove(state, scoreCfg, scoreRng)
+          const bestScore = evaluate(resultBoard(state.board, best, player), player, scoreCfg.w)
+          const actualScore = evaluate(resultBoard(state.board, move, player), player, scoreCfg.w)
+          r.bestMove = best
+          r.lossCp = Math.max(0, Math.round((bestScore - actualScore) / 100))
+        } catch {
+          /* 점수 계산 실패(예외)면 분류만 유지한다 */
+        }
+      }
+      reviews.push(r)
+    }
     try {
       state = applyMove(state, move)
     } catch {

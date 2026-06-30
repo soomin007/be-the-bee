@@ -112,6 +112,50 @@ describe('analyzeGame — 기보 한 판 분석', () => {
     expect(review.blunders).toEqual([])
     expect(review.highlights).toEqual([])
   })
+
+  it('withScores: 실수(blunder)에 점수 손해(lossCp≥0)와 추천 수(bestMove)가 붙고, 합리적 시간에 끝난다', () => {
+    const t0 = performance.now()
+    const review = analyzeGame(createInitialState(), moves, { withScores: true })
+    const ms = performance.now() - t0
+    // 실수마다 더 나은 수와 점수 손해가 채워진다(잘한 수=highlight 는 점수 계산 대상 아님).
+    for (const b of review.blunders) {
+      expect(b.bestMove).toBeDefined()
+      expect(b.lossCp !== undefined && b.lossCp >= 0).toBe(true)
+    }
+    for (const h of review.highlights) expect(h.lossCp).toBeUndefined()
+    // 결정적이어야 한다(고정 시드) — 두 번 돌려 같은 추천.
+    const review2 = analyzeGame(createInitialState(), moves, { withScores: true })
+    expect(review2.blunders.map((b) => b.lossCp)).toEqual(review.blunders.map((b) => b.lossCp))
+    // 35수 분석이 5초 안에 끝난다(실수 수만큼만 탐색).
+    expect(ms).toBeLessThan(5000)
+    // eslint-disable-next-line no-console
+    console.log(`[analyzeGame withScores] blunders=${review.blunders.length}, ${ms.toFixed(0)}ms`)
+  }, 30000)
+
+  it('withScores: missBlock(막을 수 있는 위협을 안 막음)에 추천 수(차단)와 점수 손해(>0)가 붙는다', () => {
+    // 갈색 말 4목 (0,0)~(3,0), 왼끝 (-1,0) 막힘, 오른끝 (4,0) 열림 → 노랑이 막아야 하는 위협.
+    const board: Board = {
+      [hexKey(hex(0, 0))]: { tile: { owner: 'brown' }, piece: { owner: 'brown', kind: 'normal' } },
+      [hexKey(hex(1, 0))]: { tile: { owner: 'brown' }, piece: { owner: 'brown', kind: 'normal' } },
+      [hexKey(hex(2, 0))]: { tile: { owner: 'brown' }, piece: { owner: 'brown', kind: 'normal' } },
+      [hexKey(hex(3, 0))]: { tile: { owner: 'brown' }, piece: { owner: 'brown', kind: 'normal' } },
+      [hexKey(hex(-1, 0))]: { tile: { owner: 'yellow' }, piece: { owner: 'yellow', kind: 'normal' } },
+    }
+    const before: GameState = {
+      board,
+      turn: 'yellow',
+      supplies: { yellow: { tiles: 20, pieces: 20, queenUsed: false }, brown: { tiles: 20, pieces: 20, queenUsed: false } },
+      moveNumber: 9,
+      phase: 'playing',
+    }
+    const away: Move = { type: 'tileAndPiece', tile: hex(0, 1), piece: { at: hex(0, 1), kind: 'normal' } }
+    const review = analyzeGame(before, [away], { withScores: true })
+    expect(review.blunders.length).toBe(1)
+    const b = review.blunders[0]!
+    expect(b.note).toBe('missBlock')
+    expect(b.bestMove).toBeDefined() // 더 나은 수 = 위협 차단
+    expect(b.lossCp !== undefined && b.lossCp > 0).toBe(true) // 막았어야 했으니 점수 손해 큼
+  }, 30000)
 })
 
 describe('reviewMove — 막을 수 있는 위협을 안 막으면 missBlock(블런더)', () => {
