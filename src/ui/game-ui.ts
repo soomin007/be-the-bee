@@ -33,7 +33,7 @@ import { createAiLoading } from './ai-loading'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, themeById, type ColorTheme } from './themes'
-import { autoSave, decodeSnapshot, encodeSnapshot, loadAutoSave, type GameSnapshot } from './game-save'
+import { autoSave, encodeSnapshot, loadAutoSave, type GameSnapshot } from './game-save'
 import { openTutorial } from './tutorial'
 import {
   MODE_LABEL,
@@ -58,23 +58,7 @@ import type { Board3D, BoardHints } from './board3d' // 런타임 createBoard3D 
 import { mpEnabled } from '../mp/supabase'
 import { initMobileShell } from './mobile-shell'
 import { makeDraggable } from './draggable'
-import {
-  createRoom,
-  joinRoom,
-  getRoom,
-  leaveRoom,
-  deleteRoom,
-  cleanupOldRooms,
-  pushState,
-  connectRoom,
-  agreeStart,
-  opposite,
-  clientId,
-  type Room,
-  type RoomConn,
-  type RoomStatus,
-  type Side,
-} from '../mp/room'
+import { createOnlineUi } from './online-ui'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 
@@ -243,25 +227,7 @@ export function mountGame(root: HTMLElement): void {
   let lastBoardNotesHtml = '' // 보드 옆 멘트의 직전 HTML — 같으면 재렌더 생략(등장 애니메이션 재발 방지)
   let lastModalKey = '' // 모달 상태 서명 — 같으면 재렌더 생략(온라인 안내 등 모달 깜빡임 방지)
   let beeTapCount = 0 // 제목 벌 탭 횟수 — 7번이면 실사 벌(이스터에그) 토글
-  // 온라인 대전 세션(방에 참가 중이면, 아니면 null).
-  //  - phase: 'waiting'(상대 대기) → 'negotiating'(선공/후공 합의 중) → 'playing'(대국).
-  //  - mySide: 합의로 정해진 내 진영(playing 부터 유효). 그 외 차례/협상 중엔 입력 잠금.
-  //  - proposal: 진행 중인 선공/후공 제안(mine=내가 제안 / false=상대 제안받음).
-  let online:
-    | {
-        roomId: string
-        isHost: boolean
-        phase: 'waiting' | 'negotiating' | 'playing'
-        mySide: Side
-        proposal: { hostSide: Side; mine: boolean; toss?: boolean } | null
-        undoReq: boolean // 내가 무르기를 요청해 상대 동의를 기다리는 중(true 면 대기 모달).
-        peerConnected: boolean // 상대가 지금 접속 중인지(presence). false 면 끊김 표시.
-        status: RoomStatus
-        conn: RoomConn
-      }
-    | null = null
-  let lastSyncedSnapshot = '' // 방과 마지막으로 주고받은 스냅샷 코드 — 내 push 의 에코·중복 적용 방지
-  let waitPollTimer: number | null = null // 방장 대기 중 상대 입장 폴링(실시간을 놓쳐도 잡는 안전망)
+  // (온라인 대전 세션·알림 팝업·방 동기화 상태는 ./online-ui 로 분리 — 2026-07-08)
   let lastMove: Move | null = null
   let modalDismissed = false // 결과 모달 닫음 여부
   // 팝업(결과 모달보다 우선): 여왕벌 설명/보관함 + 온라인 다이얼로그(진영 선택·나가기 확인) + 무르기 동의.
@@ -280,11 +246,11 @@ export function mountGame(root: HTMLElement): void {
     startLocal: () => startLocalNew(),
     startAi: (v) => startAiNew(v),
     startWatch: (v) => startWatchNew(v),
-    hostOnline: () => void createOnlineRoom(),
-    joinOnline: (code) => void joinOnline(code),
-    rematch: () => requestRematch(),
+    hostOnline: () => void onlineUi.createRoom(),
+    joinOnline: (code) => void onlineUi.join(code),
+    rematch: () => onlineUi.requestRematch(),
     // 온라인 경기를 마친 뒤면 첫 화면에 '상대와 재대결' 버튼을 추가로 보여준다.
-    showRematch: () => online !== null && state.phase === 'finished',
+    showRematch: () => onlineUi.active() && state.phase === 'finished',
     mpEnabled,
     render: () => render(),
   })
@@ -328,6 +294,55 @@ export function mountGame(root: HTMLElement): void {
     onAction: (a) => onPanelAction(a),
     render: () => render(),
   })
+  // 온라인 대전 — 방 수명주기(만들기/입장/재접속/나감)·선공후공 협상·재대국·온라인 무르기 신호·
+  // 온라인 전용 모달/상태줄/설정 버튼 HTML 은 online-ui.ts 모듈. 게임 상태를 만지는 효과
+  // (스냅샷 적용·새 판 리셋·무르기 수행·infoModal 전환·알림)만 여기서 콜백으로 준다.
+  const onlineUi = createOnlineUi({
+    snapshot: () => snapshot(),
+    applySnapshot: (s) => applySnapshot(s),
+    gameState: () => state,
+    resetToFreshGame: () => resetToFreshGame(),
+    enterHotseatMode: () => {
+      settings.mode = 'hotseat'
+      rebuildAi()
+    },
+    setModeFlags: (queen, infinite) => {
+      settings.queen = queen
+      settings.infiniteTiles = infinite
+    },
+    undoUsedFor: (p) => undoUsed[p],
+    markUndoUsed: (p) => {
+      undoUsed[p] = true
+    },
+    doUndo: () => doUndo(),
+    openUndoAsk: (side) => {
+      undoAsk = side
+      infoModal = 'undoAsk'
+    },
+    closeUndoAsk: () => {
+      if (infoModal === 'undoAsk') {
+        infoModal = null
+        undoAsk = null
+        notice = '상대가 무르기 요청을 취소했어요.'
+        render()
+      }
+    },
+    openRematchAsk: () => {
+      infoModal = 'rematchAsk'
+    },
+    closeInfoModal: () => {
+      infoModal = null
+    },
+    dismissResultModal: () => {
+      modalDismissed = true
+    },
+    setNotice: (t) => {
+      notice = t
+    },
+    shareCode: (c) => shareCode(c),
+    beeSvg: () => BEE_SVG,
+    render: () => render(),
+  })
   // 저장 보관함 — HTML·보관함 액션은 saves-modal.ts 모듈. 열림 상태(infoModal==='saves')와
   // 게임 상태를 만지는 효과(스냅샷 생성/복원·복기 진입·알림)만 여기서 콜백으로 준다.
   const savesModal = createSavesModal({
@@ -356,7 +371,6 @@ export function mountGame(root: HTMLElement): void {
   // 사람끼리: 각자 무르기 1회 + 상대 동의. undoUsed=진영별 사용 여부, undoAsk=되돌릴(요청한) 진영.
   let undoUsed: Record<Player, boolean> = { yellow: false, brown: false }
   let undoAsk: Player | null = null
-  let onlineMsg: string | null = null // 온라인 알림 팝업(매칭 성공·상대 모드 변경·상대 나감). 확인 누르면 사라짐
   // 리치(한 수로 5목) 칸, render 가 채우고 renderPanel 이 읽는다.
   let dangerCells: Hex[] = []
   let winNowCells: Hex[] = []
@@ -406,16 +420,17 @@ export function mountGame(root: HTMLElement): void {
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === settings.aiSide)
   // 온라인 대전 중 지금이 "내 차례"인가(방 밖이면 항상 true). 대국 중 + 내 진영 차례여야 둘 수 있다.
-  const myOnlineTurn = (): boolean =>
-    online === null || (online.phase === 'playing' && state.turn === online.mySide)
+  const myOnlineTurn = (): boolean => onlineUi.myOnlineTurn()
   // 입력(보드 클릭·행동 버튼)을 잠가야 하는가: AI 가 두는 중/AI 차례, 또는 온라인 상대 차례/협상 중.
   const inputLocked = (): boolean => aiThinking || aiControls(state.turn) || !myOnlineTurn()
   // 무르기 버튼/단축키를 쓸 수 있는가. 온라인은 "내가 방금 둠(=상대 차례) + 각자 1회 + 요청 중 아님",
   // 사람끼리는 "상대가 무르기를 안 썼을 때"(요청자=직전에 둔 사람).
   const undoEnabled = (): boolean => {
     if (history.length === 0 || aiThinking) return false
-    if (online)
-      return online.phase === 'playing' && state.turn !== online.mySide && !undoUsed[online.mySide] && !online.undoReq
+    if (onlineUi.active()) {
+      const side = onlineUi.mySide()!
+      return onlineUi.phase() === 'playing' && state.turn !== side && !undoUsed[side] && !onlineUi.undoReqPending()
+    }
     return !(settings.mode === 'hotseat' && undoUsed[opponent(state.turn)])
   }
   // 그 진영을 두는 AI 의 난이도(해설은 전문가일 때만). 관전은 색깔별, vsAi 는 단일.
@@ -941,7 +956,7 @@ export function mountGame(root: HTMLElement): void {
       return
     }
     // 새 게임(N) — 온라인은 방을 깨므로 제외(자체 나가기/재대국 UI 사용).
-    if (!online && (e.key === 'n' || e.key === 'N')) {
+    if (!onlineUi.active() && (e.key === 'n' || e.key === 'N')) {
       e.preventDefault()
       onPanelAction('new')
       return
@@ -1162,344 +1177,10 @@ export function mountGame(root: HTMLElement): void {
     autoSaveNow() // 매 수 자동 저장 → 새로고침해도 이어하기
     render()
     maybeScheduleAi()
-    if (online) pushOnline() // 온라인: 내가 둔 수를 방에 반영(상대가 구독으로 받음). 상대 수는 applySnapshot 경로라 여기 안 옴
+    onlineUi.pushCurrent() // 온라인: 내가 둔 수를 방에 반영(상대가 구독으로 받음). 상대 수는 applySnapshot 경로라 여기 안 옴
   }
 
-  // ---- 온라인 대전(Supabase 방) -------------------------------------------
-  // 초대 링크: 같은 주소 + #room=코드. 상대가 열면 자동 입장(아래 mountGame 끝 해시 처리).
-  function inviteUrl(roomId: string): string {
-    if (typeof location === 'undefined') return roomId
-    return `${location.origin}${location.pathname}#room=${roomId}`
-  }
-  // 진영 라벨(노랑=선공, 갈색=후공). 노랑이 항상 먼저 둔다.
-  function sideLabel(side: Side): string {
-    return side === 'yellow' ? '노랑(선공)' : '갈색(후공)'
-  }
-  function dayAgoIso(): string {
-    return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  }
-
-  // 방장이 상대를 기다리는 동안, 실시간 입장 이벤트를 놓쳐도 잡도록 주기적으로 방을 확인한다.
-  function startWaitPoll(roomId: string): void {
-    stopWaitPoll()
-    waitPollTimer = window.setInterval(() => {
-      if (!online || online.phase !== 'waiting') {
-        stopWaitPoll()
-        return
-      }
-      void getRoom(roomId).then((room) => {
-        if (room && room.status === 'negotiating' && online && online.phase === 'waiting') {
-          stopWaitPoll()
-          onRoomUpdate(room) // 매칭 처리(waiting→negotiating) 재사용
-        }
-      })
-    }, 2500)
-  }
-  function stopWaitPoll(): void {
-    if (waitPollTimer !== null) {
-      clearInterval(waitPollTimer)
-      waitPollTimer = null
-    }
-  }
-
-  // 내가 둔 뒤 새 스냅샷을 방에 올린다. lastSyncedSnapshot 으로 내 push 의 에코를 무시한다.
-  function pushOnline(): void {
-    if (!online) return
-    const code = encodeSnapshot(snapshot())
-    lastSyncedSnapshot = code
-    const status: RoomStatus = state.phase === 'finished' ? 'finished' : 'playing'
-    online.status = status
-    void pushState(online.roomId, code, status)
-  }
-
-  // 방 행이 바뀌면(상대 입장·수·모드 변경·나감) 호출.
-  function onRoomUpdate(room: Room): void {
-    if (!online) return
-    // 상대가 나감: 알림 + 내 온라인 세션 종료(보드는 그대로 둬 마지막 국면을 본다). 방은 정리(삭제).
-    if (room.status === 'left') {
-      stopWaitPoll()
-      void deleteRoom(online.roomId) // 둘 다 떠난 방이니 정리
-      online.conn.close()
-      online = null
-      if (typeof location !== 'undefined' && location.hash) location.hash = ''
-      onlineMsg = '상대가 방에서 나갔어요. 온라인 대전을 종료합니다.'
-      render()
-      return
-    }
-    // 매칭 성공: 대기 중이던 방에 상대가 들어옴(waiting → negotiating) → 선공/후공 협상 시작.
-    if (online.status === 'waiting' && room.status === 'negotiating') {
-      stopWaitPoll()
-      online.phase = 'negotiating'
-      onlineMsg = '상대가 들어왔어요! 이제 선공·후공을 정해요.'
-    }
-    // 합의가 DB 에 반영됨(상대가 수락) → 협상 신호를 놓쳤어도 여기서 안전하게 시작(동기화 복구).
-    if (room.status === 'playing' && online.phase !== 'playing') {
-      finalizeAgreement(room.host_side)
-      return
-    }
-    online.status = room.status
-    // 상대 수/모드 변경: 스냅샷이 내가 올린 것과 다르면 적용. 모드가 바뀌었으면 팝업으로 알림.
-    if (room.snapshot && room.snapshot !== lastSyncedSnapshot) {
-      lastSyncedSnapshot = room.snapshot
-      const s = decodeSnapshot(room.snapshot)
-      if (s) {
-        if (s.state.queenEnabled !== state.queenEnabled) {
-          onlineMsg = `상대가 여왕벌 모드를 ${s.state.queenEnabled ? '켰어요' : '껐어요'}.`
-        } else if (s.state.infiniteTiles !== state.infiniteTiles) {
-          onlineMsg = `상대가 무한 모드를 ${s.state.infiniteTiles ? '켰어요' : '껐어요'}.`
-        }
-        applySnapshot(s)
-        settings.queen = s.state.queenEnabled === true // 토글 버튼 상태도 상대 변경에 맞춤
-        settings.infiniteTiles = s.state.infiniteTiles === true
-      }
-    }
-    render()
-  }
-
-  // 선공/후공 협상 신호(broadcast). DB 가 아니라 즉석 메시지로 주고받는다.
-  function onSignal(event: string, payload: Record<string, unknown>): void {
-    if (!online) return
-    if (event === 'propose') {
-      online.proposal = { hostSide: payload.hostSide as Side, mine: false, toss: payload.toss === true }
-      render() // 협상 모달이 예/아니오 표시
-    } else if (event === 'accept') {
-      finalizeAgreement(payload.hostSide as Side)
-    } else if (event === 'reject') {
-      if (online.phase === 'playing') return // 이미 합의·시작됨 → 늦게 도착한 거절은 무시(동기화 깨짐 방지)
-      online.proposal = null
-      onlineMsg = '상대가 거절했어요. 다시 정해 주세요.'
-      render()
-    } else if (event === 'cancel') {
-      if (online.phase === 'playing') return // 이미 합의·시작됨 → 늦은 취소 무시
-      online.proposal = null // 상대가 자기 제안을 취소함
-      render()
-    } else if (event === 'rematchReq') {
-      infoModal = 'rematchAsk' // 상대가 한 판 더 요청 → 예/아니오
-      render()
-    } else if (event === 'rematchOk') {
-      startRematch()
-    } else if (event === 'rematchNo') {
-      onlineMsg = '상대가 한 판 더를 거절했어요.'
-      render()
-    } else if (event === 'undoReq') {
-      // 상대가 무르기를 요청 → 동의/거절 모달(되돌릴 진영 = payload.side).
-      if (online.phase !== 'playing') return
-      undoAsk = payload.side as Player
-      infoModal = 'undoAsk'
-      render()
-    } else if (event === 'undoOk') {
-      // 내 무르기 요청을 상대가 동의 → 내가 한 수 되돌리고 스냅샷을 방에 반영(상대는 구독으로 동기화).
-      if (!online.undoReq) return // 요청 중이 아니면 무시(지연/중복)
-      online.undoReq = false
-      undoUsed[online.mySide] = true
-      doUndo()
-      pushOnline()
-      notice = '상대가 동의했어요. 한 수 물렀습니다.'
-      render()
-    } else if (event === 'undoNo') {
-      if (!online.undoReq) return
-      online.undoReq = false
-      onlineMsg = '상대가 무르기를 거절했어요.'
-      render()
-    } else if (event === 'undoCancel') {
-      // 요청자가 취소 → 내 동의 모달을 닫는다.
-      if (infoModal === 'undoAsk') {
-        infoModal = null
-        undoAsk = null
-        notice = '상대가 무르기 요청을 취소했어요.'
-        render()
-      }
-    }
-  }
-
-  function enterOnline(roomId: string, isHost: boolean, phase: 'waiting' | 'negotiating' | 'playing', mySide: Side): void {
-    settings.mode = 'hotseat' // 온라인은 로컬 AI 없이 사람 둘. aiControls=false 가 되게.
-    rebuildAi()
-    online = {
-      roomId,
-      isHost,
-      phase,
-      mySide,
-      proposal: null,
-      undoReq: false,
-      peerConnected: phase !== 'waiting', // 협상/대국 단계면 상대가 방금 있었음(presence 가 곧 갱신)
-      status: phase === 'waiting' ? 'waiting' : phase === 'negotiating' ? 'negotiating' : 'playing',
-      conn: connectRoom(roomId, onRoomUpdate, onSignal, onPeer),
-    }
-    if (online.phase === 'waiting') startWaitPoll(roomId) // 상대 입장 폴링 안전망
-    if (typeof location !== 'undefined') location.hash = `room=${roomId}`
-  }
-
-  // 상대 presence 변화(접속/끊김). 탭 닫힘·네트워크 끊김을 자동 감지한다.
-  // 팝업은 새로고침 등으로 깜빡일 수 있어 안 띄우고, 보드 HUD 의 '상대 연결 끊김' 표시로만 반영한다.
-  function onPeer(present: boolean): void {
-    if (!online) return
-    online.peerConnected = present
-    render()
-  }
-
-  // 방장: 새 판으로 방을 만든다. 진영은 상대 입장 후 협상으로 정한다(host_side 는 임시 yellow).
-  async function createOnlineRoom(): Promise<void> {
-    resetToFreshGame()
-    const code0 = encodeSnapshot(snapshot())
-    lastSyncedSnapshot = code0
-    try {
-      void cleanupOldRooms(dayAgoIso()) // 오래된 방 정리(테이블 가볍게)
-      const room = await createRoom(code0, 'yellow')
-      enterOnline(room.id, true, 'waiting', 'yellow')
-      const url = inviteUrl(room.id)
-      // 자동 복사(따로 복사 버튼 찾을 필요 없이 바로 붙여넣기). writeText 는 Promise 라 권한 거부 시
-      // catch 가 아닌 rejection 으로 새므로 .catch 로도 막는다(불가 환경은 아래 팝업 링크로 직접 복사).
-      try {
-        void navigator.clipboard?.writeText(url).catch(() => {})
-      } catch {
-        /* navigator.clipboard 자체가 없는 환경 */
-      }
-      onlineMsg = `방을 만들고 초대 링크를 복사했어요!\n${url}\n상대에게 붙여넣어 보내세요. 들어오면 선공·후공을 정해요.\n\n두 명이 같이 접속해 있지 않아도 돼요. 이 기기에서 같은 링크로 다시 들어오면 이어서 둘 수 있고, 방은 마지막으로 둔 뒤 24시간 동안 유지돼요.`
-      render()
-    } catch (e) {
-      onlineMsg = '방 만들기 실패: ' + (e as Error).message
-      render()
-    }
-  }
-
-  // 상대: 코드로 입장 → 방장의 현재 판으로 맞추고 협상 단계로.
-  async function joinOnline(code: string): Promise<void> {
-    if (!mpEnabled) {
-      onlineMsg = '온라인 기능이 아직 설정되지 않았어요(서버 키 없음).'
-      render()
-      return
-    }
-    try {
-      const room = await joinRoom(code.trim().toUpperCase())
-      if (!room) {
-        onlineMsg = '그 방을 찾지 못했어요. 코드를 다시 확인하세요.'
-        if (typeof location !== 'undefined' && location.hash) location.hash = ''
-        render()
-        return
-      }
-      // 만석: 이미 두 명(방장+상대)이 들어찼고 내가 그중 하나가 아니면 입장 거절(관전 미지원).
-      // 코드를 여러 곳에 뿌려 3명+가 들어와도 두 사람만 두고 desync 안 나게.
-      const me = clientId()
-      if (room.host_id !== me && room.guest_id !== me && room.guest_id != null) {
-        onlineMsg = '이 방은 이미 두 명이 들어차 있어요.\n두 명까지만 둘 수 있어요(관전은 아직 없어요).'
-        if (typeof location !== 'undefined' && location.hash) location.hash = '' // 새로고침 재시도 방지
-        render()
-        return
-      }
-      lastSyncedSnapshot = room.snapshot
-      const s = decodeSnapshot(room.snapshot)
-      if (s) {
-        applySnapshot(s)
-        settings.queen = s.state.queenEnabled === true
-        settings.infiniteTiles = s.state.infiniteTiles === true
-      }
-      const isHost = room.host_id === clientId() // 보통 false(게스트), 방장 재접속이면 true
-      if (room.status === 'playing' || room.status === 'finished') {
-        // 이미 합의된 방에 재접속 → 협상 건너뛰고 저장된 진영으로 바로 재개.
-        const side: Side = isHost ? room.host_side : opposite(room.host_side)
-        enterOnline(room.id, isHost, 'playing', side)
-        onlineMsg = `다시 연결됐어요. 당신은 ${sideLabel(side)}. 이어서 둬요.`
-      } else {
-        // 신규 매칭(또는 협상 중 재접속) → 선공·후공부터.
-        enterOnline(room.id, isHost, 'negotiating', 'yellow')
-        onlineMsg = '방에 입장했어요! 매칭 성공. 이제 선공·후공을 정해요.'
-      }
-      render()
-    } catch (e) {
-      onlineMsg = '입장 실패: ' + (e as Error).message
-      render()
-    }
-  }
-
-  // 선공/후공 제안: choice = first(내가 선공)/second(내가 후공)/toss(코인토스).
-  function proposeSide(choice: 'first' | 'second' | 'toss'): void {
-    if (!online) return
-    const iAmFirst = choice === 'toss' ? Math.random() < 0.5 : choice === 'first'
-    const myColor: Side = iAmFirst ? 'yellow' : 'brown' // 노랑=선공
-    const hostSide: Side = online.isHost ? myColor : opposite(myColor)
-    const toss = choice === 'toss'
-    online.proposal = { hostSide, mine: true, toss }
-    online.conn.signal('propose', { hostSide, toss }) // 상대도 코인토스였음을 알도록 플래그 동기화
-    render()
-  }
-
-  function acceptProposal(): void {
-    if (!online || !online.proposal) return
-    const hostSide = online.proposal.hostSide
-    online.conn.signal('accept', { hostSide })
-    finalizeAgreement(hostSide)
-  }
-
-  function rejectProposal(): void {
-    if (!online || !online.proposal) return
-    const wasMine = online.proposal.mine
-    online.proposal = null
-    online.conn.signal(wasMine ? 'cancel' : 'reject') // 내 제안 취소 vs 상대 제안 거절
-    render()
-  }
-
-  // 합의 완료: 내 진영 확정 + 대국 시작. 방장은 host_side+status=playing 을 방에 저장(재접속 대비).
-  function finalizeAgreement(hostSide: Side): void {
-    if (!online) return
-    const wasToss = online.proposal?.toss === true // 동의 시점에 결과 공개(코인토스였으면)
-    online.mySide = online.isHost ? hostSide : opposite(hostSide)
-    online.proposal = null
-    online.phase = 'playing'
-    online.status = 'playing'
-    // 양쪽 다 DB 에 합의를 기록 → DB(room.status=playing+host_side)가 합의의 단일 진실.
-    // 신호(broadcast)가 유실돼도 상대는 onRoomUpdate 에서 이걸 보고 안전하게 시작한다.
-    void agreeStart(online.roomId, hostSide)
-    onlineMsg = wasToss
-      ? `🪙 코인토스 결과 — 당신은 ${sideLabel(online.mySide)}! 시작합니다!`
-      : `선공·후공이 정해졌어요. 당신은 ${sideLabel(online.mySide)}. 시작합니다!`
-    render()
-  }
-
-  // 재대국 요청("한 판 더"): 상대에게 신호 + 대기.
-  function requestRematch(): void {
-    if (!online) return
-    online.conn.signal('rematchReq')
-    modalDismissed = true // 결과 모달은 닫고
-    onlineMsg = '한 판 더를 요청했어요. 상대 수락을 기다려요.'
-    render()
-  }
-  // 재대국 시작: 새 판 + 진영 스왑. 방장이 방에 새 스냅샷·host_side 반영.
-  function startRematch(): void {
-    if (!online) return
-    const curHostSide: Side = online.isHost ? online.mySide : opposite(online.mySide)
-    const newHostSide = opposite(curHostSide) // 진영 교대
-    resetToFreshGame()
-    online.mySide = online.isHost ? newHostSide : opposite(newHostSide)
-    online.phase = 'playing'
-    online.status = 'playing'
-    online.proposal = null
-    online.undoReq = false
-    infoModal = null
-    modalDismissed = false
-    lastSyncedSnapshot = encodeSnapshot(snapshot())
-    if (online.isHost) {
-      void agreeStart(online.roomId, newHostSide)
-      pushOnline()
-    }
-    onlineMsg = `한 판 더! 진영을 바꿔서 당신은 ${sideLabel(online.mySide)}. 시작합니다!`
-    render()
-  }
-
-  // 나가기 확정: 상대에게 알리고(방 status=left) 내 화면은 완전히 새 판으로 리셋.
-  function doLeaveOnline(): void {
-    stopWaitPoll()
-    if (online) {
-      void leaveRoom(online.roomId)
-      online.conn.close()
-    }
-    online = null
-    infoModal = null
-    if (typeof location !== 'undefined' && location.hash) location.hash = ''
-    resetToFreshGame()
-    notice = '온라인 방에서 나왔어요.'
-    render()
-  }
+  // (온라인 대전 오케스트레이션 — 방 수명주기·협상·재대국·무르기 신호 — 은 online-ui.ts 로 분리)
 
   // 새 판으로 초기화(온라인 시작 시 기존 vs AI 판이 섞이지 않게). 'new' 액션과 같은 리셋.
   function resetToFreshGame(): void {
@@ -1518,15 +1199,6 @@ export function mountGame(root: HTMLElement): void {
   }
 
   // ---- 새 게임 마법사 시작 동작 -------------------------------------------
-  // 로컬/AI/관전 새 판으로 가기 전, 온라인 방에 있으면 떠난다(상대에게 알리고 세션 종료).
-  function leaveOnlineForNew(): void {
-    if (!online) return
-    stopWaitPoll()
-    void leaveRoom(online.roomId)
-    online.conn.close()
-    online = null
-    if (typeof location !== 'undefined' && location.hash) location.hash = ''
-  }
   // 새 게임 설정 마법사를 연다(상대 선택 → 로컬/온라인 또는 AI 난이도·성향). 'new' 와 온라인 경고의 "계속"이 재사용.
   function openNewGameWizard(): void {
     wizard.open(settings)
@@ -1541,14 +1213,14 @@ export function mountGame(root: HTMLElement): void {
     render()
   }
   function startLocalNew(): void {
-    leaveOnlineForNew()
+    onlineUi.leaveForNew()
     settings.mode = 'hotseat'
     watchRunning = false
     rebuildAi()
     finishNew()
   }
   function startAiNew(v: WizardValues): void {
-    leaveOnlineForNew()
+    onlineUi.leaveForNew()
     settings.mode = 'vsAi'
     settings.aiDifficulty = v.diff
     settings.personaBrown = v.persona
@@ -1559,7 +1231,7 @@ export function mountGame(root: HTMLElement): void {
     maybeScheduleAi() // 사람 후공(aiSide='yellow')이면 AI 가 선공으로 첫 수를 둔다. 사람 선공이면 가드만.
   }
   function startWatchNew(v: WizardValues): void {
-    leaveOnlineForNew()
+    onlineUi.leaveForNew()
     settings.mode = 'watch'
     settings.difficultyYellow = v.diffY
     settings.personaYellow = v.personaY
@@ -2410,22 +2082,10 @@ export function mountGame(root: HTMLElement): void {
       header = `${PLAYER_LABEL[state.turn]} 차례`
       instruction = instructionText()
     }
-    // 온라인 대전이면 방 상태(대기/내 차례/상대 차례)를 맨 위에 띄운다.
-    const onlineLine = online
-      ? online.phase !== 'waiting' && !online.peerConnected
-        ? `<div class="online-status wait-turn">⚠️ 상대 연결 끊김 · 방 ${online.roomId}</div>`
-        : `<div class="online-status ${myOnlineTurn() && online.phase === 'playing' ? 'my-turn' : 'wait-turn'}">${
-            online.phase === 'waiting'
-              ? `🔗 방 ${online.roomId} · 상대를 기다리는 중…<div class="online-hint">지금 창을 닫아도 괜찮아요. 이 기기에서 같은 링크로 다시 오면 이어서 둘 수 있어요.</div>`
-              : online.phase === 'negotiating'
-                ? `🤝 방 ${online.roomId} · 선공·후공 정하는 중`
-                : myOnlineTurn()
-                  ? `🟢 내 차례 · 방 ${online.roomId}`
-                  : `⏳ 상대 차례 · 방 ${online.roomId}`
-          }</div>`
-      : ''
+    // 온라인 대전이면 방 상태(대기/내 차례/상대 차례)를 맨 위에 띄운다(HTML 은 online-ui.ts).
+    const onlineLine = onlineUi.statusLineHtml()
     // 상대 표시: 누구와(난이도) 두는지 한눈에. 온라인은 onlineLine 이 이미 보여줘 생략.
-    const oppLabel = online
+    const oppLabel = onlineUi.active()
       ? ''
       : settings.mode === 'vsAi'
         ? `vs AI · ${DIFF_LABEL[settings.aiDifficulty]} · 나 ${settings.aiSide === 'yellow' ? '🟤갈색(후공)' : '🟡노랑(선공)'}`
@@ -2585,15 +2245,10 @@ export function mountGame(root: HTMLElement): void {
           ? `undoAsk:${undoAsk ?? ''}`
           : infoModal
             ? `info:${infoModal}`
-            : online && online.undoReq
-              ? 'undoWait'
-              : onlineMsg
-                ? `msg:${onlineMsg}`
-                : online && online.phase === 'negotiating'
-                  ? `nego:${online.proposal ? `${online.proposal.hostSide}:${online.proposal.mine}:${online.proposal.toss ?? ''}` : 'none'}`
-                  : state.phase === 'finished' && resK !== undefined && !modalDismissed
-                    ? `result:${resK.kind}` // 종료 결과는 고정이라 kind 만으로 충분
-                    : 'none'
+            : (onlineUi.modalKey() ?? // 온라인 전용 모달(무르기 대기 > 알림 > 협상)은 모듈이 키를 만든다
+              (state.phase === 'finished' && resK !== undefined && !modalDismissed
+                ? `result:${resK.kind}` // 종료 결과는 고정이라 kind 만으로 충분
+                : 'none'))
     if (modalKey === lastModalKey) return
     lastModalKey = modalKey
 
@@ -2611,33 +2266,20 @@ export function mountGame(root: HTMLElement): void {
       renderSavesModal()
       return
     }
-    if (infoModal === 'leaveConfirm') {
-      renderLeaveConfirm()
-      return
-    }
-    if (infoModal === 'rematchAsk') {
-      renderRematchAsk()
+    if (infoModal === 'leaveConfirm' || infoModal === 'rematchAsk' || infoModal === 'newOnlineWarn') {
+      modalLayer.innerHTML = onlineUi.staticModalHtml(infoModal)
+      wireModalButtons()
       return
     }
     if (infoModal === 'undoAsk') {
       renderUndoAsk()
       return
     }
-    if (infoModal === 'newOnlineWarn') {
-      renderNewOnlineWarn()
-      return
-    }
-    if (online && online.undoReq) {
-      renderUndoWait()
-      return
-    }
-    if (onlineMsg !== null) {
-      renderOnlineMsg(onlineMsg)
-      return
-    }
-    // 매칭 후 선공/후공 협상 중이면(알림 팝업 닫은 뒤) 협상 모달을 띄운다.
-    if (online && online.phase === 'negotiating') {
-      renderSideNegotiate()
+    // 온라인 전용 모달(무르기 대기 > 알림 > 협상 — HTML 은 online-ui.ts).
+    const onlineModal = onlineUi.modalHtml()
+    if (onlineModal !== null) {
+      modalLayer.innerHTML = onlineModal
+      wireModalButtons()
       return
     }
     const r = state.result
@@ -2664,7 +2306,7 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-title">${title}</div>
           <div class="modal-sub">${sub}</div>
           <div class="modal-actions">
-            ${online ? `<button class="modal-share" data-act="rematchReq">${ICON.refresh} 한 판 더(진영 교대)</button>` : `<button data-act="new">${ICON.refresh} 다시 하기</button>`}
+            ${onlineUi.active() ? `<button class="modal-share" data-act="rematchReq">${ICON.refresh} 한 판 더(진영 교대)</button>` : `<button data-act="new">${ICON.refresh} 다시 하기</button>`}
             <button class="modal-share" data-act="shareGame" title="저장 없이 이 판 기보를 바로 공유">${ICON.share} 공유하기</button>
             <button data-act="replayEnter">${ICON.history} 복기 보기</button>
             <button data-act="closeModal">${ICON.close} 닫기</button>
@@ -2710,84 +2352,11 @@ export function mountGame(root: HTMLElement): void {
     }
   }
 
-  // 매칭 후 선공·후공 합의. 제안 전이면 버튼, 내가 제안했으면 대기, 상대가 제안했으면 예/아니오.
-  function renderSideNegotiate(): void {
-    if (!online) return
-    const p = online.proposal
-    // 코인토스는 "둘이 동의하면 결과 무조건 수용". 그래서 동의 전에는 결과를 양쪽 다 보여주지 않는다
-    // (결과를 보고 무르는 것을 원천 차단). 동의하면 finalizeAgreement 가 결과를 알려준다.
-    let body: string
-    if (p === null) {
-      body = `
-        <div class="modal-sub">매칭 성공! 선공·후공을 정해요. 누가 먼저 둘까요?</div>
-        <div class="modal-actions online-side">
-          <button data-act="proposeFirst">🟡 내가 선공 · 노랑</button>
-          <button data-act="proposeSecond">🟤 내가 후공 · 갈색</button>
-          <button class="modal-share" data-act="proposeToss">🪙 코인토스(무작위)</button>
-        </div>
-        <div class="nego-hint">또는 상대가 정할 때까지 기다려요.</div>`
-    } else if (p.mine) {
-      const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
-      body = p.toss
-        ? `
-        <div class="modal-sub">🪙 코인토스를 제안했어요. 상대가 동의하면 무작위로 정해지고, 그 결과는 그대로 시작돼요.<br>상대의 응답을 기다리는 중…</div>
-        <div class="modal-actions">
-          <button data-act="rejectSide">${ICON.close} 제안 취소</button>
-        </div>`
-        : `
-        <div class="modal-sub">내 제안: <b>내가 ${sideLabel(myColor)}</b><br>상대의 응답을 기다리는 중…</div>
-        <div class="modal-actions">
-          <button data-act="rejectSide">${ICON.close} 제안 취소</button>
-        </div>`
-    } else {
-      const myColor = online.isHost ? p.hostSide : opposite(p.hostSide)
-      body = p.toss
-        ? `
-        <div class="modal-sub">🪙 상대가 코인토스를 제안했어요. 동의하면 무작위로 정해지고, <b>그 결과는 그대로 시작</b>돼요.</div>
-        <div class="modal-actions">
-          <button data-act="acceptSide">${ICON.check} 코인토스 동의</button>
-          <button data-act="rejectSide">${ICON.close} 다른 방식</button>
-        </div>`
-        : `
-        <div class="modal-sub">상대가 제안했어요. <b>당신은 ${sideLabel(myColor)}</b>.<br>이대로 시작할까요?</div>
-        <div class="modal-actions">
-          <button data-act="acceptSide">${ICON.check} 예, 시작</button>
-          <button data-act="rejectSide">${ICON.close} 아니오</button>
-        </div>`
-    }
-    modalLayer.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal-card">
-          ${BEE_SVG}
-          <div class="modal-title">🐝 선공·후공 정하기</div>
-          ${body}
-        </div>
-      </div>`
-    wireModalButtons()
-  }
-
-  // 상대가 "한 판 더" 요청 → 진영 바꿔 다시 시작 동의.
-  function renderRematchAsk(): void {
-    modalLayer.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal-card">
-          ${BEE_SVG}
-          <div class="modal-title">🔄 한 판 더?</div>
-          <div class="modal-sub">상대가 한 판 더 두고 싶어해요. 진영을 바꿔 다시 시작할까요?</div>
-          <div class="modal-actions">
-            <button data-act="rematchYes">${ICON.refresh} 예, 한 판 더</button>
-            <button data-act="rematchNo">${ICON.close} 아니오</button>
-          </div>
-        </div>
-      </div>`
-    wireModalButtons()
-  }
-
   // 무르기 동의: 되돌릴 사람(undoAsk)의 요청을 상대(지금 차례 = 나)가 허락/거절.
   function renderUndoAsk(): void {
     const mover = undoAsk // 방금 둔 사람(되돌릴 수의 주인 = 무르기 1회를 쓰는 쪽)
     const approver = state.turn // 지금 차례 = 동의해 줄 상대
-    const sub = online
+    const sub = onlineUi.active()
       ? `상대(<b>${mover ? PLAYER_LABEL[mover] : ''}</b>)가 방금 둔 수를 무르려고 해요.<br>동의할까요? (각자 한 번만)`
       : `방금 <b>${mover ? PLAYER_LABEL[mover] : ''}</b>이 둔 수를 무릅니다.<br>상대(<b>${PLAYER_LABEL[approver]}</b>) 동의가 필요합니다. (사람끼리는 각자 한 번만)`
     modalLayer.innerHTML = `
@@ -2799,69 +2368,6 @@ export function mountGame(root: HTMLElement): void {
           <div class="modal-actions">
             <button data-act="undoGrant">${ICON.check} 동의</button>
             <button data-act="undoDeny">${ICON.close} 거절</button>
-          </div>
-        </div>
-      </div>`
-    wireModalButtons()
-  }
-
-  // 온라인: 내가 무르기를 요청하고 상대 동의를 기다리는 대기 모달(취소 가능).
-  function renderUndoWait(): void {
-    modalLayer.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal-card">
-          ${BEE_SVG}
-          <div class="modal-title">↩ 무르기 요청함</div>
-          <div class="modal-sub">상대에게 무르기를 요청했어요.<br>상대가 동의하면 한 수 물러요. 잠시 기다려 주세요.</div>
-          <div class="modal-actions">
-            <button data-act="undoCancelReq">${ICON.close} 요청 취소</button>
-          </div>
-        </div>
-      </div>`
-    wireModalButtons()
-  }
-
-  // 나가기 전 확인.
-  function renderLeaveConfirm(): void {
-    modalLayer.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal-card">
-          <div class="modal-title">방에서 나갈까요?</div>
-          <div class="modal-sub">나가면 진행 중인 온라인 게임이 끝나고 상대에게도 알려져요. 내 화면은 새 게임으로 초기화됩니다.</div>
-          <div class="modal-actions">
-            <button data-act="leaveYes">${ICON.exit} 나가기</button>
-            <button data-act="leaveNo">${ICON.check} 계속하기</button>
-          </div>
-        </div>
-      </div>`
-    wireModalButtons()
-  }
-
-  // 온라인 대전 중 "새 게임"을 누르면 방에서 나가게 되므로 먼저 경고.
-  function renderNewOnlineWarn(): void {
-    modalLayer.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal-card">
-          <div class="modal-title">새 게임을 시작할까요?</div>
-          <div class="modal-sub">지금 온라인 대전 중이에요. 새 게임을 시작하면 이 방에서 나가게 되고 상대에게도 알려져요.<br>다시 두려면 같은 초대 링크가 필요해요.</div>
-          <div class="modal-actions">
-            <button data-act="newWarnYes">${ICON.refresh} 새 게임 시작</button>
-            <button data-act="newWarnNo">${ICON.check} 계속 두기</button>
-          </div>
-        </div>
-      </div>`
-    wireModalButtons()
-  }
-
-  // 온라인 알림 팝업(매칭 성공·상대 모드 변경·상대 나감).
-  function renderOnlineMsg(msg: string): void {
-    modalLayer.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal-card">
-          ${BEE_SVG}
-          <div class="modal-sub">${msg.replace(/\n/g, '<br>')}</div>
-          <div class="modal-actions">
-            <button data-act="onlineMsgOk">${ICON.check} 확인</button>
           </div>
         </div>
       </div>`
@@ -2893,18 +2399,8 @@ export function mountGame(root: HTMLElement): void {
     const lockTitle = '게임 중에는 바꿀 수 없어요. 새 게임에서 설정하세요'
 
     // 모드·난이도·AI 성향은 모두 새 게임 마법사에서만 설정한다(설정창에선 메뉴/탭 제거).
-    // 온라인 대전 컨트롤: 키가 설정돼 있을 때만(mpEnabled). 방 안이면 초대 링크/나가기, 밖이면 만들기/입장.
-    const onlineCtl = !mpEnabled
-      ? ''
-      : online
-        ? `<div class="settings-divider"></div>
-        <div class="settings-group-label">온라인 대전 · 방 ${online.roomId}</div>
-        <button data-act="onlineCopyLink" title="초대 링크를 복사해 상대에게 보내기">${ICON.share} 초대 링크 복사</button>
-        <button data-act="onlineLeave">${ICON.exit} 나가기</button>`
-        : `<div class="settings-divider"></div>
-        <div class="settings-group-label">온라인 대전</div>
-        <button data-act="onlineHost" title="방을 만들어 초대 링크로 친구를 부르기">${ICON.plus} 방 만들기</button>
-        <button data-act="onlineJoin" title="받은 방 코드로 입장">${ICON.enter} 코드로 입장</button>`
+    // 온라인 대전 컨트롤(HTML 은 online-ui.ts): 키가 설정돼 있을 때만, 방 안/밖에 따라 버튼이 다르다.
+    const onlineCtl = onlineUi.settingsCtlHtml()
     const gameGrid = `
       <div class="settings-grid">
         ${live ? `<div class="lock-note">게임 중에는 게임 설정을 바꿀 수 없어요. 새 게임에서 설정하세요.</div>` : ''}
@@ -2929,7 +2425,7 @@ export function mountGame(root: HTMLElement): void {
       </div>`
     const settingsSummary =
       settings.mode === 'hotseat'
-        ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat} (${online ? '온라인' : '로컬'})</div>`
+        ? `<div class="settings-summary">🎮 ${MODE_LABEL.hotseat} (${onlineUi.active() ? '온라인' : '로컬'})</div>`
         : settings.mode === 'watch'
           ? `<div class="settings-summary">🎮 ${MODE_LABEL.watch} · 노랑 <b>${DIFF_LABEL[settings.difficultyYellow]}</b> / 갈색 <b>${DIFF_LABEL[settings.difficultyBrown]}</b></div>`
           : `<div class="settings-summary">🎮 ${MODE_LABEL[settings.mode]} · 난이도 <b>${DIFF_LABEL[settings.aiDifficulty]}</b></div>`
@@ -3177,20 +2673,9 @@ export function mountGame(root: HTMLElement): void {
         break
       case 'undo':
         if (history.length === 0) break
-        if (online) {
-          // 온라인: 내가 방금 둔 수(=지금 상대 차례)만 무를 수 있다. 상대 동의 필요, 각자 1회.
-          if (online.phase !== 'playing') break
-          if (state.turn === online.mySide) {
-            notice = '내 차례에는 무를 수 없어요. 내가 둔 직후(상대 차례)에 무르기를 요청하세요.'
-            break
-          }
-          if (undoUsed[online.mySide]) {
-            notice = '무르기를 이미 썼어요(각자 한 번만).'
-            break
-          }
-          if (online.undoReq) break // 이미 요청 중
-          online.undoReq = true
-          online.conn.signal('undoReq', { side: online.mySide }) // 상대 화면에 동의 모달
+        if (onlineUi.active()) {
+          // 온라인: 내가 방금 둔 수(=지금 상대 차례)만 무를 수 있다. 상대 동의 필요, 각자 1회(모듈이 검사·신호).
+          onlineUi.requestUndo()
           break
         }
         if (settings.mode === 'hotseat') {
@@ -3207,9 +2692,9 @@ export function mountGame(root: HTMLElement): void {
         doUndo()
         break
       case 'undoGrant':
-        if (online) {
+        if (onlineUi.active()) {
           // 온라인 동의: 되돌리기는 요청자가 수행+스냅샷 push 하고, 나는 구독으로 동기화된다(이중 되돌리기 방지).
-          online.conn.signal('undoOk')
+          onlineUi.grantUndo()
           undoAsk = null
           infoModal = null
           break
@@ -3222,20 +2707,14 @@ export function mountGame(root: HTMLElement): void {
         }
         break
       case 'undoDeny':
-        if (online) {
-          online.conn.signal('undoNo')
-        }
+        onlineUi.denyUndo()
         undoAsk = null
         infoModal = null
         notice = '무르기를 거절했어요.'
         break
       case 'undoCancelReq':
-        // 온라인: 요청자가 대기 중 취소 → 상대 모달도 닫게 신호.
-        if (online && online.undoReq) {
-          online.undoReq = false
-          online.conn.signal('undoCancel')
-          notice = '무르기 요청을 취소했어요.'
-        }
+        // 온라인: 요청자가 대기 중 취소 → 상대 모달도 닫게 신호(모듈이 처리).
+        onlineUi.cancelUndoReq()
         break
       case 'closeModal':
         modalDismissed = true
@@ -3254,7 +2733,7 @@ export function mountGame(root: HTMLElement): void {
           settings.queen = false
           if (pieceKind === 'queen') pieceKind = 'normal'
           state = { ...state, queenEnabled: false }
-          if (online) pushOnline() // 온라인: 상대에게 모드 변경 반영(상대 화면에 팝업)
+          onlineUi.pushCurrent() // 온라인: 상대에게 모드 변경 반영(상대 화면에 팝업)
         } else {
           // 켜기 전 설명 팝업, 확인해야 켜진다
           infoModal = 'queen'
@@ -3264,7 +2743,7 @@ export function mountGame(root: HTMLElement): void {
         settings.queen = true
         state = { ...state, queenEnabled: true } // 현재 판에도 즉시 반영
         infoModal = null
-        if (online) pushOnline()
+        onlineUi.pushCurrent()
         break
       case 'queenCancel':
         infoModal = null
@@ -3274,7 +2753,7 @@ export function mountGame(root: HTMLElement): void {
         settings.infiniteTiles = !settings.infiniteTiles
         state = { ...state, infiniteTiles: settings.infiniteTiles }
         notice = settings.infiniteTiles ? '무한 모드 ON, 타일·말 무제한' : '무한 모드 OFF'
-        if (online) pushOnline()
+        onlineUi.pushCurrent()
         break
       case 'toggleActionPos':
         settings.actionBarPos = settings.actionBarPos === 'top' ? 'bottom' : 'top'
@@ -3305,37 +2784,33 @@ export function mountGame(root: HTMLElement): void {
         shareCode(encodeSnapshot(snapshot()))
         break
       case 'onlineHost':
-        if (!mpEnabled) {
-          onlineMsg = '온라인 기능이 아직 설정되지 않았어요.'
-          break
-        }
-        void createOnlineRoom() // 진영은 상대 입장 후 협상으로 정함
+        void onlineUi.createRoom() // 진영은 상대 입장 후 협상으로 정함(키 없으면 모듈이 안내 팝업)
         break
       case 'proposeFirst':
-        proposeSide('first')
+        onlineUi.proposeSide('first')
         break
       case 'proposeSecond':
-        proposeSide('second')
+        onlineUi.proposeSide('second')
         break
       case 'proposeToss':
-        proposeSide('toss')
+        onlineUi.proposeSide('toss')
         break
       case 'acceptSide':
-        acceptProposal()
+        onlineUi.acceptProposal()
         break
       case 'rejectSide':
-        rejectProposal()
+        onlineUi.rejectProposal()
         break
       case 'onlineJoin': {
         const code = window.prompt('받은 방 코드를 입력하세요 (예: ABC234)')
-        if (code && code.trim()) void joinOnline(code)
+        if (code && code.trim()) void onlineUi.join(code)
         break
       }
       case 'onlineLeave':
         infoModal = 'leaveConfirm' // 나가기 전 확인 창
         break
       case 'leaveYes':
-        doLeaveOnline()
+        onlineUi.leave()
         break
       case 'leaveNo':
         infoModal = null
@@ -3344,20 +2819,19 @@ export function mountGame(root: HTMLElement): void {
         infoModal = null
         break
       case 'onlineCopyLink':
-        if (online) shareCode(inviteUrl(online.roomId))
+        onlineUi.copyInviteLink()
         break
       case 'onlineMsgOk':
-        onlineMsg = null
+        onlineUi.clearMsg()
         break
       case 'rematchReq':
-        requestRematch()
+        onlineUi.requestRematch()
         break
       case 'rematchYes':
-        if (online) online.conn.signal('rematchOk')
-        startRematch()
+        onlineUi.acceptRematch()
         break
       case 'rematchNo':
-        if (online) online.conn.signal('rematchNo')
+        onlineUi.declineRematch()
         infoModal = null
         break
       case 'toggleMusic':
@@ -3417,7 +2891,7 @@ export function mountGame(root: HTMLElement): void {
         return
       case 'new':
         // 온라인 방에 있는 동안 새 게임을 누르면 방에서 나가게 되므로 먼저 경고한다(데스크탑·모바일 공통).
-        if (online) {
+        if (onlineUi.active()) {
           infoModal = 'newOnlineWarn'
           break
         }
@@ -3493,6 +2967,6 @@ export function mountGame(root: HTMLElement): void {
   // 초대 링크(#room=코드)로 들어왔으면 그 방에 자동 입장(상대로 합류, 또는 방장 본인 재접속).
   if (typeof location !== 'undefined') {
     const m = /[#&]room=([A-Za-z0-9]+)/.exec(location.hash)
-    if (m) void joinOnline(m[1]!)
+    if (m) void onlineUi.join(m[1]!)
   }
 }
