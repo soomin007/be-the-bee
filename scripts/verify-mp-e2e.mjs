@@ -2,13 +2,20 @@
 // 전제: .env.local 키 → `npm run build` → `npm run preview`(4173) 띄운 뒤 실행.
 //   node scripts/verify-mp-e2e.mjs [url]
 import { chromium } from 'playwright'
+import { dismissWizard } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:4173/'
 const browser = await chromium.launch()
+
+// 첫 접속 오버레이(온보딩·튜토리얼·테마 팁) seen 플래그 — boot.mjs prepPage 와 동일 목록.
+// 여기선 컨텍스트가 둘(A/B)이고 B 는 #room 해시로 진입해 reload 가 곤란하므로 addInitScript 로 심는다.
+const SEEN_FLAGS = ['be-the-bee/tutorial-seen', 'be-the-bee/onboarding-seen', 'be-the-bee/theme-told']
 
 async function newCtx() {
   const ctx = await browser.newContext({ viewport: { width: 1100, height: 820 } })
   const page = await ctx.newPage()
-  await page.addInitScript(() => localStorage.setItem('be-the-bee/tutorial-seen', '1'))
+  await page.addInitScript((flags) => {
+    for (const k of flags) localStorage.setItem(k, '1')
+  }, SEEN_FLAGS)
   return { ctx, page }
 }
 const pieces = (page) => page.locator('svg.board circle.piece').count()
@@ -41,14 +48,16 @@ const r = {}
 const A = await newCtx()
 const B = await newCtx()
 
-// 방 만들기 + 입장 + 매칭
+// 방 만들기 + 입장 + 매칭. 자동저장이 없으면 로드 직후 새 게임 마법사가 떠 클릭을 가로채므로 닫는다.
 await A.page.goto(URL, { waitUntil: 'networkidle' })
 await A.page.waitForSelector('.panel')
+await dismissWizard(A.page)
 await A.page.locator('button[data-act="onlineHost"]').click()
 await grabPopup(A.page)
 const code = await A.page.evaluate(() => location.hash.replace(/.*room=/, ''))
 console.log('방 코드:', code)
 await B.page.goto(URL + '#room=' + code, { waitUntil: 'networkidle' })
+await dismissWizard(B.page)
 await grabPopup(B.page)
 await grabPopup(A.page)
 
