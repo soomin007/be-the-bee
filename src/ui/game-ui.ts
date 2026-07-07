@@ -33,17 +33,7 @@ import { nextTip } from './tips'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, themeById, type ColorTheme } from './themes'
-import {
-  addSlot,
-  autoSave,
-  decodeSnapshot,
-  deleteSlot,
-  encodeSnapshot,
-  getSlot,
-  listSlots,
-  loadAutoSave,
-  type GameSnapshot,
-} from './game-save'
+import { autoSave, decodeSnapshot, encodeSnapshot, loadAutoSave, type GameSnapshot } from './game-save'
 import { openTutorial } from './tutorial'
 import {
   MODE_LABEL,
@@ -60,6 +50,7 @@ import {
   type SectionKey,
 } from './settings'
 import { createNewGameWizard, type WizardValues } from './new-game-wizard'
+import { createSavesModal } from './saves-modal'
 import { maybeShowOnboarding, openOnboarding, type OnboardCtx } from './onboarding'
 import { ICON } from './icons'
 import type { Board3D, BoardHints } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
@@ -299,6 +290,30 @@ export function mountGame(root: HTMLElement): void {
     // 온라인 경기를 마친 뒤면 첫 화면에 '상대와 재대결' 버튼을 추가로 보여준다.
     showRematch: () => online !== null && state.phase === 'finished',
     mpEnabled,
+    render: () => render(),
+  })
+  // 저장 보관함 — HTML·보관함 액션은 saves-modal.ts 모듈. 열림 상태(infoModal==='saves')와
+  // 게임 상태를 만지는 효과(스냅샷 생성/복원·복기 진입·알림)만 여기서 콜백으로 준다.
+  const savesModal = createSavesModal({
+    snapshot: () => snapshot(),
+    slotName: () => slotName(),
+    shareCode: (c) => shareCode(c),
+    loadSnapshot: (s) => {
+      clearAiTimer()
+      stopReplayTimer()
+      applySnapshot(s)
+      autoSaveNow()
+    },
+    enterReplay: () => handleReplay('replayEnter'),
+    close: () => {
+      infoModal = null
+    },
+    setNotice: (t) => {
+      notice = t
+    },
+    setMessage: (t) => {
+      message = t
+    },
     render: () => render(),
   })
   // 사람끼리: 각자 무르기 1회 + 상대 동의. undoUsed=진영별 사용 여부, undoAsk=되돌릴(요청한) 진영.
@@ -3048,40 +3063,10 @@ export function mountGame(root: HTMLElement): void {
     wireModalButtons()
   }
 
-  // 저장 보관함: 여러 슬롯 목록(불러오기·공유코드 복사·삭제) + 현재 판 저장/복사 + 코드 가져오기.
+  // 저장 보관함: HTML 은 saves-modal.ts 모듈이 만든다. 여기서는 모달 레이어에 붙이고 배선만.
   function renderSavesModal(): void {
-    const slots = listSlots()
-    const rows =
-      slots.length === 0
-        ? '<div class="saves-empty">저장된 기보가 없어요. “현재 판 저장”을 눌러 보세요.</div>'
-        : slots
-            .map(
-              (s) => `<div class="save-row">
-                <span class="save-name">${s.name}</span>
-                <button data-act="loadSlot:${s.id}" title="이 기보 불러오기">${ICON.download} 불러오기</button>
-                <button class="save-icon" data-act="exportSlot:${s.id}" title="공유 코드 복사">📋</button>
-                <button class="save-icon" data-act="delSlot:${s.id}" title="삭제">🗑</button>
-              </div>`,
-            )
-            .join('')
-    modalLayer.innerHTML = `
-      <div class="modal-backdrop">
-        <div class="modal-card saves-card">
-          <button class="tut-skip" data-act="closeSaves" title="닫기">닫기 ✕</button>
-          <div class="modal-title">💾 저장 보관함</div>
-          <div class="saves-top">
-            <button data-act="saveGame">＋ 현재 판 저장</button>
-            <button data-act="exportCurrent" title="현재 판 공유 코드 복사">📤 현재 판 복사</button>
-            <button data-act="importGame" title="코드를 붙여넣어 불러오기">📥 코드로 가져오기</button>
-          </div>
-          <div class="saves-list">${rows}</div>
-          <p class="saves-hint">📋 = 공유 코드 복사. 그 코드를 붙여넣어 다른 사람과 기보를 주고받거나 분석을 맡길 수 있어요.</p>
-        </div>
-      </div>
-    `
-    for (const btn of Array.from(modalLayer.querySelectorAll('button'))) {
-      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
-    }
+    modalLayer.innerHTML = savesModal.html()
+    wireModalButtons()
   }
 
   // 복기 "이 판 분석" 요약 HTML. 기보를 analyzeGame 으로 분석해 결정적 순간을 리스트로(클릭=그 수로 점프).
@@ -3394,30 +3379,8 @@ export function mountGame(root: HTMLElement): void {
       return
     }
 
-    // 보관함: 슬롯 불러오기/삭제/공유코드 복사
-    if (act.startsWith('loadSlot:')) {
-      const s = getSlot(act.slice('loadSlot:'.length))
-      if (s) {
-        clearAiTimer()
-        stopReplayTimer()
-        applySnapshot(s.snap)
-        autoSaveNow()
-        infoModal = null
-        notice = '기보를 불러왔어요.'
-      }
-      render()
-      return
-    }
-    if (act.startsWith('delSlot:')) {
-      deleteSlot(act.slice('delSlot:'.length))
-      render() // 보관함 모달 갱신
-      return
-    }
-    if (act.startsWith('exportSlot:')) {
-      const s = getSlot(act.slice('exportSlot:'.length))
-      if (s) shareCode(encodeSnapshot(s.snap))
-      return
-    }
+    // 보관함(슬롯·저장·공유·가져오기): 모듈이 처리 — 저장소는 모듈이 직접, 게임 효과는 host 콜백.
+    if (savesModal.handle(act)) return
 
     // 새 게임 마법사(ng*): 모듈이 처리 — 임시 상태 변경은 재렌더, 시작/온라인/재대결은 host 콜백.
     if (wizard.handle(act)) return
@@ -3560,18 +3523,8 @@ export function mountGame(root: HTMLElement): void {
         watchRunning = !watchRunning
         if (!watchRunning) clearAiTimer()
         break
-      case 'saveGame':
-        addSlot(slotName(), snapshot())
-        notice = '보관함에 저장했어요.'
-        break
       case 'openSaves':
         infoModal = 'saves'
-        break
-      case 'closeSaves':
-        infoModal = null
-        break
-      case 'exportCurrent':
-        shareCode(encodeSnapshot(snapshot()))
         break
       case 'shareGame':
         // 결과 모달의 "공유하기" — 저장/불러오기 없이 현재 판 기보를 클립보드에 바로 복사.
@@ -3633,28 +3586,6 @@ export function mountGame(root: HTMLElement): void {
         if (online) online.conn.signal('rematchNo')
         infoModal = null
         break
-      case 'importGame': {
-        const code = window.prompt('기보 코드를 붙여넣으세요 (BTB1:... )')
-        const s = code ? decodeSnapshot(code) : null
-        if (code && !s) {
-          notice = ''
-          message = '코드를 알아볼 수 없어요. 전체를 정확히 붙여넣었는지 확인하세요.'
-        } else if (s) {
-          clearAiTimer()
-          stopReplayTimer()
-          applySnapshot(s)
-          autoSaveNow()
-          infoModal = null
-          // 받은 기보는 분석이 목적 — 바로 복기(해설)로 진입해 한 수씩 평가를 볼 수 있게.
-          // (복기 종료를 누르면 마지막 국면으로 가 이어서 둘 수도 있다.)
-          if (s.moveLog.length > 0) {
-            handleReplay('replayEnter')
-            return
-          }
-          notice = '기보를 불러왔어요.'
-        }
-        break
-      }
       case 'toggleMusic':
         sound.toggleMusic()
         break
