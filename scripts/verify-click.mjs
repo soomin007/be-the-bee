@@ -1,6 +1,7 @@
 // 실제 브라우저(chromium)로 보드 클릭이 먹는지 검증. happy-dom 으로는 못 잡는
 // 포인터 캡처/클릭 리타깃 회귀를 잡기 위함. dev 서버가 떠 있어야 한다.
 import { chromium } from 'playwright'
+import { prepPage } from './lib/boot.mjs'
 
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
@@ -10,12 +11,7 @@ const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 
 await page.goto(URL, { waitUntil: 'networkidle' })
-// 튜토리얼·앱 사용법 온보딩 오버레이가 첫 클릭을 가로채지 않게 둘 다 스킵(known_issues 2026-06-22/25)
-await page.evaluate(() => {
-  localStorage.setItem('be-the-bee/tutorial-seen', '1')
-  localStorage.setItem('be-the-bee/onboarding-seen', '1')
-})
-await page.reload({ waitUntil: 'networkidle' })
+await prepPage(page) // 첫 접속 오버레이 스킵 + 새 게임 마법사 닫기
 await page.waitForSelector('svg.board polygon')
 
 // 0) 첫 턴도 행동 선택으로 시작 — ②(타일+말) 선택해야 프론티어가 보인다(① 타일 2개는 첫 턴 비활성)

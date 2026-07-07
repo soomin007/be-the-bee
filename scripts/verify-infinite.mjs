@@ -1,17 +1,18 @@
 // 무한 모드 토글: 켜면 자원 표시가 타일 ∞ + 설정 영속, 끄면 숫자.
 import { chromium } from 'playwright'
+import { prepPage } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1100, height: 860 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
-await page.evaluate(() => {
-  localStorage.setItem('be-the-bee/tutorial-seen', '1')
-  localStorage.removeItem('be-the-bee/settings')
-  localStorage.removeItem('be-the-bee/autosave')
+await prepPage(page, {
+  extra: () => {
+    localStorage.removeItem('be-the-bee/settings')
+    localStorage.removeItem('be-the-bee/autosave')
+  },
 })
-await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('.supplies')
 
 const tilesText = async () => (await page.locator('.supplies').textContent()) ?? ''

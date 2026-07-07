@@ -9,6 +9,12 @@
    - `verify-*` 는 통과/실패를 종료코드로 알림(자동 점검용).
    - `shot-*` 는 `docs/design/shots/` 에 PNG 미리보기를 저장(시각 확인용).
 
+> **공용 부트스트랩 `lib/boot.mjs` (2026-07-07)**: 첫 접속 오버레이(온보딩·튜토리얼) 스킵과
+> **새 게임 마법사 닫기**를 한 번에 처리한다(`prepPage`). 마법사는 자동저장이 없으면 로드 직후
+> 항상 떠서, 안 닫으면 이후 모든 클릭이 backdrop 에 먹혀 스크립트가 타임아웃 난다.
+> 새 verify/shot 스크립트는 goto 직후 `await prepPage(page)` 부터 시작할 것.
+> 마법사 조작이 필요하면 `openWizard`/`wizardPick`(예: `['ngOpp:ai','ngDiff:hard','ngStartAi']`).
+
 > `docs/design/shots/` 는 **재생성 가능한 로컬 미리보기**라 git 추적에서 제외(.gitignore)했다.
 > 필요하면 해당 `shot-*` 를 다시 돌려 만든다.
 

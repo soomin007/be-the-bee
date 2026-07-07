@@ -1,6 +1,7 @@
 // 벌 테마 2단계 잔여(꿀 차오름·붕붕·날갯짓음) 스모크: 힌트 켜고 여러 수를 둬도
 // 새 코드 경로(newlyHivedCells 매 수 실행 + buzz 힌트 렌더 + fx 스폰)가 에러 없이 돈다.
 import { chromium } from 'playwright'
+import { prepPage } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
 const browser = await chromium.launch()
@@ -8,15 +9,12 @@ const page = await browser.newPage({ viewport: { width: 1100, height: 820 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
-await page.evaluate(() => localStorage.setItem('be-the-bee/tutorial-seen', '1')) // 오버레이가 클릭 막지 않게
-await page.reload({ waitUntil: 'networkidle' })
+await prepPage(page) // 첫 접속 오버레이 스킵 + 새 게임 마법사 닫기
 await page.waitForSelector('svg.board')
 
-// 훈수 토글은 '화면·설정' 아코디언 안 → 섹션 먼저 펼친다.
-const viewSec = page.locator('button.acc-head[data-act="sec:view"]')
-if (await viewSec.count()) await viewSec.click()
-// 훈수 모드 ON → 리치 칸이 buzz 클래스로 렌더된다(리치 상황이면).
-await page.locator('button[data-act="toggleHints"]').click()
+// 코칭을 '강하게'로(기본 basic → 한 번 = strong) → 리치 칸이 buzz 클래스로 렌더(리치 상황이면).
+// 예전 toggleHints 버튼은 3단계 코칭(cycleCoach)으로 대체됐다.
+await page.locator('button[data-act="cycleCoach"]').click()
 
 async function play() {
   const c = page.locator('button[data-act="tileAndPiece"]')

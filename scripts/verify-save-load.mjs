@@ -1,5 +1,6 @@
 // 자동 이어하기 + 저장 보관함(여러 슬롯) + 기보 공유(코드 내보내기/가져오기) 점검.
 import { chromium } from 'playwright'
+import { prepPage, dismissWizard, openWizard, wizardPick } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
 const browser = await chromium.launch()
@@ -11,11 +12,8 @@ const page = await ctx.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
-await page.evaluate(() => {
-  localStorage.clear()
-  localStorage.setItem('be-the-bee/tutorial-seen', '1') // 첫 접속 튜토리얼이 보드를 가리지 않게
-})
-await page.reload({ waitUntil: 'networkidle' })
+await page.evaluate(() => localStorage.clear())
+await prepPage(page) // 첫 접속 오버레이 스킵 + 새 게임 마법사 닫기
 await page.waitForSelector('svg.board')
 
 const pieces = () => page.locator('svg.board circle.piece').count()
@@ -30,12 +28,13 @@ const openSaves = async () => {
   await page.waitForSelector('.saves-card')
 }
 
-// 1) 두 수 → 새로고침 → 자동 복원
+// 1) 두 수 → 새로고침 → 자동 복원(자동저장이 있으면 마법사는 안 뜬다)
 await play()
 await play()
 const afterPlay = await pieces()
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('svg.board')
+await dismissWizard(page, 800) // 혹시 떠 있으면 닫기(방어)
 const resumeOk = afterPlay === 2 && (await pieces()) === 2
 
 // 2) 보관함에 저장 → 슬롯 1개. 공유 코드 복사(현재=2말) → 클립보드 BTB1
@@ -58,7 +57,9 @@ await page.waitForTimeout(80)
 const loadOk = grew === 3 && (await pieces()) === 2
 
 // 4) 공유 가져오기: 새 게임(0) → 코드 붙여넣기(다이얼로그) → 분석(복기)으로 진입 → 마지막 수=2로 복원
-await page.locator('button[data-act="new"]').click()
+// ('새 게임'은 이제 마법사를 연다 → 사람과 · 한 기기 선택으로 새 판)
+await openWizard(page)
+await wizardPick(page, ['ngOpp:human', 'ngWhere:local'])
 await page.waitForTimeout(60)
 const fresh = await pieces() // 0
 page.once('dialog', (d) => d.accept(code))

@@ -1,5 +1,6 @@
 // 복기(다시보기) 기능이 실제 브라우저에서 동작하는지 점검. dev 서버 필요.
 import { chromium } from 'playwright'
+import { prepPage } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
 const browser = await chromium.launch()
@@ -7,6 +8,7 @@ const page = await browser.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
+await prepPage(page) // 첫 접속 오버레이 스킵 + 새 게임 마법사 닫기
 await page.waitForSelector('svg.board')
 
 const pieces = () => page.locator('svg.board circle.piece').count()
@@ -23,9 +25,10 @@ await playMove() // 노랑
 await playMove() // 갈색
 const afterPlay = await pieces()
 
-// 복기 진입 → 시작 국면(말 0)
+// 복기 진입 → 하단 리모컨 표시 + 시작 국면(말 0). (복기 UI 는 패널 교체 → 하단 리모컨으로 바뀜, 2026-06-30)
 await page.locator('button[data-act="replayEnter"]').click()
-const panelHasReplay = ((await page.locator('.panel').textContent()) ?? '').includes('복기')
+await page.waitForSelector('.replay-remote')
+const panelHasReplay = (await page.locator('.replay-remote').count()) === 1
 const atStart = await pieces()
 
 // 한 수씩 전진

@@ -1,5 +1,6 @@
 // BGM 선택/볼륨/재생 동작 점검(실제 브라우저). dev 서버 필요.
 import { chromium } from 'playwright'
+import { prepPage } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] })
@@ -8,6 +9,7 @@ const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 
 await page.goto(URL, { waitUntil: 'networkidle' })
+await prepPage(page) // 첫 접속 오버레이 스킵 + 새 게임 마법사 닫기
 await page.waitForSelector('select[data-ctl="bgmTrack"]')
 
 const options = await page.locator('select[data-ctl="bgmTrack"] option').count()

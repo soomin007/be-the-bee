@@ -1,6 +1,9 @@
-// 첫 접속 튜토리얼: 자동 표시 → 페이지 넘김 → 완료 시 재표시 안 됨 → 재열기 버튼.
-// + 페이지 스크린샷 몇 장 저장.
+// 첫 접속 흐름 + 튜토리얼 점검(2026-06-30 개편 반영):
+//  첫 접속 = 앱 사용법 온보딩(스포트라이트) 자동 표시 → 건너뛰면 새 게임 마법사.
+//  게임 규칙 튜토리얼은 자동으로 안 뜨고, 온보딩 마지막 '규칙 보기' 또는 설정의
+//  '게임 규칙 다시 보기'(data-act="tutorial")로 연다. + 페이지 스크린샷 저장.
 import { chromium } from 'playwright'
+import { clickXY, dismissWizard } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
 const browser = await chromium.launch()
@@ -11,20 +14,27 @@ await page.goto(URL, { waitUntil: 'networkidle' })
 await page.evaluate(() => localStorage.clear())
 await page.reload({ waitUntil: 'networkidle' })
 
-// 1) 첫 접속 자동 표시
-await page.waitForSelector('.tut-card', { timeout: 5000 })
-const autoShown = (await page.locator('.tut-card').count()) === 1
+// 1) 첫 접속: 앱 사용법 온보딩 자동 표시
+await page.waitForSelector('.coach-layer', { timeout: 5000 })
+const onboardShown = (await page.locator('.coach-layer').count()) === 1
+
+// 2) 온보딩 건너뛰기 → 새 게임 마법사가 뜬다(첫 게임 설정) → 취소로 닫기
+await clickXY(page, page.locator('.coach-skip'))
+const wizardShown = await dismissWizard(page, 5000)
+
+// 3) 설정 '게임 규칙 다시 보기'로 튜토리얼 열기 → 넘김 → 끝까지 → 닫힘
+await page.locator('button[data-act="tutorial"]').click()
+await page.waitForSelector('.tut-card')
+const opened = (await page.locator('.tut-card').count()) === 1
 const totalDots = await page.locator('.tut-dot').count()
 await page.locator('.tut-card').screenshot({ path: 'docs/design/shots/tutorial-1.png' })
 
-// 2) 다음으로 몇 장 넘기기
 await page.locator('button[data-tut="next"]').click()
 await page.locator('button[data-tut="next"]').click()
 await page.waitForTimeout(150)
 const stepText = (await page.locator('.tut-step').textContent())?.trim()
 await page.locator('.tut-card').screenshot({ path: 'docs/design/shots/tutorial-3.png' })
 
-// 끝까지 가서 "시작하기" → 닫힘
 for (let i = 0; i < totalDots; i++) {
   const btn = page.locator('button[data-tut="next"]')
   if (await btn.count()) await btn.click()
@@ -32,19 +42,22 @@ for (let i = 0; i < totalDots; i++) {
 }
 const closedAfterFinish = (await page.locator('.tut-card').count()) === 0
 
-// 3) 새로고침 → 재표시 안 됨(seen 플래그)
+// 4) 새로고침 → 온보딩·튜토리얼 재표시 안 됨(seen 플래그). 마법사만 뜰 수 있으니 닫는다.
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForTimeout(500)
-const notShownAgain = (await page.locator('.tut-card').count()) === 0
+await page.waitForTimeout(400)
+const notShownAgain =
+  (await page.locator('.coach-layer').count()) === 0 && (await page.locator('.tut-card').count()) === 0
+await dismissWizard(page)
 
-// 4) 설정의 📖 튜토리얼로 재열기
+// 5) 설정 버튼으로 재열기
 await page.locator('button[data-act="tutorial"]').click()
 await page.waitForSelector('.tut-card')
 const reopened = (await page.locator('.tut-card').count()) === 1
 
 await browser.close()
-console.log({ autoShown, totalDots, stepText, closedAfterFinish, notShownAgain, reopened, errors: errors.length })
+console.log({ onboardShown, wizardShown, opened, totalDots, stepText, closedAfterFinish, notShownAgain, reopened, errors: errors.length })
 const ok =
-  autoShown && totalDots === 7 && stepText === '3 / 7' && closedAfterFinish && notShownAgain && reopened && errors.length === 0
-console.log(ok ? 'PASS: 튜토리얼 자동표시·넘김·완료기억·재열기' : 'FAIL')
+  onboardShown && wizardShown && opened && totalDots >= 5 && stepText === `3 / ${totalDots}` && closedAfterFinish &&
+  notShownAgain && reopened && errors.length === 0
+console.log(ok ? 'PASS: 온보딩 자동표시 + 마법사 + 튜토리얼 넘김·완료기억·재열기' : 'FAIL')
 process.exit(ok ? 0 : 1)

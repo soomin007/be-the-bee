@@ -1,5 +1,6 @@
 // 여왕벌 모드 설명 팝업: 토글 클릭 → 모달 표시 → 취소(안 켜짐)/확인(켜짐) 동작 점검 + 스크린샷.
 import { chromium } from 'playwright'
+import { prepPage } from './lib/boot.mjs'
 const URL = process.argv[2] ?? 'http://localhost:5173/'
 
 const browser = await chromium.launch()
@@ -7,6 +8,7 @@ const page = await browser.newPage({ viewport: { width: 1100, height: 820 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 await page.goto(URL, { waitUntil: 'networkidle' })
+await prepPage(page) // 첫 접속 오버레이 스킵 + 새 게임 마법사 닫기
 await page.waitForSelector('button[data-act="toggleQueen"]')
 
 const queenActive = async () =>
