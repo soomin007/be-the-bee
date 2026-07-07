@@ -51,6 +51,7 @@ import {
 } from './settings'
 import { createNewGameWizard, type WizardValues } from './new-game-wizard'
 import { createSavesModal } from './saves-modal'
+import { createReplayRemote } from './replay-remote'
 import { maybeShowOnboarding, openOnboarding, type OnboardCtx } from './onboarding'
 import { ICON } from './icons'
 import type { Board3D, BoardHints } from './board3d' // 런타임 createBoard3D 는 3D 켤 때 동적 import
@@ -231,12 +232,8 @@ export function mountGame(root: HTMLElement): void {
   let state: GameState = createInitialState() // 임시(마운트 끝에서 freshState/복원으로 교체)
   let history: GameState[] = []
   let moveLog: Move[] = [] // 둔 수의 순서(history 와 보조를 맞춤), 복기용
-  let replayIndex: number | null = null // null = 실시간, 그 외 = timeline 의 그 국면을 본다
-  let replayTimer: number | null = null // 복기 자동 재생 타이머
-  let replayAnalysisOpen = false // 복기 리모컨의 "이 판 분석" 펼침 여부
+  // (복기 보기 상태·리모컨·분석 카드는 ./replay-remote 로 분리 — 2026-07-08)
   let replayPrevPanelCollapsed = false // 복기 진입 때 데스크탑 패널 접힘 상태(종료 시 복원)
-  let cachedReview: GameReview | null = null // 복기 진입 시 1회 계산한 분석(매 렌더 재계산 방지 + 점수 손해)
-  let recommendedCells: Hex[] | null = null // 분석의 "더 나은 수"가 가리키는 칸(복기 보드에 초록 강조)
   let draft: Draft | null = null
   let pieceKind: PieceKind = 'normal'
   let message = '' // 경고(잘못된 수 등), ⚠️ 빨강
@@ -291,6 +288,46 @@ export function mountGame(root: HTMLElement): void {
     mpEnabled,
     render: () => render(),
   })
+  // 복기 리모컨 — 보기 상태(몇 수째)·자동 재생·분석 카드는 replay-remote.ts 모듈.
+  // 게임 상태를 만지는 진입/종료 부수효과(AI 타이머·패널 접기/복원·턴 재시작)만 여기서 콜백으로 준다.
+  const replay = createReplayRemote({
+    moveLog: () => moveLog,
+    timeline: () => timeline(),
+    watchDelay: () => settings.watchDelay,
+    playerLabel: (p) => PLAYER_LABEL[p],
+    noteLine: (nt) => noteLine(nt),
+    moveCells: (m) => moveCells(m),
+    requestAnalysis: (initial, mlog, cb) => requestAnalysis(initial, mlog, cb),
+    cancelAnalysis: () => {
+      pendingAnalyzeCb = null
+    },
+    onEnter: () => {
+      clearAiTimer()
+      clearFx()
+      draft = null
+      message = ''
+      modalDismissed = true
+      // 복기는 보드를 보며 하는 것 — 설정 패널/시트를 닫고 보드로 복귀시킨다(조작은 하단 리모컨).
+      replayPrevPanelCollapsed = panelCollapsed
+      if (!panelCollapsed) {
+        panelCollapsed = true
+        applyPanelCollapsed()
+      }
+      if (mobileShell.active()) mobileShell.setSettings(false)
+    },
+    onExit: () => {
+      // 복기 진입 때 닫았던 데스크탑 패널 상태를 되돌린다.
+      if (panelCollapsed !== replayPrevPanelCollapsed) {
+        panelCollapsed = replayPrevPanelCollapsed
+        applyPanelCollapsed()
+      }
+      startTurn()
+      render()
+      maybeScheduleAi()
+    },
+    onAction: (a) => onPanelAction(a),
+    render: () => render(),
+  })
   // 저장 보관함 — HTML·보관함 액션은 saves-modal.ts 모듈. 열림 상태(infoModal==='saves')와
   // 게임 상태를 만지는 효과(스냅샷 생성/복원·복기 진입·알림)만 여기서 콜백으로 준다.
   const savesModal = createSavesModal({
@@ -299,11 +336,12 @@ export function mountGame(root: HTMLElement): void {
     shareCode: (c) => shareCode(c),
     loadSnapshot: (s) => {
       clearAiTimer()
-      stopReplayTimer()
-      applySnapshot(s)
+      applySnapshot(s) // 내부에서 replay.deactivate()
       autoSaveNow()
     },
-    enterReplay: () => handleReplay('replayEnter'),
+    enterReplay: () => {
+      replay.handle('replayEnter')
+    },
     close: () => {
       infoModal = null
     },
@@ -364,7 +402,6 @@ export function mountGame(root: HTMLElement): void {
   let pendingAnalyzeId = 0
   let pendingAnalyzeCb: ((r: { review?: GameReview; error?: string }) => void) | null = null
   let analyzeCount = 0
-  let analysisLoading = false // 분석을 워커에서 계산 중이면 분석 카드에 "계산 중" 표시
   let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === settings.aiSide)
@@ -510,7 +547,7 @@ export function mountGame(root: HTMLElement): void {
     history = s.history
     moveLog = s.moveLog
     lastMove = moveLog.length > 0 ? moveLog[moveLog.length - 1]! : null
-    replayIndex = null
+    replay.deactivate()
     draft = null
     message = ''
     coachNote = null
@@ -688,9 +725,8 @@ export function mountGame(root: HTMLElement): void {
   function doUndo(): void {
     if (history.length === 0) return
     clearAiTimer()
-    stopReplayTimer()
     clearFx()
-    replayIndex = null
+    replay.deactivate()
     do {
       state = history[history.length - 1]!
       history = history.slice(0, -1)
@@ -1005,31 +1041,6 @@ export function mountGame(root: HTMLElement): void {
     return [...history, state]
   }
 
-  function stopReplayTimer(): void {
-    if (replayTimer !== null) {
-      clearTimeout(replayTimer)
-      replayTimer = null
-    }
-  }
-
-  // 복기 자동 재생, watchDelay 간격으로 한 수씩 앞으로.
-  function replayTick(): void {
-    if (replayIndex === null) return
-    if (replayIndex >= moveLog.length) {
-      stopReplayTimer()
-      render()
-      return
-    }
-    replayIndex += 1
-    render()
-    if (replayIndex >= moveLog.length) {
-      stopReplayTimer()
-      render()
-      return
-    }
-    replayTimer = window.setTimeout(replayTick, settings.watchDelay)
-  }
-
   // idx 번째 수(1-based)를 사람이 읽을 수 있게 기술. idx=0 은 시작 국면.
   function describeMove(idx: number): string {
     if (idx <= 0) return '시작 국면'
@@ -1043,91 +1054,6 @@ export function mountGame(root: HTMLElement): void {
       ? `(${pc.q}, ${pc.r})`
       : tiles.map((c) => `(${c.q}, ${c.r})`).join(' · ')
     return `${idx}수 · ${PLAYER_LABEL[mover]} ${what} → ${where}`
-  }
-
-  // 복기 컨트롤(보기 전용, state/history/moveLog 를 건드리지 않는다).
-  function handleReplay(act: string): void {
-    const n = moveLog.length
-    if (act !== 'replayToggleAnalysis') recommendedCells = null // 네비/종료는 "더 나은 수" 강조 해제
-    switch (act) {
-      case 'replayEnter':
-        if (n === 0) return
-        clearAiTimer()
-        stopReplayTimer()
-        clearFx()
-        draft = null
-        message = ''
-        modalDismissed = true
-        replayIndex = 0
-        replayAnalysisOpen = false
-        cachedReview = null // 분석은 무거우니(hard 탐색) 진입이 아니라 "이 판 분석"을 펼칠 때 워커에서 계산
-        analysisLoading = false
-        // 복기는 보드를 보며 하는 것 — 설정 패널/시트를 닫고 보드로 복귀시킨다(조작은 하단 리모컨).
-        replayPrevPanelCollapsed = panelCollapsed
-        if (!panelCollapsed) {
-          panelCollapsed = true
-          applyPanelCollapsed()
-        }
-        if (mobileShell.active()) mobileShell.setSettings(false)
-        break
-      case 'replayToggleAnalysis':
-        replayAnalysisOpen = !replayAnalysisOpen
-        // 펼칠 때 아직 분석이 없으면 워커에 비동기 요청(hard 탐색이라 무거울 수 있어 화면 안 멈춤).
-        // 결과가 오면 캐싱하고 다시 그린다. 이후 슬라이더/재생에도 재계산 없음.
-        if (replayAnalysisOpen && cachedReview === null && !analysisLoading) {
-          analysisLoading = true
-          const tl0 = timeline()[0]!
-          const mlog = moveLog.slice()
-          requestAnalysis(tl0, mlog, (r) => {
-            analysisLoading = false
-            if (r.review) cachedReview = r.review
-            if (replayIndex !== null) render() // 아직 복기 중이면 분석 카드 갱신
-          })
-        }
-        break
-      case 'replayExit':
-        stopReplayTimer()
-        replayIndex = null
-        cachedReview = null
-        analysisLoading = false
-        pendingAnalyzeCb = null // 늦게 오는 워커 응답 무시(복기 종료)
-        // 복기 진입 때 닫았던 데스크탑 패널 상태를 되돌린다.
-        if (panelCollapsed !== replayPrevPanelCollapsed) {
-          panelCollapsed = replayPrevPanelCollapsed
-          applyPanelCollapsed()
-        }
-        startTurn()
-        render()
-        maybeScheduleAi()
-        return
-      case 'replayFirst':
-        stopReplayTimer()
-        replayIndex = 0
-        break
-      case 'replayPrev':
-        stopReplayTimer()
-        replayIndex = Math.max(0, (replayIndex ?? 0) - 1)
-        break
-      case 'replayNext':
-        stopReplayTimer()
-        replayIndex = Math.min(n, (replayIndex ?? 0) + 1)
-        break
-      case 'replayLast':
-        stopReplayTimer()
-        replayIndex = n
-        break
-      case 'replayPlay':
-        if (replayTimer !== null) {
-          stopReplayTimer()
-        } else {
-          if ((replayIndex ?? 0) >= n) replayIndex = 0
-          replayTimer = window.setTimeout(replayTick, settings.watchDelay)
-        }
-        break
-      default:
-        return
-    }
-    render()
   }
 
   // ---- 연출(fx 레이어, render 가 지우지 않는 일회성 효과) -------------------
@@ -1195,7 +1121,7 @@ export function mountGame(root: HTMLElement): void {
   }
 
   function applyAndAdvance(move: Move): void {
-    replayIndex = null // 실시간 수가 들어오면 복기 종료
+    replay.deactivate() // 실시간 수가 들어오면 복기 종료
     history = [...history, state]
     moveLog = [...moveLog, move]
     lastMove = move
@@ -1578,9 +1504,8 @@ export function mountGame(root: HTMLElement): void {
   // 새 판으로 초기화(온라인 시작 시 기존 vs AI 판이 섞이지 않게). 'new' 액션과 같은 리셋.
   function resetToFreshGame(): void {
     clearAiTimer()
-    stopReplayTimer()
     clearFx()
-    replayIndex = null
+    replay.deactivate()
     state = freshState()
     history = []
     moveLog = []
@@ -1797,11 +1722,12 @@ export function mountGame(root: HTMLElement): void {
 
   function render(): void {
     // 복기 중이면 과거 국면을 본다(보기 전용 오버레이, 실제 상태는 그대로).
-    const replaying = replayIndex !== null
-    const viewState: GameState = replaying ? timeline()[replayIndex!]! : state
+    const replayIdx = replay.index()
+    const replaying = replayIdx !== null
+    const viewState: GameState = replaying ? timeline()[replayIdx]! : state
     const viewLast: Move | null = replaying
-      ? replayIndex! >= 1
-        ? moveLog[replayIndex! - 1]!
+      ? replayIdx >= 1
+        ? moveLog[replayIdx - 1]!
         : null
       : lastMove
     const player = state.turn
@@ -2166,6 +2092,7 @@ export function mountGame(root: HTMLElement): void {
     }
 
     // 7.5) 복기 분석 "더 나은 수"(추천) 칸 강조 — 초록 점선 펄스. 실수 항목 클릭 시 그 직전 국면에 표시.
+    const recommendedCells = replay.recommended()
     if (recommendedCells) {
       for (const cell of recommendedCells) {
         content.appendChild(
@@ -2227,14 +2154,14 @@ export function mountGame(root: HTMLElement): void {
     // 모달(새 게임 마법사·결과·온라인 등)이 떠 있으면 모바일 FAB·행동 버튼을 숨긴다(모달 위로 떠 글씨 가림 방지).
     gameEl.classList.toggle('modal-open', modalLayer.childElementCount > 0)
     // 복기 중에는 모바일에서 무르기·새 게임 FAB 을 숨긴다(의미 없음). 대신 행동바에 복기 컨트롤을 띄운다.
-    gameEl.classList.toggle('replaying', replayIndex !== null)
+    gameEl.classList.toggle('replaying', replay.active())
     applyTurnTint() // 차례 색 비네트(공통)
     mobileShell.afterRender() // 모바일: 아코디언 접힘·하단 안내 배너 재맞춤(데스크탑 무동작)
   }
 
   // 게임 화면 우상단 플로팅 버튼: 새 게임·무르기(설정창 접힘 시). 미니 플레이어는 renderMiniPlayer(우하단).
   function renderHudFloat(): void {
-    const showActions = panelCollapsed && replayIndex === null
+    const showActions = panelCollapsed && !replay.active()
     hudFloat.innerHTML = showActions
       ? `<div class="float-actions">
           <button class="cta-new" data-act="new" title="새 게임 (단축키 N)">${ICON.refresh}<span>새 게임</span><kbd>N</kbd></button>
@@ -2438,8 +2365,9 @@ export function mountGame(root: HTMLElement): void {
   // 게임 상태(누구 차례·안내·자원·점수)를 설정 패널이 아니라 보드 화면 좌상단 오버레이에 띄운다.
   // 설정 창에는 진짜 "설정"만 남기기 위함. 복기 중에는 그 수의 진행 상태를 보여준다.
   function renderBoardStatus(): void {
-    if (replayIndex !== null) {
-      const idx = replayIndex
+    const replayIdx = replay.index()
+    if (replayIdx !== null) {
+      const idx = replayIdx
       const n = moveLog.length
       const vs = timeline()[idx]!
       const sc = totalHiveScores(vs.board)
@@ -2526,8 +2454,9 @@ export function mountGame(root: HTMLElement): void {
   //  - 실시간: 위협(리치) 경고/훈수 + AI 자기 해설 + 내 수 코칭(전문가 vs AI).
   function renderBoardNotes(): void {
     const parts: string[] = []
-    if (replayIndex !== null) {
-      const idx = replayIndex
+    const replayIdx = replay.index()
+    if (replayIdx !== null) {
+      const idx = replayIdx
       if (idx >= 1) {
         const tl = timeline()
         const note = reviewMove(tl[idx - 1]!, moveLog[idx - 1]!)
@@ -2584,82 +2513,16 @@ export function mountGame(root: HTMLElement): void {
     boardNotes.innerHTML = html
   }
 
-  // 복기 리모컨(데스크탑·모바일 공통, 보드 아래 떠 있는 컨트롤): 진행 표시 + 처음/이전/재생·멈춤/다음/끝
-  // + 진행 슬라이더 + 이 판 분석(접이식) + 종료. 복기 진입 때 설정 패널/시트를 닫아 보드를 보며 조작한다.
-  function renderReplayRemote(): void {
-    const n = moveLog.length
-    const idx = replayIndex!
-    const playing = replayTimer !== null
-    const disPrev = idx <= 0 ? 'disabled' : ''
-    const disNext = idx >= n ? 'disabled' : ''
-    const analysis = replayAnalysisOpen ? `<div class="rr-analysis">${replayAnalysisHtml(idx)}</div>` : ''
-    actionBar.innerHTML = `
-      <div class="replay-remote">
-        ${analysis}
-        <div class="rr-bar">
-          <span class="rr-progress">${idx}<i>/${n}수</i></span>
-          <div class="rr-nav">
-            <button class="rr-btn" data-act="replayFirst" ${disPrev} title="처음으로" aria-label="처음으로">⏮</button>
-            <button class="rr-btn" data-act="replayPrev" ${disPrev} title="이전 수" aria-label="이전 수">◀</button>
-            <button class="rr-btn rr-play ${playing ? 'active' : ''}" data-act="replayPlay" title="${playing ? '멈춤' : '재생'}" aria-label="${playing ? '멈춤' : '재생'}">${playing ? '⏸' : '▶'}</button>
-            <button class="rr-btn" data-act="replayNext" ${disNext} title="다음 수" aria-label="다음 수">▶</button>
-            <button class="rr-btn" data-act="replayLast" ${disNext} title="마지막으로" aria-label="마지막으로">⏭</button>
-          </div>
-          <button class="rr-btn rr-extra ${replayAnalysisOpen ? 'active' : ''}" data-act="replayToggleAnalysis" title="이 판 분석" aria-label="이 판 분석">${ICON.analysis}</button>
-          <button class="rr-btn rr-extra rr-exit" data-act="replayExit" title="복기 종료" aria-label="복기 종료">✕</button>
-        </div>
-        <div class="rr-seek">
-          <input type="range" data-ctl="replaySeek" min="0" max="${n}" step="1" value="${idx}" aria-label="복기 진행">
-          <span class="rr-seek-val">${idx}/${n}</span>
-        </div>
-      </div>`
-    for (const btn of Array.from(actionBar.querySelectorAll('button'))) {
-      if (btn.hasAttribute('data-jump')) continue // 분석 항목은 아래에서 별도 처리
-      if (btn.hasAttribute('disabled')) continue
-      btn.addEventListener('click', () => onPanelAction(btn.getAttribute('data-act')))
-    }
-    // 분석 요약 항목 클릭 → 그 수로 점프(보기 전용). 실수(data-best)면 직전 국면 + 추천 칸 강조.
-    for (const el of Array.from(actionBar.querySelectorAll('[data-jump]'))) {
-      el.addEventListener('click', () => {
-        stopReplayTimer()
-        const idx = Number(el.getAttribute('data-jump'))
-        const bestAttr = el.getAttribute('data-best')
-        if (bestAttr) {
-          replayIndex = Math.max(0, idx - 1) // 그 실수를 두기 직전(둘 차례) 국면
-          recommendedCells = bestAttr.split('|').map((p) => {
-            const [q, r] = p.split(',').map(Number)
-            return { q: q!, r: r!, s: -q! - r! } as Hex
-          })
-        } else {
-          replayIndex = idx
-          recommendedCells = null
-        }
-        render()
-      })
-    }
-    const seek = actionBar.querySelector('input[data-ctl="replaySeek"]') as HTMLInputElement | null
-    if (seek) {
-      const val = actionBar.querySelector('.rr-seek-val') as HTMLElement | null
-      seek.addEventListener('input', () => {
-        if (val) val.textContent = `${Number(seek.value)}/${n}` // 드래그 중엔 숫자만 미리보기
-      })
-      seek.addEventListener('change', () => {
-        stopReplayTimer()
-        replayIndex = Number(seek.value)
-        render()
-      })
-    }
-  }
-
   // 인게임 행동(①/② 선택·여왕벌로 놓기·취소)은 보드 아래 별도 바에, 설정 버튼과 분리.
   function renderActionBar(): void {
     // 복기 중이면 데스크탑·모바일 공통으로 하단 리모컨을 띄운다(설정 패널/시트는 진입 때 닫혔다).
-    if (replayIndex !== null) {
-      renderReplayRemote()
+    // 리모컨 HTML·배선·분석 카드는 replay-remote.ts.
+    if (replay.active()) {
+      replay.renderInto(actionBar)
       return
     }
     // 모바일 관전: 행동 버튼이 없는 자리(우하단 플로팅)에 ▶/⏸ 와 속도 슬라이더를 둔다(설정 시트 안 열어도 조작).
-    if (settings.mode === 'watch' && mobileShell.active() && state.phase === 'playing' && replayIndex === null) {
+    if (settings.mode === 'watch' && mobileShell.active() && state.phase === 'playing') {
       actionBar.innerHTML = `
         <button class="watch-toggle ${watchRunning ? 'active' : ''}" data-act="toggleWatch">${watchRunning ? '⏸ 멈춤' : '▶ 시작'}</button>
         <div class="ab-watch-speed">
@@ -3020,45 +2883,8 @@ export function mountGame(root: HTMLElement): void {
     wireModalButtons()
   }
 
-  // 복기 "이 판 분석" 요약 HTML. 기보를 analyzeGame 으로 분석해 결정적 순간을 리스트로(클릭=그 수로 점프).
-  function replayAnalysisHtml(currentIdx: number): string {
-    if (moveLog.length === 0) return ''
-    // 분석은 워커에서 비동기로 계산된다(replayToggleAnalysis). 아직 결과 전이면 "계산 중" 카드.
-    if (cachedReview === null) {
-      return `<div class="replay-analysis"><div class="ra-title">이 판 분석</div><div class="ra-empty">${analysisLoading ? '분석을 계산하고 있어요…' : '분석을 준비 중이에요…'}</div></div>`
-    }
-    const review = cachedReview
-    const decisive = [...review.blunders, ...review.highlights].sort((a, b) => a.index - b.index)
-    const cy = review.counts.yellow
-    const cb = review.counts.brown
-    const list =
-      decisive.length === 0
-        ? `<div class="ra-empty">눈에 띄는 결정적 순간은 없었어요.</div>`
-        : `<div class="ra-list">${decisive
-            .map((r) => {
-              // 실수에 점수 손해와 "더 나은 수"(추천)가 붙어 있으면 함께 보여준다(클릭=직전 국면+추천 칸 강조).
-              const loss = r.lossCp !== undefined && r.lossCp > 0 ? ` <span class="ra-loss">−${r.lossCp}</span>` : ''
-              const bestAttr = r.bestMove ? ` data-best="${moveCells(r.bestMove).map((h) => `${h.q},${h.r}`).join('|')}"` : ''
-              const bestHint = r.bestMove ? ` <span class="ra-best">더 나은 수 보기</span>` : ''
-              return (
-                `<button class="ra-item ${r.polarity} ${r.index === currentIdx ? 'cur' : ''}" data-jump="${r.index}"${bestAttr}>` +
-                `<span class="ra-idx">${r.index}수</span> ${PLAYER_LABEL[r.player]} ${noteLine(r.note)}${loss}${bestHint}</button>`
-              )
-            })
-            .join('')}</div>`
-    return `
-      <div class="replay-analysis">
-        <div class="ra-title">이 판 분석</div>
-        <div class="ra-counts">
-          <span>🟡 노랑 <b class="good">좋은 수 ${cy.good}</b> · <b class="bad">실수 ${cy.bad}</b></span>
-          <span>🟤 갈색 <b class="good">좋은 수 ${cb.good}</b> · <b class="bad">실수 ${cb.bad}</b></span>
-        </div>
-        ${list}
-      </div>`
-  }
-
   function renderPanel(): void {
-    // 복기 중에는 설정 패널을 닫고 보드 위 하단 리모컨(renderReplayRemote)으로 조작한다.
+    // 복기 중에는 설정 패널을 닫고 보드 위 하단 리모컨(replay-remote.ts)으로 조작한다.
     // 게임 상태(차례·안내·자원·점수)는 보드 좌상단 오버레이(renderBoardStatus)로 옮겼다 — 패널엔 설정만.
 
     // 게임이 진행 중(첫 수 이후)이면 게임 규칙·AI 설정(모드/난이도/성향/여왕벌/무한)을 바꿀 수 없다.
@@ -3314,11 +3140,8 @@ export function mountGame(root: HTMLElement): void {
   function onPanelAction(act: string | null): void {
     if (act === null) return
 
-    // 복기 컨트롤(보기 전용), 별도 처리 후 종료
-    if (act.startsWith('replay')) {
-      handleReplay(act)
-      return
-    }
+    // 복기 컨트롤(보기 전용): 모듈이 처리 — 진입/종료 부수효과는 host 콜백.
+    if (replay.handle(act)) return
 
     // 설정 패널 섹션(아코디언) 펼치기/접기
     if (act.startsWith('sec:')) {
