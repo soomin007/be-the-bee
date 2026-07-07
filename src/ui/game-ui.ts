@@ -29,7 +29,7 @@ import {
   withTile,
 } from '../engine/index'
 import type { Ai, AiOptions, Difficulty, GameReview, GameState, Hex, HiveCountdown, Move, MoveNote, Persona, PieceKind, Player } from '../engine/index'
-import { nextTip } from './tips'
+import { createAiLoading } from './ai-loading'
 import { HEX_SIZE, hexPolygonPoints, hexToPixel, type Point } from './layout'
 import { createSound, BGM_TRACKS } from './sound'
 import { COLOR_THEMES, themeById, type ColorTheme } from './themes'
@@ -161,8 +161,7 @@ function noteLine(note: MoveNote): string {
   return `${notePolarity(note) === 'bad' ? '✗' : '✓'} ${NOTE_TEXT[note]}`
 }
 const AI_DELAY_MS = 350
-const AI_LOADING_THRESHOLD_MS = 800 // 이보다 오래 걸리는 AI 계산에만 로딩 오버레이(초반 빠른 수 깜빡임 방지)
-const AI_LOADING_MIN_SHOW_MS = 550 // 오버레이가 한 번 뜨면 최소 이만큼 유지(잠깐 떴다 사라지는 깜빡임 방지)
+// (로딩 오버레이 임계값·최소 표시 시간은 ./ai-loading 으로 분리 — 2026-07-08)
 // 사용자 피드백 설문(구글폼). 크레딧 밑 '피드백 보내기' 버튼이 새 창으로 연다.
 const FEEDBACK_URL = 'https://forms.gle/qf5VA1xytdLojHtp9'
 
@@ -357,9 +356,6 @@ export function mountGame(root: HTMLElement): void {
   let aiTimer: number | null = null
   // AI 계산을 Web Worker 로 비동기 처리(메인 스레드 멈춤 방지). 워커가 없으면(테스트/구형) 동기 폴백.
   let aiReqId = 0 // 최신 요청 id. 리셋/무르기 시 증가시켜 오래된 워커 응답을 무시한다.
-  let loadingTimer: number | null = null // 로딩 오버레이 지연 표시 타이머
-  let overlayShownAt: number | null = null // 오버레이를 띄운 시각(최소 표시 시간 보장용), 안 떴으면 null
-  let tipTimer: number | null = null // 팁 회전 타이머
   let aiWorker: Worker | null = null
   let aiWorkerTried = false // 워커 1회 지연 생성 플래그
   let pendingAiId = -1
@@ -369,7 +365,6 @@ export function mountGame(root: HTMLElement): void {
   let pendingAnalyzeCb: ((r: { review?: GameReview; error?: string }) => void) | null = null
   let analyzeCount = 0
   let analysisLoading = false // 분석을 워커에서 계산 중이면 분석 카드에 "계산 중" 표시
-  let lastTip = '' // 직전 팁(연속 중복 방지)
   let watchRunning = false // 관전 재생 중인지(런타임, 저장 안 함, 새로고침 시 자동 시작 방지)
   const aiControls = (turn: Player): boolean =>
     settings.mode === 'watch' || (settings.mode === 'vsAi' && turn === settings.aiSide)
@@ -566,13 +561,6 @@ export function mountGame(root: HTMLElement): void {
         <div class="mini-player-host"></div>
         <div class="action-bar"></div>
         <div class="board-notes"></div>
-        <div class="ai-thinking-layer" aria-hidden="true">
-          <div class="ai-thinking-card">
-            <div class="ai-thinking-bee" aria-hidden="true">🐝</div>
-            <div class="ai-thinking-title">AI가 다음 수를 고르고 있어요</div>
-            <div class="ai-thinking-tip"></div>
-          </div>
-        </div>
       </div>
       <button class="panel-reopen" data-act="togglePanel" title="설정 펼치기" aria-label="설정 펼치기">☰</button>
     </div>
@@ -596,37 +584,11 @@ export function mountGame(root: HTMLElement): void {
     onTap: () => onPanelAction(miniHost.querySelector('.mp-card') ? 'musicCollapse' : 'musicExpand'),
   })
   const modalLayer = root.querySelector('.modal-layer') as HTMLElement
-  const aiThinkingLayer = root.querySelector('.ai-thinking-layer') as HTMLElement
-  const aiTipEl = aiThinkingLayer.querySelector('.ai-thinking-tip') as HTMLElement
   const gameEl = root.querySelector('.game') as HTMLElement // 데스크탑 설정창 접기 클래스 토글용
 
-  // ---- AI 로딩 대기 화면(엘레베이터 거울) -----------------------------------
-  // AI 가 한 수를 계산하는 동안(전문가 MCTS 는 수 초) 보여준다. 워커가 메인 스레드를 안 막아
-  // 스피너·팁이 실제로 움직인다. 계산이 짧으면(빠른 난이도) 임계값 전에 끝나 안 뜬다(깜빡임 방지).
-  function setTipText(): void {
-    lastTip = nextTip(lastTip)
-    aiTipEl.textContent = lastTip
-    aiTipEl.classList.remove('tip-in')
-    void aiTipEl.offsetWidth // 리플로우로 애니메이션 재시작
-    aiTipEl.classList.add('tip-in')
-  }
-  function showAiThinking(): void {
-    setTipText()
-    overlayShownAt = Date.now()
-    aiThinkingLayer.classList.add('show')
-    aiThinkingLayer.setAttribute('aria-hidden', 'false')
-    if (tipTimer !== null) clearInterval(tipTimer)
-    tipTimer = window.setInterval(setTipText, 3400) // 엘레베이터 거울: 기다리는 동안 팁을 돌린다
-  }
-  function hideAiThinking(): void {
-    overlayShownAt = null
-    aiThinkingLayer.classList.remove('show')
-    aiThinkingLayer.setAttribute('aria-hidden', 'true')
-    if (tipTimer !== null) {
-      clearInterval(tipTimer)
-      tipTimer = null
-    }
-  }
+  // AI 로딩 대기 화면(엘레베이터 거울)은 ai-loading.ts 로 분리 — 오버레이 DOM 을 boardWrap 에
+  // 직접 붙이고, 표시 예약(임계값)·최소 표시 시간·숨김만 API 로 노출한다.
+  const aiLoading = createAiLoading(boardWrap)
   // 설정창 펼치기 버튼(셸 정적 요소라 직접 배선; onPanelAction 은 함수선언 hoist).
   root.querySelector('.panel-reopen')?.addEventListener('click', () => onPanelAction('togglePanel'))
 
@@ -1689,14 +1651,10 @@ export function mountGame(root: HTMLElement): void {
       clearTimeout(aiTimer)
       aiTimer = null
     }
-    if (loadingTimer !== null) {
-      clearTimeout(loadingTimer)
-      loadingTimer = null
-    }
     aiReqId++ // 진행 중인 워커 응답을 무효화(리셋·무르기·모드 변경 시)
     pendingAiCb = null
     pendingAiId = -1
-    hideAiThinking()
+    aiLoading.hide() // 예약된 표시까지 취소
     aiThinking = false
   }
 
@@ -1716,26 +1674,19 @@ export function mountGame(root: HTMLElement): void {
     const reqId = ++aiReqId
     const started = Date.now()
     // 계산이 임계값보다 오래 걸릴 때만 로딩 오버레이를 띄운다(빠른 수엔 깜빡임 방지).
-    loadingTimer = window.setTimeout(() => {
-      loadingTimer = null
-      if (reqId === aiReqId && aiThinking) showAiThinking()
-    }, AI_LOADING_THRESHOLD_MS)
+    aiLoading.scheduleShow(() => reqId === aiReqId && aiThinking)
     requestAiMove(side, state, (result) => {
       if (reqId !== aiReqId) return // 오래된/취소된 요청(리셋·무르기 등)
       // 아직 임계값 전이면 오버레이 자체를 취소(빠른 수는 안 띄움).
-      if (loadingTimer !== null) {
-        clearTimeout(loadingTimer)
-        loadingTimer = null
-      }
+      aiLoading.cancelPendingShow()
       // 적용 시각 = max(페이싱 delay, 오버레이가 떴으면 최소 표시 시간). 오버레이는 그때까지 유지해
       // "잠깐 떴다 사라지는" 깜빡임을 막는다.
-      let applyAt = started + delay
-      if (overlayShownAt !== null) applyAt = Math.max(applyAt, overlayShownAt + AI_LOADING_MIN_SHOW_MS)
+      const applyAt = aiLoading.applyAtWithMinShow(started + delay)
       const wait = Math.max(0, applyAt - Date.now())
       aiTimer = window.setTimeout(() => {
         aiTimer = null
         if (reqId !== aiReqId) return
-        hideAiThinking()
+        aiLoading.hide()
         aiThinking = false
         if (result.error || !result.move) {
           message = 'AI가 둘 곳을 찾지 못했어요. 무르기나 새 게임을 눌러 주세요.'
