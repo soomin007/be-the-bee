@@ -847,7 +847,13 @@ export function mountGame(root: HTMLElement): void {
   // 첫 사용(온보딩/튜토리얼) 마무리: 테마 팁 + 진행 중인 판이 없으면 새 게임 설정 마법사를 띄운다.
   function firstRunFinish(): void {
     maybeThemeTip()
-    if (!resumed) openNewGameWizard()
+    if (!resumed) {
+      openNewGameWizard()
+      // openNewGameWizard 는 상태만 바꾼다. 온보딩·테마 팁을 이미 본 사용자는 이 경로에서
+      // 아무도 render 를 안 불러, 마법사가 "보이지 않게 존재"하다가 첫 클릭 때 갑자기 나타나
+      // 그 클릭을 가로챈다(2026-07-07 발견). 여기서 즉시 렌더해 로드 직후 보이게 한다.
+      render()
+    }
   }
 
   // 무르기 실제 수행(사람 차례까지 되돌림 — vs AI 는 AI 수+내 수 함께). 동의/직접 호출 공용.
