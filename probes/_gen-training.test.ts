@@ -1,14 +1,14 @@
 // value-net 학습 데이터 생성(Stage 1). self-play 각 국면의 피처(노랑 관점) + 게임 결과 z(노랑 관점)
-// → JSONL. 수동: GEN_N=120 npx vitest run tests/_gen-training.test.ts. 학습은 scripts/train-valuenet.mjs.
+// → JSONL. 실행: $env:GEN_N='120'; npm run probe -- probes/_gen-training.test.ts. 학습은 scripts/train-valuenet.mjs.
 import { describe, it } from 'vitest'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { createAi, createInitialState, applyMove, encodeFeatures } from '../src/engine/index'
 import type { Difficulty } from '../src/engine/index'
 
-const N = Number(process.env.GEN_N ?? 0) // 0 = npm test 에선 스킵(아래 early return). 직접 실행 시 GEN_N 지정.
+const N = Number(process.env.GEN_N ?? 0) // 0 = 스킵(아래 early return). 실행 시 GEN_N 지정.
 const PLY_CAP = 130
-const SP = 'C:/Users/soomi/AppData/Local/Temp/claude/C--Users-soomi-Dev-Be-the-Bee/a9d0705f-d9f2-4eeb-af49-1e8362798b0a/scratchpad'
-const OUT = process.env.GEN_OUT ?? `${SP}/training.jsonl`
+const OUT = process.env.GEN_OUT ?? 'probes/.out/training.jsonl'
 
 function genGame(da: Difficulty, db: Difficulty, seed: number): string[] {
   const aiY = createAi({ difficulty: da, seed })
@@ -43,6 +43,7 @@ describe('value-net 학습 데이터 생성', () => {
       lines.push(...g)
       if (g.length && (JSON.parse(g[0]!) as { z: number }).z === 1) yWins++
     }
+    mkdirSync(dirname(OUT), { recursive: true })
     writeFileSync(OUT, lines.join('\n') + '\n')
     // eslint-disable-next-line no-console
     console.log(`생성: ${lines.length} positions, ${N} games (노랑승 ${yWins}) → ${OUT}`)

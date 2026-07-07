@@ -1,14 +1,14 @@
 // value-net Stage 2: 회랑 기보(게임1~3, 모두 노랑 승) replay → 각 국면 피처 + 결과 z. 색교환으로
 // 양 진영(z 반전). 피처는 회전 불변이라 대칭 증강은 피처-MLP엔 무의미(공간 CNN=Stage 3에서만).
-// 수동: GEN_C=1 npx vitest run tests/_gen-corridor.test.ts → corridor.jsonl
+// 실행: $env:GEN_C='1'; npm run probe -- probes/_gen-corridor.test.ts → corridor.jsonl
 import { describe, it } from 'vitest'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { createInitialState, applyMove, encodeFeatures, hex } from '../src/engine/index'
 import type { Board, Move, Player } from '../src/engine/index'
 
 const RUN = Number(process.env.GEN_C ?? 0)
-const SP = 'C:/Users/soomi/AppData/Local/Temp/claude/C--Users-soomi-Dev-Be-the-Bee/a9d0705f-d9f2-4eeb-af49-1e8362798b0a/scratchpad'
-const OUT = `${SP}/corridor.jsonl`
+const OUT = process.env.GEN_OUT ?? 'probes/.out/corridor.jsonl'
 
 // 게임1~3 BTB1(ai_hive_lock_defense §2). 모두 노랑(공격)이 회랑으로 승.
 const B64 = [
@@ -61,6 +61,7 @@ describe('회랑 학습 데이터 생성', () => {
         lines.push(JSON.stringify({ f: encodeFeatures(swapBoard(b), 'yellow'), z: -z })) // 색교환=양 진영
       }
     }
+    mkdirSync(dirname(OUT), { recursive: true })
     writeFileSync(OUT, lines.join('\n') + '\n')
     // eslint-disable-next-line no-console
     console.log(`회랑 데이터: ${lines.length} positions (게임1~3 × 색교환) → ${OUT}`)

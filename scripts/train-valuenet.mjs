@@ -1,11 +1,10 @@
-// value-net 학습(Stage 1). tests/_gen-training.test.ts 가 만든 (피처, 결과 z) JSONL 로 작은 MLP
+// value-net 학습(Stage 1). probes/_gen-training.test.ts 가 만든 (피처, 결과 z) JSONL 로 작은 MLP
 // (DIM→hidden relu→1 tanh)를 순수 JS backprop(Adam)으로 학습 → src/engine/value-net-weights.ts.
 // forward 는 src/engine/value-net.ts 와 동일 식(불일치 차단). 수동: node scripts/train-valuenet.mjs
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const SP = 'C:/Users/soomi/AppData/Local/Temp/claude/C--Users-soomi-Dev-Be-the-Bee/a9d0705f-d9f2-4eeb-af49-1e8362798b0a/scratchpad'
-const DATA = process.env.TRAIN_DATA ?? `${SP}/training.jsonl`
-const CORR = process.env.CORR_DATA ?? `${SP}/corridor.jsonl` // 회랑 데이터(있으면 오버샘플로 train 에)
+const DATA = process.env.TRAIN_DATA ?? 'probes/.out/training.jsonl'
+const CORR = process.env.CORR_DATA ?? 'probes/.out/corridor.jsonl' // 회랑 데이터(있으면 오버샘플로 train 에)
 const OVERSAMPLE = Number(process.env.OVERSAMPLE ?? 5) // 회랑 데이터 반복 횟수(일반에 안 묻히게)
 const OUT = 'src/engine/value-net-weights.ts'
 const DIM = 21

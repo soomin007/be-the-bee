@@ -12,11 +12,14 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "check:engine": "tsc --noEmit --project tsconfig.engine.json",
+    "preflight": "npm run typecheck && vitest run",
     "verify:click": "node scripts/verify-click.mjs",
-    "sim": "vitest run --config vite.sim.config.ts"
+    "sim": "vitest run --config vite.sim.config.ts",
+    "probe": "vitest run --config vite.probe.config.ts"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
+    "@types/three": "^0.184.1",
     "happy-dom": "^20.10.6",
     "playwright": "^1.61.0",
     "qrcode": "^1.5.4",
@@ -26,7 +29,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
-    "@types/three": "^0.184.1",
     "three": "^0.184.0"
   }
 }

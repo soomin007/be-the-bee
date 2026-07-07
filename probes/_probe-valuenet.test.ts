@@ -1,5 +1,5 @@
 // value-net Stage 2 Gate 2: value-net leaf(rolloutDepth 0) expert 가 회랑 칸을 선점하는가?
-// off(휴리스틱 leaf) 대조. 수동: npx vitest run tests/_probe-valuenet.test.ts
+// off(휴리스틱 leaf) 대조. 실행: npm run probe -- probes/_probe-valuenet.test.ts
 import { describe, it } from 'vitest'
 import { createAi, createInitialState, applyMove, hex } from '../src/engine/index'
 import type { Move } from '../src/engine/index'

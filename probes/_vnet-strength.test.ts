@@ -1,5 +1,5 @@
 // value-net Stage 2 Gate 2(b): value-net leaf expert 의 강도 회귀 확인. vnet vs hard, off(휴리스틱
-// leaf) vs hard 대조. 수동: SIM_N=2 npx vitest run tests/_vnet-strength.test.ts
+// leaf) vs hard 대조. 실행(강도 A/B 는 N≥5): $env:SIM_N='5'; npm run probe -- probes/_vnet-strength.test.ts
 import { describe, it } from 'vitest'
 import { createAi, createInitialState, applyMove } from '../src/engine/index'
 import type { AiOptions, Player } from '../src/engine/index'

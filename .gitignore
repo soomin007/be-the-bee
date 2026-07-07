@@ -30,5 +30,11 @@ docs/design/shots/
 scripts/sim-result.txt
 scripts/code.txt
 
+# 연구 프로브 출력(재생성 가능 데이터) — git 추적 제외
+probes/.out/
+
+# 마케팅/홍보용 export 이미지(대용량 바이너리, 코드 저장소 밖에서 보관)
+export-hook/
+
 # 동시 세션 작업 조율판 — 로컬 실시간 공유용(머신 단위), git 추적 제외
 ACTIVE_WORK.md
