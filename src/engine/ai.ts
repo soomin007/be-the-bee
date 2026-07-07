@@ -81,8 +81,8 @@ function cfgFor(difficulty: Difficulty): Omit<Cfg, 'w'> {
     case 'easy':
       return { useBlock: true, beamWidth: 0, beamDepth: 0, relevanceRadius: 2 }
     case 'expert':
-      // 최상위: 강함은 탐색 깊이(검증된 레버)로 — hard(4)보다 한 단계 깊은 5수. 속도를 위해
-      // 빔은 좁힘(beam^depth). gapped-four 인식(EXPERT_WEIGHTS)을 더해 회랑/벌어진 4목도 본다.
+      // 최상위. 기본 엔진은 MCTS(createAi 에서 결정)라 이 빔 설정은 engine:'search' 대조/테스트용.
+      // 깊이는 hard 와 같은 4수, 빔은 더 넓힘(8→12) + EXPERT_WEIGHTS(벌어진 4목 등) 인식 추가.
       return { useBlock: true, beamWidth: 12, beamDepth: 4, relevanceRadius: 2 }
     case 'hard':
       return { useBlock: true, beamWidth: 8, beamDepth: 4, relevanceRadius: 2 }
