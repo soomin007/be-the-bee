@@ -1,0 +1,44 @@
+# Supabase 무료 플랜은 7일간 요청이 하나도 없으면 프로젝트를 일시정지(pause)시킨다.
+# 일시정지되면 배포된 사이트의 온라인 대전만 조용히 실패한다(로컬·AI 대전은 무관).
+# 그래서 3일마다 낡은 방을 정리한다 — 어차피 필요한 유지보수이고, 그 요청 자체가
+# "활동"으로 잡혀 프로젝트가 잠들지 않는다.
+#
+# 정리 기준은 앱과 동일하다: updated_at 이 24시간 지난 방 삭제
+# (src/mp/room.ts 의 cleanupOldRooms — 방 생성 시에도 같은 기준으로 호출된다).
+#
+# 주의: GitHub 은 레포에 60일간 아무 활동이 없으면 schedule 워크플로를 자동 비활성화한다.
+# 이 레포는 계속 커밋되므로 문제 없지만, 오래 손 놓으면 Actions 탭에서 다시 켜야 한다.
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '17 3 */3 * *' # 3일마다 03:17 UTC (실행 간격이 7일을 넘지 않게)
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 낡은 방 정리 + 핑
+        env:
+          # 브라우저에 원래 실리는 공개 값이다(src/mp/supabase.ts 와 동일). 비밀 키가 아니다.
+          # 실제 권한은 DB 의 RLS 정책이 담당한다.
+          SUPABASE_URL: https://nvadbcrlgfzoppnvhoru.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52YWRiY3JsZ2Z6b3BwbnZob3J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMzkzOTksImV4cCI6MjA5NzgxNTM5OX0.h0nVnP8Hg6qO0GjQoY0YlpQzZBxVQHrE1BluRf6GwFA
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "정리 기준: updated_at < $cutoff"
+
+          deleted=$(curl -sS --fail-with-body \
+            -X DELETE "$SUPABASE_URL/rest/v1/rooms?updated_at=lt.$cutoff&select=id" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Prefer: return=representation")
+          echo "삭제한 낡은 방: $(echo "$deleted" | jq 'length')"
+
+          remaining=$(curl -sS --fail-with-body \
+            "$SUPABASE_URL/rest/v1/rooms?select=id" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "남은 방: $(echo "$remaining" | jq 'length')"
