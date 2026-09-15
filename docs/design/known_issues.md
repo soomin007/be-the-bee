@@ -541,7 +541,7 @@
   돌아오면 Actions 탭에서 다시 켰는지 확인할 것. 일시정지돼도 데이터는 안 사라지고 90일 내 대시보드에서
   복구 가능(그 뒤엔 데이터 다운로드만).
 
-## GitHub 60일 무커밋 시 schedule 워크플로 자동 비활성화 — Supabase keep-alive 가 멈추는 연쇄 (2026-09-15)
+## GitHub 60일 무커밋 시 schedule 워크플로 자동 비활성화, Supabase keep-alive 가 멈추는 연쇄 (2026-09-15)
 - **증상**: GitHub 에서 "Supabase keep-alive workflow will be disabled soon" 메일. 마지막 커밋이 07-24 라
   53일째였다. 그대로 두면 keep-alive 크론이 꺼지고 → Supabase 가 7일 뒤 일시정지 → 온라인 대전만 조용히
   죽는다(07-14 항목의 연쇄). 워크플로 주석에 "이 레포는 계속 커밋되므로 문제 없다"고 써둔 가정이 틀렸다.
