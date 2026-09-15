@@ -540,3 +540,17 @@
   주의: GitHub 은 레포에 **60일간 활동이 없으면 schedule 워크플로를 자동 비활성화**한다 → 오래 손 놓았다가
   돌아오면 Actions 탭에서 다시 켰는지 확인할 것. 일시정지돼도 데이터는 안 사라지고 90일 내 대시보드에서
   복구 가능(그 뒤엔 데이터 다운로드만).
+
+## GitHub 60일 무커밋 시 schedule 워크플로 자동 비활성화 — Supabase keep-alive 가 멈추는 연쇄 (2026-09-15)
+- **증상**: GitHub 에서 "Supabase keep-alive workflow will be disabled soon" 메일. 마지막 커밋이 07-24 라
+  53일째였다. 그대로 두면 keep-alive 크론이 꺼지고 → Supabase 가 7일 뒤 일시정지 → 온라인 대전만 조용히
+  죽는다(07-14 항목의 연쇄). 워크플로 주석에 "이 레포는 계속 커밋되므로 문제 없다"고 써둔 가정이 틀렸다.
+- **원인**: GitHub 은 공개 레포에 **60일간 커밋(push)이 없으면** schedule 트리거를 끈다. 이슈·태그·PR 열기는
+  활동으로 안 치고, 워크플로가 도는 것 자체도 활동이 아니다. 한 번 꺼지면 이후 커밋을 해도 저절로 안 켜진다.
+- **재발 방지**: 남들의 해법은 ① 더미 커밋 자동 생성, ② 워크플로가 자기 자신을 API 로 강제 enable 해
+  카운터 리셋(메일의 "workflows page 에서 방지" 버튼과 같은 동작, `liskin/gh-workflow-keepalive` 의 실체).
+  ②를 서드파티 액션 없이 한 줄로 넣었다: `supabase-keepalive.yml` 첫 스텝에서
+  `gh api -X PUT repos/<레포>/actions/workflows/supabase-keepalive.yml/enable`(기본 GITHUB_TOKEN +
+  `permissions: actions: write`). 이미 켜진 워크플로에 호출해도 204 로 정상. 또 이미 꺼진 뒤의 자가 복구로
+  `deploy.yml` 의 push 때도 같은 호출을 한다(`revive-keepalive` 잡). 같은 메일이 또 오면 ① Actions 탭에서
+  두 워크플로가 active 인지, ② 최근 keep-alive 실행의 첫 스텝이 통과했는지부터 본다.

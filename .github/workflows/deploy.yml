@@ -15,6 +15,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # push 가 있을 때마다 Supabase keep-alive 크론을 다시 켠다. GitHub 은 60일간 커밋이 없으면
+  # schedule 워크플로를 끄고, 한 번 꺼지면 이후 커밋으로도 저절로 안 켜지기 때문(자가 복구).
+  revive-keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/supabase-keepalive.yml/enable"
+
   build:
     runs-on: ubuntu-latest
     steps:

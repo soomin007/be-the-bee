@@ -8,8 +8,11 @@
 # 정리 기준은 앱과 동일하다: updated_at 이 24시간 지난 방 삭제
 # (src/mp/room.ts 의 cleanupOldRooms — 방 생성 시에도 같은 기준으로 호출된다).
 #
-# 주의: GitHub 은 레포에 60일간 아무 활동이 없으면 schedule 워크플로를 자동 비활성화한다.
-# 이 레포는 계속 커밋되므로 문제 없지만, 오래 손 놓으면 Actions 탭에서 다시 켜야 한다.
+# 주의: GitHub 은 공개 레포에 60일간 커밋(push)이 없으면 schedule 워크플로를 자동 비활성화한다.
+# 2026-09-15 실제로 경고 메일이 왔다(마지막 커밋 07-24). 이슈·태그·PR 은 활동으로 안 치고 커밋만 친다.
+# 그래서 매 실행마다 이 워크플로를 API 로 강제 enable 해 60일 카운터를 리셋한다(첫 스텝).
+# 메일의 "workflows page 에서 방지" 버튼과 같은 동작이며, 기본 GITHUB_TOKEN(actions: write)이면 된다.
+# 한 번 꺼지면 이후 커밋을 해도 저절로 안 켜지므로 deploy.yml 의 push 때도 같은 API 로 다시 켠다.
 name: Supabase keep-alive
 
 on:
@@ -17,10 +20,18 @@ on:
     - cron: '17 0,6,12,18 * * *' # 하루 4회(6시간마다), 매회 DB 요청 2건 = 일 8건
   workflow_dispatch:
 
+permissions:
+  actions: write # 아래 "자기 자신 다시 켜기" 용. 그 외 권한은 필요 없다.
+
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - name: 60일 비활성화 방지(자기 자신 강제 enable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/supabase-keepalive.yml/enable"
+
       - name: 낡은 방 정리 + 핑
         env:
           # 브라우저에 원래 실리는 공개 값이다(src/mp/supabase.ts 와 동일). 비밀 키가 아니다.
